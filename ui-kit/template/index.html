@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  Toolkit app template.
+
+  Copy this folder into a new app (e.g. ClaudWorkSpace/Pyramid/ui) and then:
+    1. Point the two kit paths below at ../ui-kit/… from the new location.
+    2. Set data-app on <html> to the app's id: heptabase | idef0 | pyramid | metropolis.
+    3. Replace the brand block, nav items and views in app.js.
+
+  The shell markup — titlebar, brand, nav, sections, footer, header, content —
+  is the contract every app shares. Keep the class names; change the content.
+-->
+<html lang="en" data-app="pyramid">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toolkit Template</title>
+    <link rel="stylesheet" href="../css/kit.css" />
+    <link rel="stylesheet" href="./app.css" />
+    <!-- Apply the theme before first paint so the page never flashes unthemed. -->
+    <script type="module">
+      import { initTheme, detectMacDesktop } from '../js/theme.js';
+      initTheme({ app: document.documentElement.dataset.app, macInset: detectMacDesktop() });
+    </script>
+    <script type="module" src="../js/theme-picker.js"></script>
+  </head>
+  <body>
+    <div class="sc-shell" id="shell">
+      <aside class="sc-sidebar">
+        <div class="sc-titlebar">
+          <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm" title="Back" data-action="back">‹</button>
+          <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm" title="Forward" data-action="forward">›</button>
+          <span class="sc-spacer"></span>
+          <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm" title="Hide sidebar" data-action="collapse">«</button>
+        </div>
+
+        <div class="sc-brand">
+          <span class="sc-brand-mark">PY</span>
+          <div>
+            <div class="sc-brand-name">Pyramid</div>
+            <span class="sc-brand-sub">MINTO · v0.1</span>
+          </div>
+        </div>
+
+        <nav class="sc-nav" id="nav"></nav>
+
+        <div class="sidebar-scroll">
+          <div class="sc-section-title" style="padding: 0 16px">Workspace</div>
+          <div id="workspace-list"></div>
+        </div>
+
+        <footer class="sc-sidebar-foot">
+          <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm" title="Settings" data-view="settings">⚙</button>
+          <span class="sc-spacer"></span>
+          <span class="sc-badge" title="Sync status">SYNCED</span>
+        </footer>
+      </aside>
+
+      <main class="sc-main">
+        <header class="sc-header">
+          <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm show-sidebar" data-action="collapse" title="Show sidebar">»</button>
+          <h1 class="sc-header-title" id="view-title">Overview</h1>
+          <span class="sc-spacer"></span>
+          <span class="sc-resource"><span class="sc-resource-icon"></span><span id="res-a">1,284</span></span>
+          <span class="sc-resource sc-resource--alt"><span class="sc-resource-icon"></span><span>312</span></span>
+          <button class="sc-button sc-button--primary" data-action="dialog">+ New</button>
+        </header>
+        <div class="sc-content sc-hexgrid" id="view"></div>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,195 @@
+/*
+ * Pyramid adapter (the app is a single-file HTML document, published as a
+ * Claude artifact and wrapped as a native macOS app — see the Pyramid repo's
+ * own mac/ folder). Because both those hosts serve one bundled document with
+ * no access to a live filesystem, this file cannot be linked with <link> the
+ * way the Metropolis/IDEF0 adapters are — Pyramid inlines a verbatim copy of
+ * this file (plus tokens.css + base.css + components.css) directly into its
+ * own <style> block at authoring time. This file stays the source of truth;
+ * re-copy it into governing-thought.html by hand when it changes.
+ *
+ *   <link rel="stylesheet" href="../ui-kit/css/kit.css">
+ *   <link rel="stylesheet" href="../ui-kit/adapters/pyramid.css">
+ *   <script type="module">
+ *     import { initTheme } from '../ui-kit/js/theme.js';
+ *     initTheme({ app: 'pyramid' });
+ *   </script>
+ *
+ * Pyramid already keys every colour off its own custom properties, so this
+ * adapter follows the same shape as metropolis.css/idef0.css: remap Pyramid's
+ * tokens onto the kit's, then layer the two signature primitives (chamfer on
+ * anything pressable, brackets on anything that frames content) onto
+ * Pyramid's own component classes rather than rewriting its markup onto the
+ * sc-shell contract — this app predates the kit and has too much bespoke
+ * behaviour (the lint engine, the walkthrough, the graph export) to move onto
+ * the shell markup without real risk.
+ *
+ * Deliberately NOT remapped:
+ *   the SCQA/problem-definition vocabulary, the lint rule catalogue, the
+ *   graph/JSON-LD export vocabulary (NS, urn:pyramid:… ids) — all Pyramid
+ *   domain concepts, untouched by appearance.
+ */
+
+:root[data-sc] {
+  /* :root, not html — Pyramid's own dark-mode rules reach c=2 specificity
+     (:root:not([data-theme="light"]), :root[data-theme="dark"]); html[data-sc]
+     is only c=1,d=1 and would silently lose this exact token remap to them. */
+  color-scheme: dark;
+
+  --paper: var(--sc-void);
+  --surface: var(--sc-panel);
+  --raise: var(--sc-panel-2);
+  --sunk: var(--sc-sunken);
+  --line: var(--sc-line);
+  --line-strong: var(--sc-line-strong);
+  --ink: var(--sc-text);
+  --ink-2: var(--sc-text-2);
+  --ink-3: var(--sc-text-3);
+
+  /* Pyramid's --accent (fills/borders) and --accent-ink (accent used AS text)
+     both read fine off the kit's one --sc-accent; --on-accent (ink ON a solid
+     accent fill) is exactly what the kit reserves --sc-accent-ink for. */
+  --accent: var(--sc-accent);
+  --accent-ink: var(--sc-accent);
+  --accent-soft: rgb(var(--sc-accent-rgb) / 0.16);
+  --on-accent: var(--sc-accent-ink);
+
+  --ok: var(--sc-success);
+  --warn: var(--sc-warning);
+  --crit: var(--sc-danger);
+  --ok-soft: rgb(var(--sc-success-rgb) / 0.14);
+  --warn-soft: rgb(var(--sc-warning-rgb) / 0.14);
+  --crit-soft: rgb(var(--sc-danger-rgb) / 0.14);
+
+  --shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 10px 30px rgb(0 0 0 / 0.45);
+
+  /* Rule: Orbitron for labels/buttons/headings only; anything read at length
+     uses Exo 2. Pyramid's --serif carries the argument prose (governing
+     thought, key-line points, notes) — that is exactly "read at length", so
+     it moves to the kit's UI face rather than staying a serif. --mono stays
+     genuinely monospaced for rule codes, tabular indices and JSON/CSV output. */
+  --serif: var(--sc-font-ui);
+  --sans: var(--sc-font-ui);
+  --mono: var(--sc-font-mono);
+
+  --r: 0px; /* chamfer or bracket instead — see below; never round */
+}
+
+/* ------------------------------------------------------------------ */
+/* Brand identity                                                     */
+/* ------------------------------------------------------------------ */
+
+/* The app's own identity colour (the same orange Metropolis paints a Pyramid
+   claim with), not the shared palette accent — matches the README's rule
+   that a tool's brand mark always carries its own --sc-app colour. */
+html[data-sc] .mark svg path {
+  stroke: var(--sc-app);
+  filter: drop-shadow(0 0 4px rgb(var(--sc-app-rgb) / 0.55));
+}
+html[data-sc] .mark b {
+  font-family: var(--sc-font-display);
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* Orbitron on chrome — labels, buttons, headings. Content (argument     */
+/* prose, document titles, notes, export text) stays off this list.      */
+/* ------------------------------------------------------------------ */
+
+html[data-sc] .btn,
+html[data-sc] .iconbtn,
+html[data-sc] .tabs button,
+html[data-sc] .seg button,
+html[data-sc] .fmtbar button,
+html[data-sc] .step .sname,
+html[data-sc] h2,
+html[data-sc] .ihead .ttl,
+html[data-sc] .klhead .lbl,
+html[data-sc] .field > label,
+html[data-sc] .finding .fname,
+html[data-sc] .grouphd,
+html[data-sc] h3.pane {
+  font-family: var(--sc-font-display);
+}
+html[data-sc] .btn,
+html[data-sc] .iconbtn {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chamfer — anything pressable, clipped instead of rounded              */
+/* ------------------------------------------------------------------ */
+
+html[data-sc] .btn,
+html[data-sc] .iconbtn,
+html[data-sc] .docitem,
+html[data-sc] .step,
+html[data-sc] .tabs,
+html[data-sc] .seg,
+html[data-sc] .fmtbar {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+html[data-sc] .btn:hover:not(:disabled),
+html[data-sc] .iconbtn:hover {
+  filter: drop-shadow(0 0 5px rgb(var(--sc-glow-rgb) / 0.4));
+}
+
+/* ------------------------------------------------------------------ */
+/* Brackets — the panels that frame the working area                    */
+/* ------------------------------------------------------------------ */
+
+html[data-sc] .rail,
+html[data-sc] .margin,
+html[data-sc] .intro,
+html[data-sc] .pbox.apex,
+html[data-sc] .tutbar {
+  position: relative;
+}
+html[data-sc] .rail::after,
+html[data-sc] .margin::after,
+html[data-sc] .intro::after,
+html[data-sc] .pbox.apex::after,
+html[data-sc] .tutbar::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  --b: var(--sc-bracket);
+  --c: rgb(var(--sc-accent-rgb) / 0.6);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--b) 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 2px var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--b) 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 2px var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--b) 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 2px var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--b) 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 2px var(--b) no-repeat;
+}
+
+/* ------------------------------------------------------------------ */
+/* Glow — one lit element per region, not every hover                   */
+/* ------------------------------------------------------------------ */
+
+html[data-sc] .step[aria-current="true"]::before {
+  box-shadow: 0 0 10px var(--sc-glow);
+}
+html[data-sc] .docitem[aria-current="true"] {
+  box-shadow: inset 2px 0 0 0 var(--sc-accent), 0 0 10px rgb(var(--sc-glow-rgb) / 0.25);
+}
+html[data-sc] .btn.primary {
+  text-shadow: 0 0 8px rgb(var(--sc-glow-rgb) / 0.6);
+}
+html[data-sc] .btn.primary:hover:not(:disabled) {
+  filter: drop-shadow(0 0 8px rgb(var(--sc-glow-rgb) / 0.55));
+}
+html[data-sc] .pbox.apex {
+  box-shadow: 0 0 0 1px var(--sc-app), 0 0 24px rgb(var(--sc-app-rgb) / 0.3), var(--shadow);
+}

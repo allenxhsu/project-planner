@@ -1,0 +1,98 @@
+/*
+ * Base layer. Everything here is scoped to `html[data-sc]`, so an app can
+ * load the kit and still switch the skin off at runtime by removing that one
+ * attribute — useful while migrating an existing UI screen by screen.
+ */
+
+html[data-sc] {
+  color-scheme: dark;
+  background: var(--sc-void);
+}
+
+html[data-sc] body {
+  margin: 0;
+  color: var(--sc-text);
+  font-family: var(--sc-font-ui);
+  font-size: var(--sc-text-md);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  /* Deep-space ground: a faint vignette of the race glow over the void. */
+  background:
+    radial-gradient(1200px 700px at 12% -10%, rgb(var(--sc-glow-rgb) / 0.09), transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, rgb(var(--sc-accent-2-rgb) / 0.05), transparent 60%),
+    var(--sc-void);
+}
+
+html[data-sc] ::selection {
+  background: rgb(var(--sc-accent-rgb) / 0.35);
+  color: var(--sc-text);
+}
+
+html[data-sc] :focus-visible {
+  outline: 1px solid var(--sc-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgb(var(--sc-accent-rgb) / 0.18), 0 0 14px rgb(var(--sc-glow-rgb) / 0.35);
+}
+
+html[data-sc] code,
+html[data-sc] kbd,
+html[data-sc] pre {
+  font-family: var(--sc-font-mono);
+}
+
+html[data-sc] h1,
+html[data-sc] h2,
+html[data-sc] h3 {
+  font-family: var(--sc-font-display);
+  letter-spacing: 0.04em;
+}
+
+/* Thin, lit scrollbars that read as part of the instrument panel. */
+html[data-sc] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+html[data-sc] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html[data-sc] ::-webkit-scrollbar-thumb {
+  background: rgb(var(--sc-accent-rgb) / 0.22);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 0;
+}
+html[data-sc] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--sc-accent-rgb) / 0.45);
+  background-clip: content-box;
+}
+
+/*
+ * CRT scanlines over the whole window. Kept extremely faint and non-interactive
+ * so long reading stays comfortable; `data-sc-effects="off"` disables all
+ * decorative overlays for people who find them distracting.
+ */
+html[data-sc]:not([data-sc-effects='off']) body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.018) 0,
+    rgb(255 255 255 / 0.018) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-sc] *,
+  html[data-sc] *::before,
+  html[data-sc] *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

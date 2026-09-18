@@ -1,0 +1,128 @@
+#!/bin/sh
+# Build "Project Planner.app" from the Swift package and the web app beside it.
+#
+#   macos/scripts/build-app.sh            # release build into macos/build/
+#   CONFIG=debug macos/scripts/build-app.sh
+#
+# NSDocument takes the document types it can open from Info.plist, so the app
+# must run as a bundle: the bare executable cannot open or save plans.
+set -eu
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PKG="$(cd "$HERE/.." && pwd)"
+REPO="$(cd "$PKG/.." && pwd)"
+CONFIG="${CONFIG:-release}"
+OUT="${OUT_DIR:-$PKG/build}"
+APP="$OUT/Project Planner.app"
+VERSION="${VERSION:-1.0}"
+
+swift build --package-path "$PKG" -c "$CONFIG" --product ProjectPlanner
+BIN_DIR="$(swift build --package-path "$PKG" -c "$CONFIG" --show-bin-path)"
+
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/web"
+cp "$BIN_DIR/ProjectPlanner" "$APP/Contents/MacOS/Project Planner"
+
+# The web app, exactly as the browser gets it. Only what the page loads:
+# the kit's build scripts, Swift theme and template stay behind.
+WEB="$APP/Contents/Resources/web"
+cp "$REPO/index.html" "$WEB/"
+cp -R "$REPO/src" "$WEB/src"
+mkdir -p "$WEB/ui-kit"
+for part in css js fonts; do cp -R "$REPO/ui-kit/$part" "$WEB/ui-kit/$part"; done
+
+# The Microsoft Project converter: MPXJ and its Java runtime (about 180 MB),
+# when tools/setup-converter.sh has fetched them. CONVERTER=0 leaves it out.
+if [ "${CONVERTER:-1}" != 0 ] && [ -x "$REPO/tools/jre/Contents/Home/bin/java" ] && [ -f "$REPO/tools/mpxj/mpxj.jar" ]; then
+  CONV="$APP/Contents/Resources/converter"
+  mkdir -p "$CONV"
+  cp "$REPO/tools/mpp2xml.sh" "$CONV/"
+  cp -R "$REPO/tools/mpxj" "$CONV/mpxj"
+  cp -R "$REPO/tools/jre" "$CONV/jre"
+  echo "bundled the Microsoft Project converter"
+else
+  echo "no converter bundled (run tools/setup-converter.sh to read .mpp files)"
+fi
+
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Project Planner</string>
+  <key>CFBundleDisplayName</key><string>Project Planner</string>
+  <key>CFBundleIdentifier</key><string>org.projectplanner.app</string>
+  <key>CFBundleExecutable</key><string>Project Planner</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <!-- A plan file is plain JSON, as the web app writes it. Alternate
+           rank: the app opens JSON when asked, but never claims all of it. -->
+      <key>CFBundleTypeName</key><string>Project Plan</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>public.json</string></array>
+      <key>NSDocumentClass</key><string>ProjectPlanner.ModelDocument</string>
+    </dict>
+    <dict>
+      <!-- Microsoft Project XML opens as a new, untitled plan; it is never written back over. -->
+      <key>CFBundleTypeName</key><string>Microsoft Project XML</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>public.xml</string></array>
+      <key>NSDocumentClass</key><string>ProjectPlanner.ModelDocument</string>
+    </dict>
+    <dict>
+      <!-- Microsoft Project's own files, read through MPXJ; never written. -->
+      <key>CFBundleTypeName</key><string>Microsoft Project File</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>org.projectplanner.mpp</string></array>
+      <key>NSDocumentClass</key><string>ProjectPlanner.ModelDocument</string>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Project Plan (other planners)</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>org.projectplanner.plan-import</string></array>
+      <key>NSDocumentClass</key><string>ProjectPlanner.ModelDocument</string>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Task List (CSV)</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>public.comma-separated-values-text</string></array>
+      <key>NSDocumentClass</key><string>ProjectPlanner.ModelDocument</string>
+    </dict>
+  </array>
+  <key>UTImportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>org.projectplanner.mpp</string>
+      <key>UTTypeDescription</key><string>Microsoft Project File</string>
+      <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+      <key>UTTypeTagSpecification</key>
+      <dict><key>public.filename-extension</key><array><string>mpp</string><string>mpt</string></array></dict>
+    </dict>
+    <dict>
+      <key>UTTypeIdentifier</key><string>org.projectplanner.plan-import</string>
+      <key>UTTypeDescription</key><string>Project Plan (MPX, XER, PMXML, Planner, GanttProject, ProjectLibre)</string>
+      <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+      <key>UTTypeTagSpecification</key>
+      <dict><key>public.filename-extension</key><array><string>mpx</string><string>xer</string><string>pmxml</string><string>pod</string><string>gan</string><string>planner</string><string>pp</string><string>prx</string></array></dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+PLIST
+
+# An ad-hoc signature, so macOS will launch a locally built bundle.
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || codesign --force --sign - "$APP" >/dev/null
+echo "$APP"

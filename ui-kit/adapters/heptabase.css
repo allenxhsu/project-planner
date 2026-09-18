@@ -1,0 +1,32 @@
+/*
+ * Heptabase adapter: maps Heptabase's design tokens onto the kit.
+ *
+ * `html[data-sc]` outranks Heptabase's `:root` and its dark-mode media query,
+ * so load order doesn't matter and switching the skin off restores the classic
+ * palette untouched.
+ */
+html[data-sc] {
+  --bg: var(--sc-bg);
+  --surface: var(--sc-panel);
+  --surface-2: var(--sc-panel-2);
+  --sunken: var(--sc-sunken);
+  --border: var(--sc-line);
+  --border-strong: var(--sc-line-strong);
+  --text: var(--sc-text);
+  --text-muted: var(--sc-text-2);
+  --text-faint: var(--sc-text-3);
+  --accent: var(--sc-accent);
+  --accent-soft: rgb(var(--sc-accent-rgb) / 0.16);
+  --accent-text: var(--sc-accent);
+  --danger: var(--sc-danger);
+  --canvas: var(--sc-bg);
+  --grid-dot: rgb(var(--sc-accent-rgb) / 0.14);
+  --shadow-sm: 0 0 0 1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 0 0 1px rgb(0 0 0 / 0.5), 0 8px 24px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 0 0 1px rgb(0 0 0 / 0.6), 0 20px 50px rgb(0 0 0 / 0.65), 0 0 30px rgb(var(--sc-glow-rgb) / 0.1);
+  --radius: var(--sc-radius);
+  --radius-sm: var(--sc-radius);
+  --font: var(--sc-font-ui);
+  --mono: var(--sc-font-mono);
+  color-scheme: dark;
+}

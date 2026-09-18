@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-app="project">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Planner</title>
+<link rel="stylesheet" href="ui-kit/css/kit.css">
+<link rel="stylesheet" href="src/styles.css">
+<!-- Applied before first paint so the page never flashes unthemed. -->
+<script type="module">
+  import { initTheme } from './ui-kit/js/theme.js';
+  initTheme({ app: 'project' });
+</script>
+<script type="module" src="ui-kit/js/theme-picker.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header id="header" class="sc-header"></header>
+    <div id="body">
+      <main id="center">
+        <div class="sc-tabs view-tabs" id="view-tabs"></div>
+        <div id="toolbar" class="sc-panel"></div>
+        <div id="stage"></div>
+        <div id="statusbar" class="sc-mono"></div>
+        <section id="bottom">
+          <div class="sc-tabs" id="bottom-tabs"></div>
+          <div id="bottom-body"></div>
+        </section>
+      </main>
+      <aside id="right">
+        <div class="sc-tabs" id="right-tabs"></div>
+        <div class="pane" id="inspector"></div>
+      </aside>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <input type="file" id="file-input" accept=".json,.xml,.csv,.mpp,.mpt,.mpx,.xer,.pmxml,.pod,.gan,.planner,.pp,.prx" hidden>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

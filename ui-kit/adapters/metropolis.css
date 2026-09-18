@@ -1,0 +1,63 @@
+/*
+ * Metropolis adapter (the app lives in ClaudWorkSpace/MindMap).
+ *
+ *   <link rel="stylesheet" href="/ui-kit/css/kit.css">
+ *   <link rel="stylesheet" href="/ui-kit/adapters/metropolis.css">
+ *   <script type="module">
+ *     import { initTheme } from '/ui-kit/js/theme.js';
+ *     initTheme({ app: 'metropolis' });
+ *   </script>
+ *
+ * Metropolis's Node server must serve the ui-kit folder (or a copy under app/ui/).
+ *
+ * Before adopting: Metropolis already ships its own HUD skin in app/ui/styles.css
+ * that sets the same variables mapped below. On adoption that file should keep
+ * only Metropolis-specific shapes (the way Heptabase's src/theme/hud.css does)
+ * and drop its variable and font overrides, or the two will fight over them.
+ *
+ * Deliberately NOT remapped, because Metropolis owns their meaning:
+ *   --osm --str --yt (+ -soft)  source colours for OpenStreetMap, Strava, YouTube
+ *   --viz-video --viz-music     a chart palette validated against the dark surface
+ *   --c --cs                    local helpers
+ */
+html[data-sc] {
+  --ground: var(--sc-bg);
+  --surface: var(--sc-panel);
+  --sunken: var(--sc-sunken);
+  --hover: rgb(var(--sc-accent-rgb) / 0.08);
+  --line: var(--sc-line);
+  --line-strong: var(--sc-line-strong);
+  --ink: var(--sc-text);
+  --ink-2: var(--sc-text-2);
+  --ink-3: var(--sc-text-3);
+  --accent: var(--sc-accent);
+  --accent-ink: var(--sc-accent-ink);
+  --accent-soft: rgb(var(--sc-accent-rgb) / 0.16);
+  --glow: var(--sc-glow);
+  --cut: var(--sc-chamfer);
+
+  /* The toolkit apps keep one identity colour everywhere: a Heptabase object in
+     Metropolis matches the Heptabase app's own brand badge. */
+  --hep: var(--sc-app-heptabase);
+  --idf: var(--sc-app-idef0);
+  --pyr: var(--sc-app-pyramid);
+  --mm: var(--sc-app-metropolis);
+  --hep-soft: rgb(var(--sc-app-heptabase-rgb) / 0.16);
+  --idf-soft: rgb(var(--sc-app-idef0-rgb) / 0.16);
+  --pyr-soft: rgb(var(--sc-app-pyramid-rgb) / 0.16);
+
+  --err: var(--sc-danger);
+  --warn: var(--sc-warning);
+  --ok: var(--sc-success);
+  --obs: var(--sc-info);
+  --err-soft: rgb(var(--sc-danger-rgb) / 0.14);
+  --warn-soft: rgb(var(--sc-warning-rgb) / 0.14);
+  --ok-soft: rgb(var(--sc-success-rgb) / 0.14);
+  --obs-soft: rgb(var(--sc-info-rgb) / 0.14);
+
+  --shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 8px 24px rgb(0 0 0 / 0.5);
+  --sans: var(--sc-font-ui);
+  --cond: var(--sc-font-display);
+  --mono: var(--sc-font-mono);
+  color-scheme: dark;
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ui-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared sci-fi HUD UI kit for the toolkit apps: Heptabase, IDEF0, Pyramid and Metropolis.",
+  "type": "module",
+  "exports": {
+    "./css/*": "./css/*",
+    "./adapters/*": "./adapters/*",
+    "./fonts/*": "./fonts/*",
+    "./theme": {
+      "types": "./js/theme.d.ts",
+      "default": "./js/theme.js"
+    },
+    "./theme-picker": "./js/theme-picker.js",
+    "./tokens.json": "./tokens/tokens.json"
+  },
+  "files": ["css", "adapters", "fonts", "js", "tokens", "swift"],
+  "scripts": {
+    "tokens": "node scripts/build-tokens.mjs",
+    "serve": "python3 -m http.server 8130 --directory .."
+  }
+}

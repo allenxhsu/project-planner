@@ -1,0 +1,75 @@
+/*
+ * IDEF0 Modeler adapter.
+ *
+ *   <link rel="stylesheet" href="../ui-kit/css/kit.css">
+ *   <link rel="stylesheet" href="../ui-kit/adapters/idef0.css">
+ *   <script type="module">
+ *     import { initTheme } from '../ui-kit/js/theme.js';
+ *     initTheme({ app: 'idef0' });
+ *   </script>
+ *
+ * Tokens are remapped onto the kit; the few generic controls IDEF0 defines
+ * (.btn, .tab, .menu-pop) pick up the kit's button and menu treatment.
+ *
+ * The diagram sheet is intentionally themed dark on screen. SVG/PNG/PDF export
+ * should keep rendering on white: when wiring this in, confirm the exporter
+ * sets its own sheet colours rather than reading --sheet.
+ */
+html[data-sc] {
+  --bg: var(--sc-bg);
+  --panel: var(--sc-panel);
+  --panel-2: var(--sc-panel-2);
+  --line: var(--sc-line-strong);
+  --line-soft: var(--sc-line);
+  --ink: var(--sc-text);
+  --ink-soft: var(--sc-text-2);
+  --accent: var(--sc-accent);
+  --accent-soft: rgb(var(--sc-accent-rgb) / 0.16);
+  --err: var(--sc-danger);
+  --warn: var(--sc-warning);
+  --ok: var(--sc-success);
+  --sheet: var(--sc-sunken);
+  --sheet-ink: var(--sc-text);
+  --box: var(--sc-panel-2);
+  --font: var(--sc-font-ui);
+  --mono: var(--sc-font-mono);
+  color-scheme: dark;
+}
+
+html[data-sc] #toolbar .brand {
+  font-family: var(--sc-font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sc-app);
+}
+
+html[data-sc] .btn {
+  border-radius: 0;
+  font-family: var(--sc-font-display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+html[data-sc] .btn:hover:not(:disabled) {
+  box-shadow: 0 0 10px rgb(var(--sc-glow-rgb) / 0.35);
+}
+html[data-sc] .btn.on {
+  background: rgb(var(--sc-accent-rgb) / 0.25);
+  border-color: var(--sc-accent);
+  color: #fff;
+}
+
+html[data-sc] .menu-pop {
+  border-radius: 0;
+  background: rgb(var(--sc-panel-2-rgb) / 0.96);
+  border-color: var(--sc-line-strong);
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.6), 0 0 24px rgb(var(--sc-glow-rgb) / 0.08);
+}
+
+html[data-sc] .panel-tabs .tab {
+  font-family: var(--sc-font-display);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}

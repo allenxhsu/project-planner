@@ -1,0 +1,72 @@
+/* Bundled fonts (SIL Open Font License, see fonts/licenses). Local files, so
+   desktop builds render correctly offline. */
+
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/orbitron-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/orbitron-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/orbitron-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/orbitron-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 800;
+  font-display: swap;
+  src: url('../fonts/orbitron-latin-800-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Exo 2';
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/exo-2-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/exo-2-latin-400-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/exo-2-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/exo-2-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/exo-2-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/share-tech-mono-latin-400-normal.woff2') format('woff2');
+}
