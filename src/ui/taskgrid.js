@@ -57,7 +57,7 @@ export function taskRows(ids) {
     const summary = isSummary(project, i);
     return {
       id, indent: t.level - 1, summary, toggle: summary ? (ui.collapsed[id] ? 'closed' : 'open') : null,
-      class: `${s.critical && !summary ? 'is-critical' : ''}${s.milestone ? ' is-milestone' : ''}${s.cyclic ? ' is-cyclic' : ''}`,
+      class: `lvl-${Math.min(t.level, 3)}${s.critical && !summary ? ' is-critical' : ''}${s.milestone ? ' is-milestone' : ''}${s.cyclic ? ' is-cyclic' : ''}`,
       cells: {
         id: s.index, ind: indicators(t, s), wbs: s.wbs, name: t.name, duration: summary ? formatDuration(s.duration) : formatDuration(t.duration),
         start: formatDate(s.startIso), finish: formatDate(s.finishIso), predecessors: formatPredecessors(project, t), resources: formatAssignments(project, t),

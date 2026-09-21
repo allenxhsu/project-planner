@@ -67,7 +67,10 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .grid td:first-child { color: var(--sc-text-3); font-family: var(--sc-font-mono); background: var(--sc-panel-2); }
 .grid tr.is-summary td { font-weight: 700; }
 .grid tr.is-milestone td.name-cell::before { content: '◆'; font-size: 9px; color: var(--sc-text-2); }
-.grid tr.is-critical td.name-cell .cell-text { color: var(--sc-danger); }
+/* Outline levels: # white, ## blue, ### (and deeper) green. Critical tasks show red in the chart and the Critical column. */
+.grid tr.lvl-1 td.name-cell .cell-text { color: var(--sc-text); }
+.grid tr.lvl-2 td.name-cell .cell-text { color: #6aa8e6; }
+.grid tr.lvl-3 td.name-cell .cell-text { color: var(--sc-success); }
 .grid tr.is-cyclic td { color: var(--sc-danger); text-decoration: line-through; }
 .grid tr.is-sel td { background: rgb(var(--sc-accent-rgb) / 0.13); }
 .grid tr.is-sel td:first-child { background: rgb(var(--sc-accent-rgb) / 0.25); color: var(--sc-text); }
