@@ -64,7 +64,7 @@ the duration.
 
 | View | What it is |
 |---|---|
-| Gantt Chart | editable task grid beside the timeline (task names coloured by outline level: white, blue, green): bars, summary brackets, milestones, dependency arrows, progress, deadlines, today. Drag a bar to move it, its right edge to resize, the dot at its end onto another bar to link. Days, weeks or months. |
+| Gantt Chart | editable task grid beside the timeline: bars, summary brackets, milestones, dependency arrows, progress, deadlines, today. Drag a bar to move it, its right edge to resize, the dot at its end onto another bar to link. Days, weeks or months. |
 | Task Sheet | the full column set: WBS, work, cost, slack, critical, constraint, deadline, notes |
 | Resource Sheet | people and things: type, max units, rate, group; work and cost roll-ups |
 | Resource Usage | hours per resource per week, with each assignment beneath; over-allocated weeks highlighted |
