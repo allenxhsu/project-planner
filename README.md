@@ -33,7 +33,9 @@ macos/scripts/build-app.sh
 
 builds `macos/build/Project Planner.app`: a native shell that hosts this same
 web app, with document windows, a real menu bar, Finder file opening, native
-save panels and vector PDF export. See [macos/README.md](macos/README.md).
+save panels and vector PDF export. The shell itself is the shared
+[ToolkitShell](../shell-kit) package; what is written here is the app's
+configuration, its menu table and the Microsoft Project converter. See [macos/README.md](macos/README.md).
 
 ## How it schedules
 
@@ -100,6 +102,50 @@ deadlines, over-allocation, tasks with no predecessor or resource, late tasks
   (`--sample`, `--zoom day|week|month`). [doc/sample-gantt.svg](doc/sample-gantt.svg)
   is the sample plan rendered that way.
 
+## Sync
+
+Every plan carries an `id`, and one plan is one record in a
+[sync-kit](../sync-kit) workspace called `project`:
+
+```json
+{ "id": "plan_…", "type": "document", "format": "project-planner",
+  "name": "Website relaunch", "body": "…the exact bytes File ▸ Save writes…",
+  "updatedAt": 1790217036091, "deletedAt": null, "origin": "1d6b1106" }
+```
+
+The server never learns what any of it means, so a plan that travelled through
+sync and one that travelled on a memory stick are the same plan.
+
+`Settings ▸ Sync…` (the View menu, or the app menu on macOS) takes a server
+URL, a token and a switch, and shows what the last sync did. With it on, a sync
+runs every 30 seconds, whenever the window comes back to the front, and after
+every save. To try it on this machine:
+
+```bash
+cd ../sync-kit/server && npm install
+PORT=8081 SYNC_TOKENS='project:dev:a-secret-at-least-12-chars' \
+  ALLOWED_ORIGINS='http://localhost:8125,project-app://app' \
+  STORAGE=sqlite npm run dev
+```
+
+Then paste `http://127.0.0.1:8081/w/project` and the secret into Sync… in a
+browser tab and in the Mac app; both converge on the same plan. (The
+`ALLOWED_ORIGINS` line is what lets a browser tab and the Mac app's
+`project-app://` page call it; a deployed server names its own origins.)
+
+Whoever saved last wins — **except** when the plan here has unsaved edits, in
+which case the arriving plan does not silently replace them and you are asked
+which to keep. Changing the server URL clears both sync cursors, because they
+describe a position against one particular server and mean nothing against
+another.
+
+**What travels later.** Today the whole plan is one record, which is honest
+about how it is edited: a rescheduling touches nearly every task at once. When
+this grows to two people editing one plan at the same time, tasks, links,
+resources and assignments become per-row records under the plan id, while the
+calendar and any baselines stay document-level — they are properties of the
+plan as a whole, and splitting them would buy nothing.
+
 ## Keys
 
 `⌘Z` `⇧⌘Z` undo, redo · `⌘S` save · `⌘O` open · `⌘A` select all · `⌘I` task
@@ -117,10 +163,12 @@ src/model/          calendar, plan model and outline, scheduler (CPM), checks, s
 src/state/          store with undo/redo; editing commands
 src/ui/             grid, task grid, Gantt, network, resources, inspector, checks, header/menus, dialogs
 src/io/             .project.json, Microsoft Project XML, CSV, SVG/PNG/PDF
-src/host.js         bridge to the macOS shell
+src/state/sync.js   sync: settings, the engine, and what arrives from elsewhere
+src/host.js         bridge to the macOS shell (a vendored copy of ../shell-kit/js/host.js)
 tests/              node --test
 tools/gantt-svg.mjs the chart as SVG from the command line
 tools/mpp2xml.sh    Microsoft Project files in and out, through MPXJ (see tools/README.md)
 macos/              the Swift shell
-ui-kit/             the shared theme (a copy of ../ui-kit)
+ui-kit/             the shared theme (a vendored copy of ../ui-kit)
+sync-kit/           the sync client (a vendored copy of ../sync-kit)
 ```

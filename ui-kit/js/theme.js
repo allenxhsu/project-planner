@@ -7,7 +7,7 @@
  * State is three attributes on <html>, which is all the CSS keys off:
  *   data-sc            skin on (absent = the app's own classic styling)
  *   data-race          steel | crystal | chitin
- *   data-app           heptabase | idef0 | pyramid | metropolis (identity colour)
+ *   data-app           one of APPS below (the app's identity colour)
  * plus data-sc-effects="off" to drop the decorative overlays, and
  * data-sc-mac-inset when a desktop build hides the macOS title bar.
  *
@@ -17,7 +17,8 @@
 
 export const RACES = ['steel', 'crystal', 'chitin'];
 export const RACE_LABELS = { steel: 'Steel', crystal: 'Crystal', chitin: 'Chitin' };
-export const APPS = ['heptabase', 'idef0', 'pyramid', 'metropolis'];
+/** Every app in the suite, i.e. the valid data-app values. Colours live in tokens/tokens.json. */
+export const APPS = ['heptabase', 'idef0', 'sysml', 'project', 'pyramid', 'profiler', 'hypermail', 'metropolis', 'habit', 'bom'];
 
 /**
  * Values written by the first release of the kit. They are translated on read

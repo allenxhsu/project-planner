@@ -807,7 +807,8 @@
   backdrop-filter: blur(3px);
   animation: sc-fade var(--sc-dur-base) var(--sc-ease);
 }
-.sc-dialog {
+.sc-dialog,
+sc-dialog[open] {
   width: min(560px, 92vw);
   max-height: 76vh;
   overflow: auto;
@@ -869,6 +870,227 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Web components (js/*.js)                                           */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The elements render into the light DOM, so everything below is an ordinary
+ * class an app can restyle. Custom elements stay out of layout until their
+ * module upgrades them and opens them.
+ */
+sc-dialog,
+sc-command-palette {
+  display: none;
+}
+sc-command-palette[open] {
+  display: contents;
+}
+
+/* <sc-dialog>: the element is the dialog box; a backdrop it adds to <body>
+   sits behind it. Children are the body; the head and foot are rendered. */
+sc-dialog[open] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 12vh;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  margin: 0 auto;
+  padding: 0 var(--sc-space-4);
+  outline: none;
+}
+sc-dialog[open] > .sc-dialog-head {
+  order: -1;
+  margin: 0 calc(-1 * var(--sc-space-4)) var(--sc-space-4);
+}
+sc-dialog[open] > .sc-dialog-foot {
+  order: 1;
+  margin: var(--sc-space-4) calc(-1 * var(--sc-space-4)) 0;
+}
+.sc-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border-top: 1px solid var(--sc-line);
+  background: linear-gradient(0deg, rgb(var(--sc-accent-rgb) / 0.05), transparent 70%);
+}
+
+/* <sc-sync-status>: phase dot, phase word, detail readout, "Sync now". */
+sc-sync-status {
+  display: inline-flex;
+  flex-wrap: wrap; /* the button drops to a second line where the row is narrow */
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+  color: var(--sc-text-2);
+}
+.sc-sync-dot {
+  --tint: var(--sc-text-3);
+  width: 8px;
+  height: 8px;
+  flex: none;
+  background: var(--tint);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.sc-sync-phase {
+  flex: none;
+  font-family: var(--sc-font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sc-text-2);
+}
+.sc-sync-detail {
+  /* A small basis keeps the detail on the first line; the button wraps instead. */
+  flex: 1 1 9em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sc-text-3);
+}
+sc-sync-status > .sc-button {
+  flex: none;
+  margin-left: auto;
+}
+sc-sync-status[data-phase="idle"][data-synced] .sc-sync-dot {
+  --tint: var(--sc-success);
+}
+sc-sync-status[data-phase="syncing"] .sc-sync-dot {
+  --tint: var(--sc-accent);
+  box-shadow: 0 0 8px var(--sc-glow);
+  animation: sc-pulse 1s ease-in-out infinite;
+}
+sc-sync-status[data-phase="syncing"] .sc-sync-phase {
+  color: var(--sc-accent);
+}
+sc-sync-status[data-phase="error"] .sc-sync-dot {
+  --tint: var(--sc-danger);
+}
+sc-sync-status[data-phase="error"] .sc-sync-phase,
+sc-sync-status[data-phase="error"] .sc-sync-detail {
+  color: var(--sc-danger);
+}
+[data-sc-effects="off"] .sc-sync-dot {
+  animation: none;
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-sync-dot {
+    animation: none;
+  }
+}
+
+/* <sc-toast>: the region sits bottom-right; each toast is an sc-alert. */
+sc-toast {
+  position: fixed;
+  right: var(--sc-space-5);
+  bottom: var(--sc-space-5);
+  z-index: 1100;
+  display: grid;
+  justify-items: end;
+  gap: var(--sc-space-2);
+  width: min(420px, calc(100vw - 2 * var(--sc-space-5)));
+  pointer-events: none;
+}
+.sc-toast-item {
+  box-sizing: border-box;
+  width: 100%;
+  pointer-events: auto;
+  border: 1px solid var(--sc-line-strong);
+  border-left: 3px solid var(--tint);
+  background-color: var(--sc-panel-2);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 14px 40px rgb(0 0 0 / 0.55);
+  animation: sc-deploy var(--sc-dur-base) var(--sc-ease);
+}
+.sc-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+.sc-toast-item > .sc-button {
+  flex: none;
+}
+.sc-toast-item.is-leaving {
+  animation: sc-fade var(--sc-dur-base) var(--sc-ease) reverse forwards;
+}
+
+/* <sc-command-palette>: an sc-dialog with a search line and grouped results. */
+.sc-palette-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--sc-line);
+  background: linear-gradient(90deg, rgb(var(--sc-accent-rgb) / 0.1), transparent 70%);
+  color: var(--sc-text);
+  font: inherit;
+  font-size: var(--sc-text-md);
+  outline: none;
+}
+.sc-palette-input::placeholder {
+  color: var(--sc-text-3);
+}
+.sc-palette-results {
+  max-height: 52vh;
+  overflow: auto;
+  padding: 6px;
+}
+.sc-palette-group {
+  padding: 10px 10px 4px;
+  font-family: var(--sc-font-display);
+  font-size: var(--sc-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sc-text-3);
+}
+.sc-palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-3);
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--sc-text);
+  font: inherit;
+  font-size: var(--sc-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.sc-palette-item.is-active {
+  background: linear-gradient(90deg, rgb(var(--sc-accent-rgb) / 0.22), transparent);
+  border-left-color: var(--sc-accent);
+  color: #fff;
+}
+.sc-palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-palette-label mark {
+  background: transparent;
+  color: var(--sc-accent);
+  font-weight: 600;
+}
+.sc-palette-empty {
+  padding: 22px;
+  text-align: center;
+  color: var(--sc-text-3);
+}
+
+/* ------------------------------------------------------------------ */
 /* Motion                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -883,6 +1105,11 @@
     opacity: 0;
     transform: scaleY(0.92);
     filter: brightness(1.6);
+  }
+}
+@keyframes sc-pulse {
+  50% {
+    opacity: 0.35;
   }
 }
 @keyframes sc-scan {

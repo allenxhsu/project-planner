@@ -14,6 +14,8 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
+import { initSync, syncAfterSave } from './state/sync.js';
+import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -84,9 +86,10 @@ function onKey(e) {
 // its menu bar run the same commands the web menu bar does.
 function initHosting() {
   initHost({
+    name: 'project',
     load: (text, name) => loadText(text, name),
     command: (id) => { COMMANDS[id]?.(); },
-    saved: (name) => markSaved(name),
+    saved: (name) => { markSaved(name); syncAfterSave(); },
   });
   if (!hosted) return;
   let lastRev = -1, lastDirty = null;
@@ -101,6 +104,8 @@ initHeader($('header'));
 subscribe(render);
 document.addEventListener('keydown', onKey);
 initHosting();
+// The status line carries the sync indicator, so a status event redraws it.
+window.addEventListener(SYNC_EVENTS.status, () => renderStatus($('statusbar')));
 
 if (!hosted) {
   const saved = readAutosave();
@@ -108,3 +113,6 @@ if (!hosted) {
     try { loadProject(parse(JSON.stringify(saved)).project); } catch { loadProject(sampleProject()); }
   } else loadProject(sampleProject());
 } else render();
+
+// After the first plan is on screen: the record store, the engine and the timer.
+initSync().catch((err) => console.error('sync could not start', err));

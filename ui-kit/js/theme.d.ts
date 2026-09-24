@@ -1,6 +1,16 @@
 export type Race = 'steel' | 'crystal' | 'chitin';
 export type Skin = 'hud' | 'classic';
-export type AppId = 'heptabase' | 'idef0' | 'pyramid' | 'metropolis';
+export type AppId =
+  | 'heptabase'
+  | 'idef0'
+  | 'sysml'
+  | 'project'
+  | 'pyramid'
+  | 'profiler'
+  | 'hypermail'
+  | 'metropolis'
+  | 'habit'
+  | 'bom';
 
 export interface ThemeState {
   skin: Skin;

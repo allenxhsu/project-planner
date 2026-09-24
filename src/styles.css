@@ -1,11 +1,5 @@
 /* App layout. Everything reusable comes from ../ui-kit; chart colours are the kit tokens. */
 
-/* App identity colour; belongs in ui-kit/tokens/tokens.json once the kit adopts the app. */
-[data-app="project"] {
-  --sc-app: #5cc46a;
-  --sc-app-rgb: 92 196 106;
-}
-
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
@@ -189,6 +183,12 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .insp-actions { display: flex; justify-content: flex-end; }
 .workdays { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 4px 0; }
 #inspector .sc-section-title { margin: var(--sc-space-2) 0 0; }
+
+/* ---------- sync ---------- */
+.sync-status { padding: 8px 10px; border: 1px solid var(--sc-line); background: var(--sc-panel-2); font-size: 11.5px; color: var(--sc-text-2); }
+#statusbar .status-sync { font: inherit; color: var(--sc-text-3); }
+#statusbar .status-sync:hover { color: var(--sc-accent); }
+#statusbar .status-sync.warn { color: var(--sc-warning); }
 
 /* ---------- dialogs & menus ---------- */
 .dialog-foot { display: flex; justify-content: flex-end; gap: var(--sc-space-2); margin-top: var(--sc-space-3); }

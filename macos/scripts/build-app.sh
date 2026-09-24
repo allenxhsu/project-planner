@@ -16,6 +16,20 @@ OUT="${OUT_DIR:-$PKG/build}"
 APP="$OUT/Project Planner.app"
 VERSION="${VERSION:-1.0}"
 
+# The vendored kit copies must match their sources before they are bundled.
+# A kit that does not exist yet (or has no copy script yet) is skipped, not failed.
+check_copy() {  # <kit dir> <copy-script args…>
+  kit="$REPO/../$1"; shift
+  if [ -f "$kit/scripts/copy-into.mjs" ]; then
+    (cd "$REPO" && node "$kit/scripts/copy-into.mjs" --check "$@") || { echo "refresh the $kit copy first"; exit 1; }
+  else
+    echo "skipped: $kit has no scripts/copy-into.mjs yet"
+  fi
+}
+check_copy ui-kit ui-kit
+check_copy shell-kit src/host.js
+[ -d "$REPO/sync-kit" ] && check_copy sync-kit sync-kit
+
 swift build --package-path "$PKG" -c "$CONFIG" --product ProjectPlanner
 BIN_DIR="$(swift build --package-path "$PKG" -c "$CONFIG" --show-bin-path)"
 
@@ -30,6 +44,7 @@ cp "$REPO/index.html" "$WEB/"
 cp -R "$REPO/src" "$WEB/src"
 mkdir -p "$WEB/ui-kit"
 for part in css js fonts; do cp -R "$REPO/ui-kit/$part" "$WEB/ui-kit/$part"; done
+[ -d "$REPO/sync-kit/js" ] && mkdir -p "$WEB/sync-kit" && cp -R "$REPO/sync-kit/js" "$WEB/sync-kit/js"
 
 # The Microsoft Project converter: MPXJ and its Java runtime (about 180 MB),
 # when tools/setup-converter.sh has fetched them. CONVERTER=0 leaves it out.
@@ -60,6 +75,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <!-- Sync talks to a server over plain HTTP when that server is on this
+       machine or this network; App Transport Security blocks that by default. -->
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

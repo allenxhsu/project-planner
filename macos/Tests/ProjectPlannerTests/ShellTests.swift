@@ -1,48 +1,39 @@
 import XCTest
+import ToolkitShell
 @testable import ProjectPlanner
 
+/// What is left to test here is what is left in this target: the menu table,
+/// the document's own rules about Microsoft Project files, and the converter.
+/// The shell itself (path guard, MIME table, save panel, PDF) is covered by
+/// shell-kit's own tests.
 final class ShellTests: XCTestCase {
-    /// The repository root, from …/macos/Tests/ProjectPlannerTests/ShellTests.swift.
-    private var repo: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-    }
+    override func setUp() { ShellConfig.current = PlannerApp.config }
 
     /// A menu item whose id the page does not know would do nothing, silently.
     func testEveryMenuCommandExistsInThePage() throws {
-        let source = try String(contentsOf: repo.appendingPathComponent("src/ui/toolbar.js"), encoding: .utf8)
-        let start = try XCTUnwrap(source.range(of: "export const COMMANDS = {"))
-        let end = try XCTUnwrap(source.range(of: "};", range: start.upperBound..<source.endIndex))
-        let table = String(source[start.upperBound..<end.lowerBound])
-        let known = Set(table.matches(of: #/'([a-z]+\.[A-Za-z]+)':/#).map { String($0.1) })
+        let source = try String(contentsOf: PlannerApp.repositoryRoot.appendingPathComponent("src/ui/toolbar.js"), encoding: .utf8)
+        let known = ShellMenu.commandIDs(inJavaScript: source)
         XCTAssertFalse(known.isEmpty)
-        let sent = MainMenu.webCommandIDs()
+        let sent = ShellMenu.webCommandIDs(in: MainMenu.build())
         XCTAssertFalse(sent.isEmpty)
         for id in sent { XCTAssertTrue(known.contains(id), "the page has no command “\(id)”") }
     }
 
-    func testSaveNameMatchesTheWebApp() {
-        XCTAssertEqual(ModelDocument.fileName(forModelNamed: "Website relaunch"), "website-relaunch.project.json")
-        XCTAssertEqual(ModelDocument.fileName(forModelNamed: "  Pump / v2 (draft) "), "pump-v2-draft.project.json")
-        XCTAssertEqual(ModelDocument.fileName(forModelNamed: "…"), "untitled.project.json")
+    func testTheKitServesThisRepositoryAndNamesSavedPlans() {
+        let index = WebRoot.file(for: URL(string: "project-app://app/")!, under: PlannerApp.repositoryRoot)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: index!.path))
+        XCTAssertEqual(WebDocument.fileName(forModelNamed: "Website relaunch"), "website-relaunch.project.json")
+        XCTAssertEqual(WebDocument.fileName(forModelNamed: "  Pump / v2 (draft) "), "pump-v2-draft.project.json")
+        XCTAssertEqual(WebDocument.fileName(forModelNamed: "…"), "untitled.project.json")
     }
 
+    /// Only `.project.json` is written back over; everything else opens as a new plan.
     func testImportsAreToldFromJSON() {
-        XCTAssertTrue(ModelDocument.looksLikeXML("\u{FEFF}\n <?xml version=\"1.0\"?><xmi:XMI/>"))
-        XCTAssertFalse(ModelDocument.looksLikeXML("  {\"format\":\"project-planner\"}"))
+        XCTAssertTrue(WebDocument.looksLikeXML("\u{FEFF}\n <?xml version=\"1.0\"?><Project/>"))
+        XCTAssertFalse(WebDocument.looksLikeXML("  {\"format\":\"project-planner\"}"))
         XCTAssertTrue(ModelDocument.looksLikeCSV("Name,Duration\nPlan,3d", name: nil))
         XCTAssertTrue(ModelDocument.looksLikeCSV("{\"x\":1}", name: "tasks.csv"))
         XCTAssertFalse(ModelDocument.looksLikeCSV("  {\"format\":\"project-planner\"}", name: "plan.project.json"))
-    }
-
-    func testTheSchemeServesOnlyTheWebRoot() throws {
-        let root = repo
-        let index = try XCTUnwrap(WebRoot.file(for: URL(string: "project-app://app/")!, under: root))
-        XCTAssertEqual(index.lastPathComponent, "index.html")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: index.path))
-        XCTAssertNotNil(WebRoot.file(for: URL(string: "project-app://app/src/main.js")!, under: root))
-        XCTAssertNil(WebRoot.file(for: URL(string: "project-app://app/../IDEF0/index.html")!, under: root))
-        XCTAssertNil(WebRoot.file(for: URL(string: "project-app://app/src/../../secret")!, under: root))
     }
 
     func testConverterRecognisesProjectFiles() {
@@ -57,16 +48,10 @@ final class ShellTests: XCTestCase {
     /// With the converter fetched (tools/setup-converter.sh), a real .mpp turns into Project XML.
     func testConverterReadsAnMPP() throws {
         try XCTSkipUnless(Converter.isAvailable, "run tools/setup-converter.sh first")
-        let mpp = try Data(contentsOf: repo.appendingPathComponent("tests/fixtures/baseline-project2010.mpp"))
+        let mpp = try Data(contentsOf: PlannerApp.repositoryRoot.appendingPathComponent("tests/fixtures/baseline-project2010.mpp"))
         let xml = try Converter.convert(mpp, from: "mpp", to: "xml")
         let text = try XCTUnwrap(String(data: xml, encoding: .utf8))
         XCTAssertTrue(text.contains("<Project xmlns=\"http://schemas.microsoft.com/project\">"))
         XCTAssertTrue(text.contains("<Name>Subtask 1</Name>"))
-    }
-
-    func testModulesGetAJavaScriptType() {
-        XCTAssertEqual(WebRoot.mimeType(for: URL(fileURLWithPath: "/x/main.js")), "text/javascript")
-        XCTAssertEqual(WebRoot.mimeType(for: URL(fileURLWithPath: "/x/kit.css")), "text/css")
-        XCTAssertEqual(WebRoot.mimeType(for: URL(fileURLWithPath: "/x/exo.woff2")), "font/woff2")
     }
 }

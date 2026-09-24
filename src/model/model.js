@@ -25,6 +25,9 @@ export const RESOURCE_TYPES = { work: 'Work', material: 'Material', cost: 'Cost'
 
 export function createProject(name = 'Untitled project', start = null) {
   return {
+    // The id travels with the plan and never changes: it is what sync uses to
+    // know that this plan and the one on another device are the same plan.
+    id: uid('plan'),
     format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] }, tasks: [], resources: [],
   };

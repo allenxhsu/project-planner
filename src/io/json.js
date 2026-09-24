@@ -16,6 +16,8 @@ export function parse(text) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.tasks)) throw new Error('The file is not a Project Planner plan (no task list).');
   const repairs = [];
   const p = createProject(String(raw.name || 'Untitled project'), isoValid(raw.start) ? raw.start : undefined);
+  // A plan written before ids existed gets one now; it keeps it from here on.
+  if (typeof raw.id === 'string' && raw.id) p.id = raw.id;
   if (!isoValid(raw.start)) repairs.push('The project start date was missing or unreadable; today is used.');
   p.statusDate = isoValid(raw.statusDate) ? raw.statusDate : null;
   p.currency = typeof raw.currency === 'string' ? raw.currency : '$';

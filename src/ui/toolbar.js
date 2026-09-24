@@ -10,6 +10,8 @@ import { exportMspdi, importMspdi } from '../io/mspdi.js';
 import { exportCsv, importCsv } from '../io/csv.js';
 import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
 import { showMenu, confirmDialog, showText } from './dialog.js';
+import { settingsDialog } from './settings.js';
+import { syncAfterSave, syncConfigured, syncStatus } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -34,6 +36,7 @@ export function saveProject() {
   const name = store.ui.fileName || `${slugify(store.project.name)}${FILE_EXT}`;
   downloadText(serialize(store.project), name, 'application/json');
   markSaved(name);
+  syncAfterSave();
 }
 
 /** File name extensions the MPXJ converter reads (Microsoft Project and its neighbours). */
@@ -174,7 +177,7 @@ export const COMMANDS = {
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
-  'view.appearance': appearance,
+  'view.appearance': appearance, 'view.sync': settingsDialog,
   'project.info': () => set({ rightOpen: true, rightTab: 'project' }), 'project.stats': () => set({ bottomOpen: true, bottomTab: 'stats' }),
   'export.svg': guarded(exportSvg), 'export.png': guarded(exportPng), 'export.pdf': guarded(exportPdf),
   'help.guide': help,
@@ -217,6 +220,7 @@ const MENUS = {
     { label: 'Expand all', run: run('view.expandAll') }, { label: 'Collapse all', run: run('view.collapseAll') }, '-',
     { label: 'Details panel', checked: store.ui.rightOpen, run: run('view.inspector') }, { label: 'Checks panel', checked: store.ui.bottomOpen, run: run('view.checks') }, '-',
     { label: 'Appearance…', run: run('view.appearance') },
+    { label: 'Sync…', run: run('view.sync') },
   ],
   Project: () => [
     { label: 'Project information & working time…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') },
@@ -318,4 +322,13 @@ export function renderStatus(root) {
   const errs = issues.filter((i) => i.level === 'error').length, warns = issues.filter((i) => i.level === 'warning').length;
   root.append(el('span', { class: errs ? 'warn' : '', text: errs || warns ? `${errs ? `${errs} error${errs > 1 ? 's' : ''}` : ''}${errs && warns ? ', ' : ''}${warns ? `${warns} warning${warns > 1 ? 's' : ''}` : ''}` : 'no issues' }));
   root.append(el('span', { class: ui.dirty ? 'warn' : 'ok', text: ui.dirty ? '● unsaved' : '● saved' }));
+  if (syncConfigured()) {
+    const s = syncStatus();
+    const glyph = s.phase === 'syncing' ? '⟳' : s.phase === 'error' ? '⚠' : '⇅';
+    root.append(el('button', {
+      class: `link status-sync${s.phase === 'error' ? ' warn' : ''}`, text: `${glyph} sync`,
+      title: s.phase === 'error' ? `Last sync failed: ${s.lastError}` : s.lastSyncAt ? `Last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}` : 'Not synced yet',
+      onclick: settingsDialog,
+    }));
+  }
 }

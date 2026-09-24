@@ -106,6 +106,12 @@ public enum SCAppColor {
     public static let idef0 = Color(red: 0.416, green: 0.659, blue: 0.902)
     public static let pyramid = Color(red: 0.878, green: 0.604, blue: 0.353)
     public static let metropolis = Color(red: 0.235, green: 0.733, blue: 0.655)
+    public static let sysml = Color(red: 0.510, green: 0.796, blue: 0.302)
+    public static let project = Color(red: 0.333, green: 0.765, blue: 0.392)
+    public static let profiler = Color(red: 0.757, green: 0.451, blue: 0.871)
+    public static let hypermail = Color(red: 0.910, green: 0.451, blue: 0.820)
+    public static let bom = Color(red: 0.808, green: 0.824, blue: 0.294)
+    public static let habit = Color(red: 0.922, green: 0.478, blue: 0.627)
 }
 
 /// Font helpers. Bundle the TTF/OTF files of these families in the app target

@@ -42,6 +42,18 @@
   --sc-app-pyramid-rgb: 224 154 90;
   --sc-app-metropolis: #3cbba7;
   --sc-app-metropolis-rgb: 60 187 167;
+  --sc-app-sysml: #82cb4d;
+  --sc-app-sysml-rgb: 130 203 77;
+  --sc-app-project: #55c364;
+  --sc-app-project-rgb: 85 195 100;
+  --sc-app-profiler: #c173de;
+  --sc-app-profiler-rgb: 193 115 222;
+  --sc-app-hypermail: #e873d1;
+  --sc-app-hypermail-rgb: 232 115 209;
+  --sc-app-bom: #ced24b;
+  --sc-app-bom-rgb: 206 210 75;
+  --sc-app-habit: #eb7aa0;
+  --sc-app-habit-rgb: 235 122 160;
   --sc-app: var(--sc-accent);
   --sc-app-rgb: var(--sc-accent-rgb);
 }
@@ -163,4 +175,34 @@
 [data-app="metropolis"] {
   --sc-app: var(--sc-app-metropolis);
   --sc-app-rgb: var(--sc-app-metropolis-rgb);
+}
+
+[data-app="sysml"] {
+  --sc-app: var(--sc-app-sysml);
+  --sc-app-rgb: var(--sc-app-sysml-rgb);
+}
+
+[data-app="project"] {
+  --sc-app: var(--sc-app-project);
+  --sc-app-rgb: var(--sc-app-project-rgb);
+}
+
+[data-app="profiler"] {
+  --sc-app: var(--sc-app-profiler);
+  --sc-app-rgb: var(--sc-app-profiler-rgb);
+}
+
+[data-app="hypermail"] {
+  --sc-app: var(--sc-app-hypermail);
+  --sc-app-rgb: var(--sc-app-hypermail-rgb);
+}
+
+[data-app="bom"] {
+  --sc-app: var(--sc-app-bom);
+  --sc-app-rgb: var(--sc-app-bom-rgb);
+}
+
+[data-app="habit"] {
+  --sc-app: var(--sc-app-habit);
+  --sc-app-rgb: var(--sc-app-habit-rgb);
 }

@@ -276,3 +276,33 @@ test('loading repairs a damaged file', () => {
   assert.ok(repairs.length >= 3);
   assert.throws(() => parse('{"nope":1}'));
 });
+
+// ---------------------------------------------------------------------------
+// Sync, document level. The engine and the merge are sync-kit's own tests;
+// what belongs here is the one rule this app decides for itself.
+// ---------------------------------------------------------------------------
+
+test('a plan that arrived elsewhere replaces this one only when nothing is unsaved', async () => {
+  const { decideRemote } = await import('../src/state/sync.js');
+  const mine = { id: 'plan_a', type: 'document', body: '{}', updatedAt: 2, origin: 'other' };
+  const other = { id: 'plan_b', type: 'document', body: '{}', updatedAt: 2, origin: 'other' };
+
+  assert.equal(decideRemote({ dirty: false, applied: [mine], planId: 'plan_a' }).action, 'take');
+  assert.equal(decideRemote({ dirty: true, applied: [mine], planId: 'plan_a' }).action, 'ask',
+    'unsaved work is never discarded without asking');
+  assert.equal(decideRemote({ dirty: false, applied: [other], planId: 'plan_a' }).action, 'ignore',
+    'another plan changing is not this plan changing');
+  assert.equal(decideRemote({ dirty: false, applied: [], planId: 'plan_a' }).action, 'ignore');
+  assert.equal(decideRemote({ dirty: false, applied: [{ ...mine, deletedAt: 3 }], planId: 'plan_a' }).action, 'ignore',
+    'a tombstone is not a plan to open');
+  assert.equal(decideRemote({ dirty: false, applied: [mine], planId: 'plan_a' }).remote, mine);
+});
+
+test('a plan keeps its id through save and load, and the sample has a fixed one', () => {
+  const p = sampleProject();
+  assert.equal(p.id, 'plan_sample_website_relaunch');
+  const { project } = parse(serialize(p));
+  assert.equal(project.id, p.id, 'the id is what makes two devices agree this is one plan');
+  const fresh = parse(JSON.stringify({ name: 'X', tasks: [{ name: 'A' }] })).project;
+  assert.match(fresh.id, /^plan_/, 'a plan written before ids existed gets one');
+});

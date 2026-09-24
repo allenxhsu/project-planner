@@ -46,6 +46,8 @@ const RESOURCES = [
 
 export function sampleProject() {
   const p = createProject('Website relaunch', '2026-09-21');
+  // A fixed id, so the sample opened on two devices is one plan to sync, not two.
+  p.id = 'plan_sample_website_relaunch';
   p.statusDate = null;
   p.calendar.holidays = ['2026-11-26', '2026-12-25', '2027-01-01'];
   const res = {};

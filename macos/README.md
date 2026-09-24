@@ -2,8 +2,17 @@
 
 A native shell around the [web app](../README.md). The plan, the scheduler and
 every editing rule stay in `../src` — one codebase, so the Mac app and the
-browser can never disagree about a date. This package supplies what a browser
-tab cannot: documents, the menu bar, save panels and PDF.
+browser can never disagree about a date. The shell that supplies what a browser
+tab cannot — documents, the menu bar, save panels, PDF — is the shared
+[ToolkitShell](../../shell-kit) package.
+
+What is left in this target is what no other app in the suite has:
+
+| File | |
+|---|---|
+| `App.swift` | the `ShellConfig` (name, `project-app` scheme, `.project.json` suffix), the document's Microsoft Project rules, and the one extra message (`convertExport`) |
+| `MainMenu.swift` | the menu table: every `web` item is a command id from `COMMANDS` in `src/ui/toolbar.js` |
+| `Converter.swift` | Microsoft Project files through MPXJ |
 
 ## Requirements
 
