@@ -73,6 +73,8 @@ export function createProject(name = 'Untitled project', start = null) {
     // The hue this project is drawn in on a shared calendar. Null means the
     // calendar picks one, spaced away from the projects beside it.
     colour: null,
+    // Kept at the top of the shelf, whatever the alphabet says.
+    pinned: false,
     // A template is a pattern to copy, not work in anyone's week.
     template: false,
     // Archived: finished or shelved. Kept in full, but out of the way of

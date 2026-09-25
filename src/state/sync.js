@@ -461,6 +461,17 @@ export async function deleteWorkspace(id) {
   return true;
 }
 
+/**
+ * Pin a plan to the top of the shelf, or unpin it.
+ *
+ * The shelf used to be ordered by what changed last, which meant opening a
+ * project moved it — the list rearranged itself under the pointer as you
+ * clicked. Order is by name now, and pinning is how something is deliberately
+ * kept at the top rather than by accident of being touched.
+ */
+export const setPlanPinned = (id, on) =>
+  patchPlan(id, (project) => { project.pinned = !!on; }, on ? 'Pin to the top' : 'Unpin');
+
 /** File a plan under a workspace, or take it out of one with null. */
 export const setPlanWorkspace = (id, workspaceId) =>
   patchPlan(id, (project) => { project.workspaceId = workspaceId || null; }, 'Move to a workspace');
@@ -710,6 +721,7 @@ export function planSummary(record) {
     startIso: schedule?.startIso || project.start, finishIso: schedule?.finishIso || null,
     percent: schedule?.percent ?? 0, critical: schedule?.criticalCount ?? 0,
     template: project.template === true,
+    pinned: project.pinned === true,
     workspaceId: project.workspaceId || null,
     archived: project.archived === true,
     archivedAt: project.archivedAt || null,
@@ -732,8 +744,10 @@ export async function listPlans() {
   const all = await recordStore.all();
   return all
     .filter((r) => r && r.type === 'document' && !r.deletedAt && typeof r.body === 'string')
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map(planSummary);
+    .map(planSummary)
+    // Pinned first, then by name. Never by what was touched last: a list that
+    // rearranges itself as you open things is a list you cannot point at.
+    .sort((a, b) => (b.pinned === true) - (a.pinned === true) || String(a.name).localeCompare(String(b.name)));
 }
 
 /** Put one of them on screen. */

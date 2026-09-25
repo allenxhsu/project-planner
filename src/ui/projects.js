@@ -9,7 +9,7 @@ import { el, clear, formatMoney } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
-import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
+import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, setPlanPinned, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 
@@ -38,18 +38,14 @@ export async function reloadPlans({ pull = false } = {}) {
   set({});
 }
 
-function card(p) {
-  const open = () => { void openThis(); };
-  const openThis = async () => {
+/** Everything you can do to a plan, from a card or from a row. */
+function cardMenu(p, x, y) {
+  const open = async () => {
     if (p.id === store.project.id) { set({ view: 'gantt' }); return; }
     if (await openPlan(p.id)) set({ view: 'gantt' });
   };
-  const isOpen = p.id === store.project.id;
-  const menu = (e) => {
-    e.stopPropagation();
-    const r = e.currentTarget.getBoundingClientRect();
-    showMenu(r.left - 170, r.bottom + 4, [
-      { label: 'Open', run: open },
+  showMenu(x, y, [
+      { label: 'Open', run: () => { void open(); } },
       '-',
       { label: 'Duplicate', run: async () => {
         const name = await promptText('Duplicate this plan', 'What is the copy called?', `${p.name} (copy)`);
@@ -63,6 +59,8 @@ function card(p) {
         if (!name) return;
         if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }
       } },
+      '-',
+      { label: p.pinned ? 'Unpin from the top' : 'Pin to the top', run: async () => { await setPlanPinned(p.id, !p.pinned); void reloadPlans(); } },
       '-',
       ...(spaces.length ? [
         { note: 'Workspace' },
@@ -83,8 +81,17 @@ function card(p) {
         if (p.id === store.project.id) loadProject(createProject());
         void reloadPlans();
       } },
-    ]);
+  ]);
+}
+
+function card(p) {
+  const open = () => { void openThis(); };
+  const openThis = async () => {
+    if (p.id === store.project.id) { set({ view: 'gantt' }); return; }
+    if (await openPlan(p.id)) set({ view: 'gantt' });
   };
+  const isOpen = p.id === store.project.id;
+  const menu = (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); cardMenu(p, r.left - 170, r.bottom + 4); };
 
   return el('article', { class: `plan-card sc-card sc-brackets sc-brackets--hover${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`, onclick: open, title: `Last saved ${formatDate(new Date(p.updatedAt).toISOString().slice(0, 10), 'long')} on ${p.origin || 'this device'}` },
     el('div', { class: 'plan-head' },
@@ -100,10 +107,58 @@ function card(p) {
       el('span', { class: 'sc-spacer' }),
       p.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: `${p.critical} critical` }) : null,
       el('span', { class: 'sc-pill', text: `${p.percent || 0}%` }),
+      p.pinned ? el('span', { class: 'sc-pill', title: 'Pinned to the top', text: '★' }) : null,
       p.template ? el('span', { class: 'sc-pill', title: 'A pattern to copy — its tasks stay off the calendar', text: 'Template' }) : null,
       p.archived ? el('span', { class: 'sc-pill', title: p.archivedAt ? `Archived ${formatDate(p.archivedAt, 'long')}` : 'Archived', text: 'Archived' }) : null,
       !activeWorkspace() && p.workspaceId ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-text-3)' }, title: 'The workspace this project is filed under', text: spaces.find((w) => w.id === p.workspaceId)?.name || 'Filed' }) : null,
       isOpen ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'Open' }) : null));
+}
+
+/** One plan as a row: the same facts as a card, in a line you can scan. */
+function row(p, spaces) {
+  const isOpen = p.id === store.project.id;
+  const open = async () => {
+    if (isOpen) { set({ view: 'gantt' }); return; }
+    if (await openPlan(p.id)) set({ view: 'gantt' });
+  };
+  return el('tr', {
+    class: `plan-row${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`,
+    onclick: () => { void open(); },
+    oncontextmenu: (e) => { e.preventDefault(); cardMenu(p, e.clientX, e.clientY); },
+  },
+    el('td', { class: 'plan-row-pin' }, el('button', {
+      class: `sc-button sc-button--ghost sc-button--icon sc-button--sm${p.pinned ? ' is-on' : ''}`,
+      title: p.pinned ? 'Unpin from the top' : 'Pin to the top', text: p.pinned ? '★' : '☆',
+      onclick: async (e) => { e.stopPropagation(); await setPlanPinned(p.id, !p.pinned); void reloadPlans(); },
+    })),
+    el('td', {}, el('span', { class: 'cell-text plan-row-name', text: p.name }),
+      p.template ? el('span', { class: 'sc-pill', text: 'Template' }) : null,
+      p.archived ? el('span', { class: 'sc-pill', text: 'Archived' }) : null,
+      isOpen ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'Open' }) : null),
+    el('td', { class: 'sc-faint', text: !activeWorkspace() && p.workspaceId ? (spaces.find((w) => w.id === p.workspaceId)?.name || '') : '' }),
+    el('td', { class: 'sc-mono num', text: p.ok ? formatDate(p.startIso, 'day') : '—' }),
+    el('td', { class: 'sc-mono num', text: p.ok && p.finishIso ? formatDate(p.finishIso, 'day') : '—' }),
+    el('td', { class: 'num', text: String(p.tasks ?? 0) }),
+    el('td', { class: 'num' }, p.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: String(p.critical) }) : null),
+    el('td', { class: 'num' }, el('span', { class: 'sc-meter plan-row-meter' }, el('span', { style: { '--value': `${p.percent || 0}%` } }))),
+    el('td', { class: 'num', text: `${p.percent || 0}%` }),
+    el('td', { class: 'plan-row-menu' }, el('button', {
+      class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋮', title: 'Actions',
+      onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); cardMenu(p, r.left - 200, r.bottom + 4); },
+    })));
+}
+
+function listOf(plans, spaces) {
+  const table = el('table', { class: 'grid plan-list' });
+  table.append(el('thead', {}, el('tr', {},
+    el('th', { text: '' }), el('th', { text: 'Project' }), el('th', { text: 'Workspace' }),
+    el('th', { class: 'num', text: 'Start' }), el('th', { class: 'num', text: 'Finish' }),
+    el('th', { class: 'num', text: 'Tasks' }), el('th', { class: 'num', text: 'Critical' }),
+    el('th', { class: 'num', text: 'Progress' }), el('th', { class: 'num', text: '%' }), el('th', { text: '' }))));
+  const body = el('tbody');
+  for (const p of plans) body.append(row(p, spaces));
+  table.append(body);
+  return table;
 }
 
 export function renderProjects(root) {
@@ -117,26 +172,33 @@ export function renderProjects(root) {
   const active = activeWorkspace();
   const here = plans.filter((p) => !active || (p.workspaceId || null) === active || !p.workspaceId);
 
-  pane.append(el('div', { class: 'projects-head' },
-    el('div', { class: 'sc-display', text: 'Projects' }),
-    el('span', { class: 'sc-muted small', text: active
+  pane.append(el('div', { class: 'projects-head people-head' },
+    el('div', { class: 'people-head-text' },
+      el('div', { class: 'sc-display', text: 'Projects' }),
+      el('span', { class: 'sc-muted small', text: active
       ? `The projects in this workspace, and any that are not filed under one. ${spaces.find((w) => w.id === active)?.name || ''}`.trim()
-      : (syncConfigured() ? 'Every plan on this device and on every device you sync with.' : 'Every plan on this device. Turn on Sync… to keep a copy online and see plans from your other devices.') })));
+        : (syncConfigured() ? 'Every plan on this device and on every device you sync with.' : 'Every plan on this device. Turn on Sync… to keep a copy online and see plans from your other devices.') })),
+    el('div', { class: 'people-head-actions' },
+      el('button', { class: `sc-button sc-button--sm${store.ui.projectsLayout !== 'list' ? ' is-on' : ''}`, text: 'Cards', title: 'One card per project', onclick: () => set({ projectsLayout: 'cards' }) }),
+      el('button', { class: `sc-button sc-button--sm${store.ui.projectsLayout === 'list' ? ' is-on' : ''}`, text: 'List', title: 'One row per project', onclick: () => set({ projectsLayout: 'list' }) }),
+      el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: '+ Project', onclick: () => { const np = createProject(); np.workspaceId = activeWorkspace() || null; loadProject(np); set({ view: 'gantt' }); void reloadPlans(); } }))));
 
   const live = here.filter((p) => !p.archived);
   const archived = here.filter((p) => p.archived);
 
-  const grid = el('div', { class: 'plan-grid' });
-  grid.append(el('button', {
+  const asList = store.ui.projectsLayout === 'list';
+  const grid = asList ? el('div', { class: 'plan-listing' }) : el('div', { class: 'plan-grid' });
+  if (!asList) grid.append(el('button', {
     class: 'plan-card plan-new sc-card sc-brackets',
     // A plan started while a workspace is in front belongs to that workspace.
     onclick: () => { const p = createProject(); p.workspaceId = activeWorkspace() || null; loadProject(p); set({ view: 'gantt' }); void reloadPlans(); },
   }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'New project' })));
-  if (!live.length && !loading) {
+  if (!live.length && !loading && !asList) {
     grid.append(el('button', { class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(sampleProject()); set({ view: 'gantt' }); void reloadPlans(); } },
       el('div', { class: 'plan-new-mark', text: '◈' }), el('div', { text: 'Open the sample plan' })));
   }
-  for (const p of live) grid.append(card(p));
+  if (asList) grid.append(listOf(live, spaces));
+  else for (const p of live) grid.append(card(p));
   pane.append(grid);
 
   // The archive is kept, not hidden: it is one click away and says how much is in it.
@@ -148,9 +210,12 @@ export function renderProjects(root) {
       onclick: () => { showArchive = !showArchive; set({}); },
     }));
     if (showArchive) {
-      const old = el('div', { class: 'plan-grid' });
-      for (const p of archived) old.append(card(p));
-      pane.append(old);
+      if (asList) pane.append(listOf(archived, spaces));
+      else {
+        const old = el('div', { class: 'plan-grid' });
+        for (const p of archived) old.append(card(p));
+        pane.append(old);
+      }
     }
   }
 

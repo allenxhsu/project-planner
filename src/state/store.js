@@ -45,6 +45,7 @@ export const store = {
     calendarScope: 'all',   // calendar: 'all' plans, or 'plan' for the open one
     calendarRange: 'work',  // calendar: 'day', 'three' days, 'work' week, whole 'week', or 'month'
     calendarColour: 'auto', // calendar: colour a block by 'person', by 'plan', or 'auto'
+    projectsLayout: 'cards', // projects: 'cards' or 'list'
     usageGrain: 'week',     // resource usage: 'day' or 'week' columns
     usageScope: 'all',      // resource usage: every project, or the open one
     split: 560,             // gantt: width of the grid half
