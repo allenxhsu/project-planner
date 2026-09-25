@@ -27,6 +27,7 @@ import { showMenu } from './dialog.js';
  */
 export const RANGES = {
   day: { label: 'Day', step: 1, unit: 'day' },
+  three: { label: '3 days', step: 3, unit: 'day' },
   work: { label: 'Work week', step: 7, unit: 'week' },
   week: { label: 'Week', step: 7, unit: 'week' },
   month: { label: 'Month', step: 1, unit: 'month' },
@@ -48,6 +49,9 @@ export function daysOnScreen(project) {
   const at = anchor ?? toDay(today());
   const range = rangeOf();
   if (range === 'day') return { days: [at], start: at };
+  // Three days runs from the day on screen, not from a Monday: "today and the
+  // next two" is what anyone means by it.
+  if (range === 'three') return { days: [at, at + 1, at + 2], start: at };
   if (range === 'month') {
     const first = monthStart(at);
     const gridStart = weekStart(first);
@@ -102,6 +106,24 @@ export async function reloadCalendarPlans() {
   loadedPlans = true;
   set({});
 }
+
+/**
+ * What the colour on a block means.
+ *
+ * Colour by person answers "who is in three places at once", which is the
+ * question when several people share a calendar. Colour by project answers
+ * "what am I spending the week on", which is the question when the calendar is
+ * one person's and the projects are many — and one person's calendar coloured
+ * by person is one colour, which says nothing. `auto` picks whichever of those
+ * the week actually is.
+ */
+export const COLOUR_BY = { auto: 'Automatic', person: 'Person', plan: 'Project' };
+export const colourModeFor = (blocks) => {
+  const mode = COLOUR_BY[store.ui.calendarColour] ? store.ui.calendarColour : 'auto';
+  if (mode !== 'auto') return mode;
+  const people = new Set(blocks.flatMap((b) => b.people || []));
+  return people.size > 1 ? 'person' : 'plan';
+};
 
 /** A stable colour per person, so a week of several people reads at a glance. */
 export function personColour(name) {
@@ -190,6 +212,7 @@ export function renderCalendar(root) {
   const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : all.blocks;
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who) : all.meetings;
   const overflow = all.overflow;
+  const colourMode = colourModeFor(blocks);
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getTask(project, project.currentPhaseId) : null;
   const planCount = entries.length;
@@ -201,9 +224,15 @@ export function renderCalendar(root) {
     el('select', { class: 'sc-select', onchange: (e) => set({ calendarScope: e.target.value }) },
       el('option', { value: 'all', text: `All projects (${others.length + 1})`, selected: ui.calendarScope !== 'plan' }),
       el('option', { value: 'plan', text: 'This project only', selected: ui.calendarScope === 'plan' })),
+    el('span', { class: 'sc-label', text: 'Colour by' }),
+    el('select', { class: 'sc-select', onchange: (e) => set({ calendarColour: e.target.value }) },
+      ...Object.entries(COLOUR_BY).map(([id, label]) => el('option', {
+        value: id, selected: (store.ui.calendarColour || 'auto') === id,
+        text: id === 'auto' ? `Automatic — ${COLOUR_BY[colourMode].toLowerCase()}` : label,
+      }))),
     el('span', { class: 'sc-faint small', text: who
-      ? `One person’s week, across ${planCount === 1 ? 'this project' : `${planCount} projects`}.`
-      : `Everyone’s hours, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the person.` }));
+      ? `One person’s week, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.`
+      : `Everyone’s hours, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.` }));
   pane.append(bar);
   if (phaseList.length) {
     pane.append(el('div', { class: 'cal-phase' },
@@ -270,9 +299,13 @@ export function renderCalendar(root) {
       const info = entry.schedule.tasks[b.taskId];
       if (!t || !info) continue;
       const person = whoOf(entries, b);
-      const colour = personColour(person.names[0] || 'unassigned');
+      const colour = personColour(colourMode === 'plan' ? b.planName || b.planId : person.names[0] || 'unassigned');
       const foreign = b.planId !== project.id;
       const height = Math.max(16, y(b.end) - y(b.start) - 2);
+      // Half an hour is about twenty pixels: too short to stack a time, a name
+      // and a project, so those go on one line and the block still says what
+      // it is rather than only when it is.
+      const tight = height < 34;
       // Two people can work the same hour, so their blocks sit side by side
       // rather than one hiding the other.
       const width = 100 / lanes;
@@ -282,7 +315,7 @@ export function renderCalendar(root) {
       // task's name and the day says the rest.
       const oneDay = range === 'day';
       col.append(el('div', {
-        class: `cal-block${oneDay ? ' is-day' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
@@ -311,7 +344,7 @@ export function renderCalendar(root) {
           oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
           person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
         el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),
-        (planCount > 1 && !who) || foreign ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
+        (planCount > 1 && !who) || foreign || tight ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
         oneDay ? el('div', { class: 'cal-block-facts sc-mono sc-faint' },
           `${b.minutes % 60 ? `${b.minutes}m` : `${b.minutes / 60}h`}`,
           person.names.length ? el('span', { text: person.names.join(', ') }) : null,

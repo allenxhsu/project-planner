@@ -210,19 +210,28 @@ Mac app registers.
 
 ### How much of it is on screen
 
-Four ranges, from the toolbar or the View menu. **Day** is one day hour by
-hour. **Work week** is the plan's own working days, which is not Monday to
-Friday by decree — it follows the working days in Project information.
-**Week** is all seven, for when the weekend is being worked. **Month** is a
-different drawing: a cell a day, each listing what is on it with the hours it
+Five ranges, from the toolbar or the View menu. **Day** is one day hour by
+hour. **3 days** is that day and the next two, starting where you are rather
+than at a Monday. **Work week** is the plan's own working days, which is not
+Monday to Friday by decree — it follows the working days in Project
+information. **Week** is all seven, for when the weekend is being worked.
+**Month** is a different drawing: a cell a day, each listing what is on it with the hours it
 holds, because thirty days of an hour grid is unreadable. Double-clicking a
 day, or its "+n more", opens that day. The arrows move by whatever is on
 screen: a day, a week or a month.
 
 A day has one column and room to spare, so each block reads as a line: the
 hours it runs, who is on it, the task, the project it belongs to, how long it
-takes, its urgency, how far along it is and any deadline. A week keeps to the
-task's name, because half an hour of a week is too short to stack all that.
+takes, its urgency, how far along it is and any deadline. A block too short to stack a time, a name and a project — half an hour is
+about twenty pixels — puts them on one line instead, so a week still says what
+each block is rather than only when it is.
+
+**Colour by** is person, project, or automatic. Colour by person answers who
+is in three places at once, which is the question when several people share a
+calendar. Colour by project answers what the week is going into, which is the
+question when the calendar is one person's and the projects are many — and one
+person's calendar coloured by person is one colour, which says nothing.
+Automatic picks whichever the week actually is.
 
 ### Why a week is not full
 

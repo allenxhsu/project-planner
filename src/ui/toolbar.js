@@ -337,10 +337,11 @@ export function renderToolbar(root) {
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'calendar') {
-    const unit = RANGES[rangeOf()].unit;
+    const r = RANGES[rangeOf()];
+    const unit = r.step === 3 ? '3 days' : r.unit;
     const Unit = unit[0].toUpperCase() + unit.slice(1);
     root.append(b(`‹ ${Unit}`, `The ${unit} before`, () => shiftWeek(-1)), b('Today', 'Back to today', showThisWeek), b(`${Unit} ›`, `The ${unit} after`, () => shiftWeek(1)), sep(),
-      ...Object.entries(RANGES).map(([id, r]) => b(r.label, `Show one ${r.unit === 'week' && id === 'work' ? 'working week' : r.unit}`, () => set({ calendarRange: id }), { on: rangeOf() === id })), sep(),
+      ...Object.entries(RANGES).map(([id, r]) => b(r.label, `Show ${r.step === 3 ? 'three days' : `one ${r.unit === 'week' && id === 'work' ? 'working week' : r.unit}`}`, () => set({ calendarRange: id }), { on: rangeOf() === id })), sep(),
       b('↻ Plans', 'Re-read every plan on the shelf', () => { void reloadCalendarPlans(); }),
       b('+ Task', 'New task below the selection', act.newTaskBelow),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),

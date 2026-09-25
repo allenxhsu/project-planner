@@ -230,6 +230,10 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .person-plans { display: flex; gap: 4px; flex-wrap: wrap; }
 .person-plan { --tint: var(--sc-text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.cal-block.is-tight { display: flex; flex-direction: row; align-items: baseline; gap: 6px; padding: 1px 5px; overflow: hidden; }
+.cal-block.is-tight .cal-block-time { flex: none; }
+.cal-block.is-tight .cal-block-name { flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-block.is-tight .cal-block-plan { flex: none; max-width: 38%; }
 .cal-block.is-day { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 2px 10px; min-height: 22px; overflow: hidden; }
 .cal-block.is-day .cal-block-time { flex: none; }
 .cal-block.is-day .cal-block-name { flex: none; max-width: 44%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

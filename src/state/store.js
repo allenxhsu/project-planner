@@ -43,7 +43,8 @@ export const store = {
     kanbanGroup: 'stage',   // kanban: 'stage' | 'status' | 'resource'
     calendarWho: '',        // calendar: '' is everyone, otherwise a person key
     calendarScope: 'all',   // calendar: 'all' plans, or 'plan' for the open one
-    calendarRange: 'work',  // calendar: 'day', 'work' week, whole 'week', or 'month'
+    calendarRange: 'work',  // calendar: 'day', 'three' days, 'work' week, whole 'week', or 'month'
+    calendarColour: 'auto', // calendar: colour a block by 'person', by 'plan', or 'auto'
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     bottomTab: 'checks',
