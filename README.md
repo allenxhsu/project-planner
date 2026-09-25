@@ -274,10 +274,14 @@ there opens it.
 A person works on several projects at once, so their load is only meaningful
 added up: forty hours in one plan and thirty in another is not two comfortable
 weeks, it is one impossible one. **Resource Usage** puts every plan in the
-workspace on one sheet, one row per person — matched by the shared directory
-first and the name second, as the calendar matches them — with their tasks
-beneath, each naming the project it came from. A row from another project
-opens it on a double-click.
+workspace on one sheet in three levels — a person, the projects under them,
+and the tasks under each project. People are matched by the shared directory
+first and the name second, as the calendar matches them.
+
+Projects start folded, so the first thing the sheet answers is where a
+person's week is going: Alcon 69h, L3 Harris 449h, ISEN 616 68h. Click one to
+see its tasks, click a person to fold them away entirely. A task from another
+project opens it on a double-click.
 
 **By day** or **by week**: a week says whether the month is deliverable, a day
 says whether tomorrow is. A column over the working hours it holds is marked.

@@ -232,6 +232,9 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 
 .workspace-pick { margin-left: 10px; padding: 2px 8px; color: var(--sc-text-2); box-shadow: inset 0 0 0 1px var(--sc-line); }
 .workspace-pick:hover { color: var(--sc-text-1); }
+.usage-row { cursor: pointer; }
+.usage-twist { display: inline-block; width: 14px; color: var(--sc-text-3); }
+.grid.usage tr.usage-plan-row td { color: var(--sc-text-2); background: color-mix(in srgb, var(--sc-line) 22%, transparent); }
 .usage-bar { gap: 8px; flex-wrap: wrap; }
 .usage-plan { --tint: var(--sc-text-3); margin-left: 8px; font-size: 9.5px; }
 .grid.usage th.is-today { color: var(--sc-app); }

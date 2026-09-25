@@ -139,6 +139,14 @@ export async function reloadUsage() {
 /** Columns: a run of days, or of weeks, from where the view is anchored. */
 const USAGE_SPANS = { day: { label: 'By day', count: 21, step: 1 }, week: { label: 'By week', count: 12, step: 7 } };
 let usageAnchor = null;
+/** What is folded away. People are open by default, projects folded. */
+const collapsedPeople = new Set();
+const openPlans = new Set();
+function toggle(set_, key, openByDefault = false) {
+  if (openByDefault) { if (set_.has(key)) set_.delete(key); else set_.add(key); }
+  else if (set_.has(key)) set_.delete(key); else set_.add(key);
+  set({});
+}
 export const usageGrain = () => (USAGE_SPANS[store.ui.usageGrain] ? store.ui.usageGrain : 'week');
 export function usageShift(steps) {
   const g = USAGE_SPANS[usageGrain()];
@@ -174,18 +182,24 @@ export function renderResourceUsage(root) {
     for (const r of pr.resources) {
       if (r.type !== 'work') continue;
       const key = keyFor(r);
-      if (!people.has(key)) people.set(key, { name: r.name, key, byDay: new Map(), tasks: new Map() });
+      if (!people.has(key)) people.set(key, { name: r.name, key, byDay: new Map(), total: 0, plans: new Map() });
       const person = people.get(key);
       const days = load.get(r.id);
       if (!days) continue;
       for (const [day, items] of days) {
         for (const it of items) {
           person.byDay.set(day, (person.byDay.get(day) || 0) + it.hours);
+          person.total += it.hours;
           const t = pr.tasks.find((x) => x.id === it.taskId);
           if (!t) continue;
-          const id = `${pr.id}:${t.id}`;
-          if (!person.tasks.has(id)) person.tasks.set(id, { name: t.name, planName: pr.name, planId: pr.id, taskId: t.id, byDay: new Map(), total: 0 });
-          const row = person.tasks.get(id);
+          // A person's hours break down by project first, then by task: the
+          // question under "am I overloaded" is always "with what".
+          if (!person.plans.has(pr.id)) person.plans.set(pr.id, { planId: pr.id, name: pr.name, byDay: new Map(), total: 0, tasks: new Map() });
+          const plan = person.plans.get(pr.id);
+          plan.byDay.set(day, (plan.byDay.get(day) || 0) + it.hours);
+          plan.total += it.hours;
+          if (!plan.tasks.has(t.id)) plan.tasks.set(t.id, { name: t.name, planName: pr.name, planId: pr.id, taskId: t.id, byDay: new Map(), total: 0 });
+          const row = plan.tasks.get(t.id);
           row.byDay.set(day, (row.byDay.get(day) || 0) + it.hours);
           row.total += it.hours;
         }
@@ -236,37 +250,49 @@ export function renderResourceUsage(root) {
   table.append(el('thead', {}, head));
   const body = el('tbody');
 
-  for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-    const total = [...person.byDay.values()].reduce((n, h) => n + h, 0);
-    const tr = el('tr', { class: 'is-summary' },
-      el('td', {}, el('span', { class: 'cell-text', text: person.name })),
-      el('td', { class: 'num', text: formatHours(total) }));
-    for (const at of columns) {
-      const h = bucket(person.byDay, at);
-      const cap = capacityOf(at);
-      tr.append(el('td', { class: `num${h > cap + 1e-9 ? ' is-over' : ''}`, title: h ? `${formatHours(h)} of ${formatHours(cap)}` : '', text: h ? formatHours(h) : '' }));
-    }
-    body.append(tr);
+  const cells = (byDay, { cap = false } = {}) => columns.map((at) => {
+    const h = bucket(byDay, at);
+    const room = capacityOf(at);
+    return el('td', {
+      class: `num${cap && h > room + 1e-9 ? ' is-over' : ''}`,
+      title: cap && h ? `${formatHours(h)} of ${formatHours(room)}` : '',
+      text: h ? formatHours(h) : '',
+    });
+  });
 
-    for (const row of [...person.tasks.values()].sort((a, b) => a.planName.localeCompare(b.planName) || a.name.localeCompare(b.name))) {
-      const inColumns = columns.some((at) => bucket(row.byDay, at) > 0);
-      if (!inColumns) continue;
-      const foreign = row.planId !== project.id;
-      const tr2 = el('tr', {
-        class: ui.selection.includes(row.taskId) && !foreign ? 'is-sel' : '',
-        onpointerdown: () => { if (!foreign) act.selectTask(row.taskId); },
-        ondblclick: () => { if (foreign) void openUsagePlan(row.planId, row.taskId); },
-        title: foreign ? `${row.planName} — double-click to open it` : row.planName,
-      },
-        el('td', { style: { paddingLeft: '28px' } },
-          el('span', { class: 'cell-text', text: row.name }),
-          scope.length > 1 ? el('span', { class: 'sc-pill usage-plan', text: row.planName }) : null),
-        el('td', { class: 'num', text: formatHours(row.total) }));
-      for (const at of columns) {
-        const h = bucket(row.byDay, at);
-        tr2.append(el('td', { class: 'num', text: h ? formatHours(h) : '' }));
+  for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    const shut = collapsedPeople.has(person.key);
+    body.append(el('tr', { class: 'is-summary usage-row', onpointerdown: () => toggle(collapsedPeople, person.key) },
+      el('td', {}, el('span', { class: 'usage-twist', text: shut ? '▸' : '▾' }), el('span', { class: 'cell-text', text: person.name })),
+      el('td', { class: 'num', text: formatHours(person.total) }),
+      ...cells(person.byDay, { cap: true })));
+    if (shut) continue;
+
+    for (const plan of [...person.plans.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!columns.some((at) => bucket(plan.byDay, at) > 0)) continue;
+      const planKey = `${person.key}|${plan.planId}`;
+      const planShut = !openPlans.has(planKey);           // projects start folded
+      body.append(el('tr', { class: 'usage-plan-row usage-row', onpointerdown: () => toggle(openPlans, planKey, true) },
+        el('td', { style: { paddingLeft: '20px' } },
+          el('span', { class: 'usage-twist', text: planShut ? '▸' : '▾' }),
+          el('span', { class: 'cell-text', text: plan.name })),
+        el('td', { class: 'num', text: formatHours(plan.total) }),
+        ...cells(plan.byDay)));
+      if (planShut) continue;
+
+      for (const row of [...plan.tasks.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+        if (!columns.some((at) => bucket(row.byDay, at) > 0)) continue;
+        const foreign = row.planId !== project.id;
+        body.append(el('tr', {
+          class: ui.selection.includes(row.taskId) && !foreign ? 'is-sel' : '',
+          onpointerdown: () => { if (!foreign) act.selectTask(row.taskId); },
+          ondblclick: () => { if (foreign) void openUsagePlan(row.planId, row.taskId); },
+          title: foreign ? `${row.planName} — double-click to open it` : row.planName,
+        },
+          el('td', { style: { paddingLeft: '44px' } }, el('span', { class: 'cell-text', text: row.name })),
+          el('td', { class: 'num', text: formatHours(row.total) }),
+          ...cells(row.byDay)));
       }
-      body.append(tr2);
     }
   }
   table.append(body);
