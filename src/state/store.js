@@ -40,6 +40,7 @@ export const store = {
     collapsed: {},          // taskId → true when its subtasks are hidden
     zoom: 'day',            // gantt: 'day' | 'week' | 'month'
     kanbanGroup: 'stage',   // kanban: 'stage' | 'status' | 'resource'
+    calendarWho: '',        // calendar: '' is everyone, otherwise a resource id
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     bottomTab: 'checks',

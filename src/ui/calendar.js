@@ -60,9 +60,22 @@ export function renderCalendar(root) {
   const pane = el('div', { class: 'cal-pane' });
   root.append(pane);
 
-  const { blocks, overflow, meetings } = planBlocks(project, schedule);
+  const all = planBlocks(project, schedule);
+  // Whose week this is. Everyone at once is a room's calendar, not a person's,
+  // and reads as being in three places — so one person can be picked out.
+  const who = ui.calendarWho && project.resources.some((r) => r.id === ui.calendarWho) ? ui.calendarWho : '';
+  const blocks = who ? all.blocks.filter((b) => (b.lanes || [b.lane]).includes(who)) : all.blocks;
+  const meetings = who ? (all.meetings || []).filter((m) => m.lane === who) : all.meetings;
+  const overflow = all.overflow;
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getTask(project, project.currentPhaseId) : null;
+  const bar = el('div', { class: 'cal-phase' },
+    el('span', { class: 'sc-label', text: 'Calendar for' }),
+    el('select', { class: 'sc-select', onchange: (e) => set({ calendarWho: e.target.value }) },
+      el('option', { value: '', text: 'Everyone', selected: !who }),
+      ...project.resources.map((r) => el('option', { value: r.id, text: r.name, selected: r.id === who }))),
+    el('span', { class: 'sc-faint small', text: who ? 'One person’s week.' : 'Every person’s blocks, side by side where they share an hour.' }));
+  pane.append(bar);
   if (phaseList.length) {
     pane.append(el('div', { class: 'cal-phase' },
       el('span', { class: 'sc-label', text: 'Releasing' }),

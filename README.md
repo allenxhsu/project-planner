@@ -135,8 +135,9 @@ calendar says *when*: which hours, on which days.
 - **A gap, if you want one.** Project ▸ details sets the breathing room after
   every block — none, 5, 10, 15 or 30 minutes — so the day is not back to back.
   It costs a block a day and the work moves on rather than vanishing.
-- **Nobody is double-booked.** Two tasks for one person never overlap; two
-  people working the same hour sit side by side.
+- **Nobody is double-booked.** A task books the hours of *everyone* on it, so
+  two tasks that share a person never overlap; two people working the same hour
+  sit side by side. **Calendar for** narrows the week to one person.
 - **A week that does not hold the work says so**, rather than hiding the
   overflow.
 

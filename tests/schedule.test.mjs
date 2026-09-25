@@ -672,3 +672,41 @@ test('an empty untitled plan does not put a row on the shelf', async () => {
   const emptied = createProject();
   assert.equal(earnsRecord(emptied, doc), true);
 });
+
+test('a task books everyone on it, so nobody is in two places at once', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan();
+  const priya = addResource(p, { name: 'Priya' });
+  const uma = addResource(p, { name: 'Uma' });
+  // Uma is on both: the pair task, and one of her own.
+  const interviews = task(p, 'Stakeholder interviews', 1);
+  const review = task(p, 'Analytics review', 1);
+  assign(p, interviews.id, priya.id, 1);
+  assign(p, interviews.id, uma.id, 1);
+  assign(p, review.id, uma.id, 1);
+  for (const t of [interviews, review]) { setTaskField(p, t.id, 'calendarShow', true); setTaskField(p, t.id, 'blockHours', 2); }
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  const umaBlocks = blocks.filter((b) => b.lanes.includes(uma.id)).sort((x, y) => x.day - y.day || x.start - y.start);
+  assert.ok(umaBlocks.length >= 2);
+  for (let i = 1; i < umaBlocks.length; i++) {
+    const prev = umaBlocks[i - 1], now = umaBlocks[i];
+    assert.ok(now.day > prev.day || now.start >= prev.end,
+      `Uma is booked twice at once: ${prev.dateIso} ${prev.start} and ${now.start}`);
+  }
+  // Priya is only on the pair task, so her hours are exactly its blocks.
+  const priyaBlocks = blocks.filter((b) => b.lanes.includes(priya.id));
+  assert.ok(priyaBlocks.every((b) => b.taskId === interviews.id));
+
+  // Someone not on either task is free at the same hour — two people can work at once.
+  const dan = addResource(p, { name: 'Dan' });
+  const solo = task(p, 'Visual design', 1);
+  assign(p, solo.id, dan.id, 1);
+  setTaskField(p, solo.id, 'calendarShow', true);
+  setTaskField(p, solo.id, 'blockHours', 2);
+  const after = planBlocks(p, computeSchedule(p)).blocks;
+  const danFirst = after.filter((b) => b.lanes.includes(dan.id)).sort((x, y) => x.day - y.day || x.start - y.start)[0];
+  const umaFirst = after.filter((b) => b.lanes.includes(uma.id)).sort((x, y) => x.day - y.day || x.start - y.start)[0];
+  assert.equal(danFirst.day, umaFirst.day);
+  assert.equal(danFirst.start, umaFirst.start, 'different people, same hour, which is not a clash');
+});

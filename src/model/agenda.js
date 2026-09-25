@@ -72,8 +72,17 @@ export function hoursLeft(project, info) {
   return Math.max(0, Math.min(left, byPercent));
 }
 
-/** Who a block belongs to, so two tasks for one person cannot overlap. */
-const laneOf = (task) => task.assignments[0]?.resourceId || '__unassigned';
+/**
+ * Whose time a task takes — every person on it, not just the first.
+ *
+ * Booking only the first assignee was a real bug: a task for Priya and Uma
+ * took Priya's hour and left Uma apparently free, so the next task of Uma's
+ * could be placed on top of it and she would be in two places at once.
+ */
+const lanesOf = (task) => {
+  const ids = task.assignments.map((a) => a.resourceId).filter(Boolean);
+  return ids.length ? [...new Set(ids)] : ['__unassigned'];
+};
 
 /** Free stretches of `[from, to)` on one day, given what is already booked. */
 function freeSlots(booked, from, to) {
@@ -154,7 +163,7 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       byTask.set(t.id, mine);
       continue;
     }
-    const lane = laneOf(t);
+    const lanes = lanesOf(t);
     // Duration is how long the task is open; work is how much of that time is
     // spent on it. A five-day design task of twelve hours is three hours a day,
     // not three full days and two idle ones — so each day takes its share,
@@ -168,16 +177,19 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       // task's to use, however free it looks.
       if (a.days && !a.days.includes(weekday(day))) { day = cal.next(day + 1); continue; }
       let placedToday = 0;
-      for (const [from, to] of freeSlots(bookedOn(lane, day), a.from, a.to)) {
+      // Free for everyone on the task: the union of what each of them is doing.
+      const busyForAll = lanes.flatMap((lane) => bookedOn(lane, day));
+      for (const [from, to] of freeSlots(busyForAll, a.from, a.to)) {
         let at = from;
         while (left > 0 && at + size <= to && placedToday < perDayBlocks) {
           const minutes = Math.min(size, left);
-          const block = { taskId: t.id, day, start: at, end: at + minutes, minutes, lane, critical: info.critical, dateIso: fromDay(day) };
+          const block = { taskId: t.id, day, start: at, end: at + minutes, minutes, lanes, lane: lanes[0], critical: info.critical, dateIso: fromDay(day) };
           blocks.push(block);
           mine.push(block);
           // The gap is booked with the block, so the next thing — this task's
-          // or anyone's — starts after it rather than back to back.
-          bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
+          // or anyone's — starts after it rather than back to back. Booked for
+          // every person on the task, which is what stops the double-booking.
+          for (const lane of lanes) bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
           at += size + a.gap;
           left -= minutes;
           placedToday++;
