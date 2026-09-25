@@ -6,6 +6,7 @@
 // task under it. Nothing here is stored: it is recomputed from the plan.
 
 import { makeCalendar, toDay, fromDay } from './calendar.js';
+import { LOAD_CHOICES, DEFAULT_AGENDA } from './agenda.js';
 import { dependencyGraph, topoOrder, isSummary, childrenOf, ancestors, wbsCodes, parentIndex, spentOn } from './model.js';
 
 /**
@@ -222,9 +223,17 @@ export function resourceLoad(p, sched) {
       const r = p.resources.find((x) => x.id === a.resourceId);
       if (r.type !== 'work') continue;
       // The hours this person really puts in each day, from the task's work.
+      //
+      // A task that does not state its work has it implied as its whole
+      // duration at full time. That is the right number for costing and the
+      // wrong one for a week — the same reason the calendar takes an implied
+      // figure at the plan's assumed load — so the load here is scaled the
+      // same way. Otherwise a day of usage and a day of calendar disagree.
       const share = info.workShares?.get(a.resourceId);
       const span = Math.max(1, info.duration);
-      const perDay = info.milestone ? 0 : (share !== undefined ? share / span : cal.hoursPerDay * (a.units || 0));
+      const stated = t.work !== null && t.work !== undefined && Number.isFinite(+t.work) && +t.work >= 0;
+      const factor = stated ? 1 : Math.max(0, Math.min(1, (LOAD_CHOICES.includes(+p.agenda?.assumedLoad) ? +p.agenda.assumedLoad : DEFAULT_AGENDA.assumedLoad) / 100));
+      const perDay = info.milestone ? 0 : (share !== undefined ? (share / span) * factor : cal.hoursPerDay * (a.units || 0) * factor);
       for (let d = info.start; d <= info.finish; d++) {
         if (!cal.isWorking(d)) continue;
         if (!days.has(d)) days.set(d, []);

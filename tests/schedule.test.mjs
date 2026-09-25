@@ -238,11 +238,21 @@ test('work, cost and over-allocation', () => {
   assert.equal(s.tasks[a.id].cost, 1650);
   assert.equal(s.work, 24);
   assert.equal(s.cost, 1650 + 800);
+  // Over-allocation is judged on the hours the plan really expects, so this
+  // one says outright that an unstated task is full time.
+  p.agenda = { ...p.agenda, assumedLoad: 100 };
   const load = resourceLoad(p, s);
   assert.equal(load.get(r.id).get(d(MON)).length, 2);
   const over = validate(p, s).find((i) => i.code === 'overallocated');
   assert.ok(over, 'A and B overlap at 150%');
   assert.equal(over.days.length, 2);
+
+  // At the default assumption — half a day unless a task says otherwise —
+  // the same two tasks are 75% of a day and nobody is over-allocated.
+  p.agenda = { ...p.agenda, assumedLoad: 50 };
+  assert.equal(validate(p, computeSchedule(p)).some((i) => i.code === 'overallocated'), false);
+  const half = resourceLoad(p, computeSchedule(p));
+  assert.equal(half.get(r.id).get(d(MON)).reduce((n, x) => n + x.hours, 0), 6, 'four hours plus two');
 });
 
 test('the sample plan schedules cleanly and round-trips through JSON', () => {

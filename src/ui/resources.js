@@ -3,9 +3,11 @@
 import { el, clear, formatMoney, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { RESOURCE_TYPES } from '../model/model.js';
-import { resourceLoad } from '../model/schedule.js';
-import { weekStart, fromDay, formatDate, makeCalendar } from '../model/calendar.js';
+import { RESOURCE_TYPES, identityOf } from '../model/model.js';
+import { resourceLoad, computeSchedule } from '../model/schedule.js';
+import { weekStart, fromDay, toDay, today, formatDate, makeCalendar, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
+import { planRecords, isCurrentWork } from '../state/sync.js';
+import { parse } from '../io/json.js';
 import { renderGrid } from './grid.js';
 import { showMenu } from './dialog.js';
 
@@ -95,53 +97,187 @@ export function renderResourceSheet(root) {
   });
 }
 
+/**
+ * Resource Usage: who is carrying what, across every project.
+ *
+ * A person works on several projects at once, so their load is only
+ * meaningful when all of them are added up: forty hours in one plan and
+ * thirty in another is not two comfortable weeks, it is one impossible one.
+ * The rows are people, not a plan's resources, matched the way the calendar
+ * matches them — the shared directory first, then the name.
+ *
+ * By day or by week, because those answer different questions: a week says
+ * whether the month is deliverable, a day says whether tomorrow is.
+ */
+
+/** Which plans feed the view, read once and kept until their records change. */
+const usageCache = new Map();
+let usagePlans = [];
+let usageLoaded = false;
+
+export async function reloadUsage() {
+  try {
+    const out = [];
+    for (const r of await planRecords()) {
+      const hit = usageCache.get(r.id);
+      if (hit && hit.updatedAt === r.updatedAt) { if (isCurrentWork(hit.entry.project)) out.push(hit.entry); continue; }
+      try {
+        const project = parse(r.body).project;
+        const entry = { project, schedule: computeSchedule(project) };
+        usageCache.set(r.id, { updatedAt: r.updatedAt, entry });
+        if (isCurrentWork(project)) out.push(entry);
+      } catch { /* a plan that cannot be read carries no load */ }
+    }
+    usagePlans = out;
+  } catch {
+    usagePlans = [];
+  }
+  usageLoaded = true;
+  set({});
+}
+
+/** Columns: a run of days, or of weeks, from where the view is anchored. */
+const USAGE_SPANS = { day: { label: 'By day', count: 21, step: 1 }, week: { label: 'By week', count: 12, step: 7 } };
+let usageAnchor = null;
+export const usageGrain = () => (USAGE_SPANS[store.ui.usageGrain] ? store.ui.usageGrain : 'week');
+export function usageShift(steps) {
+  const g = USAGE_SPANS[usageGrain()];
+  usageAnchor = (usageAnchor ?? toDay(today())) + steps * g.step * Math.max(1, Math.round(g.count / 2));
+  set({});
+}
+export function usageToday() { usageAnchor = null; set({}); }
+
 export function renderResourceUsage(root) {
   const { project, schedule, ui } = store;
   clear(root);
   const pane = el('div', { class: 'sheet-pane usage-pane' });
   root.append(pane);
-  if (!project.resources.length) { pane.append(el('div', { class: 'empty-note sc-muted', text: 'No resources yet. Add them in the Resource Sheet, or type names into a task’s Resource Names cell.' })); return; }
+  if (!usageLoaded) void reloadUsage();
+
+  // The open plan comes from the store — it is newer than its record — and
+  // every other plan from the shelf, as the calendar does it.
+  const entries = [{ project, schedule }, ...usagePlans.filter((e) => e.project.id !== project.id)];
+  const scope = ui.usageScope === 'plan' ? entries.slice(0, 1) : entries;
+
+  const grain = usageGrain();
+  const span = USAGE_SPANS[grain];
+  const start = grain === 'week' ? weekStart(usageAnchor ?? toDay(today())) : (usageAnchor ?? toDay(today()));
+  const columns = [];
+  for (let i = 0; i < span.count; i++) columns.push(start + i * span.step);
+
+  // people → { name, total, perColumn, tasks: [{plan, task, hours per column}] }
   const cal = makeCalendar(project.calendar);
-  const load = resourceLoad(project, schedule);
-  const weeks = [];
-  for (let d = weekStart(schedule.start); d <= schedule.finish; d += 7) weeks.push(d);
-  const table = el('table', { class: 'grid usage' });
-  table.append(el('thead', {}, el('tr', {}, el('th', { text: 'Resource / Task' }), el('th', { class: 'num', text: 'Work' }), ...weeks.map((w) => el('th', { class: 'num week', text: formatDate(fromDay(w), 'day') })))));
-  const body = el('tbody');
-  const hoursIn = (days, w, filterTask) => {
-    let h = 0, over = false;
-    for (let d = w; d < w + 7; d++) {
-      const items = days.get(d);
-      if (!items) continue;
-      const units = items.reduce((s, x) => s + x.units, 0);
-      for (const it of items) if (!filterTask || it.taskId === filterTask) h += it.hours;
-      if (!filterTask && units > 1e-9) over = over || units > (project.resources.find((r) => days === load.get(r.id))?.maxUnits ?? 1) + 1e-9;
+  const people = new Map();
+  const keyFor = (r) => identityOf(r);
+  for (const { project: pr, schedule: sc } of scope) {
+    const load = resourceLoad(pr, sc);
+    for (const r of pr.resources) {
+      if (r.type !== 'work') continue;
+      const key = keyFor(r);
+      if (!people.has(key)) people.set(key, { name: r.name, key, byDay: new Map(), tasks: new Map() });
+      const person = people.get(key);
+      const days = load.get(r.id);
+      if (!days) continue;
+      for (const [day, items] of days) {
+        for (const it of items) {
+          person.byDay.set(day, (person.byDay.get(day) || 0) + it.hours);
+          const t = pr.tasks.find((x) => x.id === it.taskId);
+          if (!t) continue;
+          const id = `${pr.id}:${t.id}`;
+          if (!person.tasks.has(id)) person.tasks.set(id, { name: t.name, planName: pr.name, planId: pr.id, taskId: t.id, byDay: new Map(), total: 0 });
+          const row = person.tasks.get(id);
+          row.byDay.set(day, (row.byDay.get(day) || 0) + it.hours);
+          row.total += it.hours;
+        }
+      }
     }
-    return { h, over };
+  }
+
+  const bucket = (byDay, at) => {
+    let h = 0;
+    for (let d = at; d < at + span.step; d++) h += byDay.get(d) || 0;
+    return h;
   };
-  for (const r of project.resources) {
-    const days = load.get(r.id);
-    let total = 0;
-    for (const items of days.values()) for (const it of items) total += it.hours;
-    const tr = el('tr', { class: `is-summary${ui.resourceId === r.id ? ' is-sel' : ''}`, onpointerdown: () => set({ resourceId: r.id, rightTab: 'resource' }) },
-      el('td', {}, el('span', { class: 'cell-text', text: r.name })), el('td', { class: 'num', text: r.type === 'work' ? formatHours(total) : '' }));
-    for (const w of weeks) {
-      const { h, over } = hoursIn(days, w, null);
-      tr.append(el('td', { class: `num${over ? ' is-over' : ''}`, text: h ? formatHours(h) : '' }));
+  // What a person can do in a column: the working days it holds.
+  const capacityOf = (at) => {
+    let days = 0;
+    for (let d = at; d < at + span.step; d++) if (cal.isWorking(d)) days++;
+    return days * cal.hoursPerDay;
+  };
+
+  const bar = el('div', { class: 'cal-phase usage-bar' },
+    el('span', { class: 'sc-label', text: 'Usage' }),
+    el('select', { class: 'sc-select', onchange: (e) => set({ usageGrain: e.target.value }) },
+      ...Object.entries(USAGE_SPANS).map(([id, g]) => el('option', { value: id, text: g.label, selected: grain === id }))),
+    el('select', { class: 'sc-select', onchange: (e) => set({ usageScope: e.target.value }) },
+      el('option', { value: 'all', text: `All projects (${entries.length})`, selected: ui.usageScope !== 'plan' }),
+      el('option', { value: 'plan', text: 'This project only', selected: ui.usageScope === 'plan' })),
+    el('button', { class: 'sc-button sc-button--sm', text: '‹', title: 'Earlier', onclick: () => usageShift(-1) }),
+    el('button', { class: 'sc-button sc-button--sm', text: 'Today', onclick: usageToday }),
+    el('button', { class: 'sc-button sc-button--sm', text: '›', title: 'Later', onclick: () => usageShift(1) }),
+    el('span', { class: 'sc-faint small', text: `Hours per person, ${grain === 'week' ? 'by week' : 'by day'}, across ${scope.length === 1 ? 'this project' : `${scope.length} projects`}. Over ${formatHours(capacityOf(start))} in a ${grain} is marked.` }));
+  pane.append(bar);
+
+  if (!people.size) {
+    pane.append(el('div', { class: 'empty-note sc-muted', text: 'Nobody is assigned to anything yet. Put people on tasks and their hours show up here.' }));
+    return;
+  }
+
+  const todayDay = toDay(today());
+  const head = el('tr', {}, el('th', { text: 'Person / Task' }), el('th', { class: 'num', text: 'Work' }));
+  for (const at of columns) {
+    head.append(el('th', {
+      class: `num week${grain === 'day' && at === todayDay ? ' is-today' : ''}${grain === 'day' && !cal.isWorking(at) ? ' is-off' : ''}`,
+      title: grain === 'week' ? `Week of ${formatDate(fromDay(at), 'long')}` : formatDate(fromDay(at), 'long'),
+      text: grain === 'week' ? formatDate(fromDay(at), 'day') : `${WEEKDAY_NAMES[weekday(at)].slice(0, 1)} ${fromDay(at).slice(8)}`,
+    }));
+  }
+  const table = el('table', { class: 'grid usage' });
+  table.append(el('thead', {}, head));
+  const body = el('tbody');
+
+  for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    const total = [...person.byDay.values()].reduce((n, h) => n + h, 0);
+    const tr = el('tr', { class: 'is-summary' },
+      el('td', {}, el('span', { class: 'cell-text', text: person.name })),
+      el('td', { class: 'num', text: formatHours(total) }));
+    for (const at of columns) {
+      const h = bucket(person.byDay, at);
+      const cap = capacityOf(at);
+      tr.append(el('td', { class: `num${h > cap + 1e-9 ? ' is-over' : ''}`, title: h ? `${formatHours(h)} of ${formatHours(cap)}` : '', text: h ? formatHours(h) : '' }));
     }
     body.append(tr);
-    const tasks = project.tasks.filter((t) => t.assignments.some((a) => a.resourceId === r.id) && !schedule.tasks[t.id].summary);
-    for (const t of tasks) {
-      const s = schedule.tasks[t.id];
-      const a = t.assignments.find((x) => x.resourceId === r.id);
-      const th = r.type === 'work' ? s.duration * cal.hoursPerDay * a.units : 0;
-      const tr2 = el('tr', { class: ui.selection.includes(t.id) ? 'is-sel' : '', onpointerdown: (e) => act.selectTask(t.id, { extend: e.metaKey || e.ctrlKey }) },
-        el('td', { style: { paddingLeft: '28px' } }, el('span', { class: 'cell-text', text: `${s.index} ${t.name}${a.units !== 1 ? ` [${Math.round(a.units * 100)}%]` : ''}` })),
-        el('td', { class: 'num', text: th ? formatHours(th) : '' }));
-      for (const w of weeks) { const { h } = hoursIn(days, w, t.id); tr2.append(el('td', { class: 'num', text: h ? formatHours(h) : '' })); }
+
+    for (const row of [...person.tasks.values()].sort((a, b) => a.planName.localeCompare(b.planName) || a.name.localeCompare(b.name))) {
+      const inColumns = columns.some((at) => bucket(row.byDay, at) > 0);
+      if (!inColumns) continue;
+      const foreign = row.planId !== project.id;
+      const tr2 = el('tr', {
+        class: ui.selection.includes(row.taskId) && !foreign ? 'is-sel' : '',
+        onpointerdown: () => { if (!foreign) act.selectTask(row.taskId); },
+        ondblclick: () => { if (foreign) void openUsagePlan(row.planId, row.taskId); },
+        title: foreign ? `${row.planName} — double-click to open it` : row.planName,
+      },
+        el('td', { style: { paddingLeft: '28px' } },
+          el('span', { class: 'cell-text', text: row.name }),
+          scope.length > 1 ? el('span', { class: 'sc-pill usage-plan', text: row.planName }) : null),
+        el('td', { class: 'num', text: formatHours(row.total) }));
+      for (const at of columns) {
+        const h = bucket(row.byDay, at);
+        tr2.append(el('td', { class: 'num', text: h ? formatHours(h) : '' }));
+      }
       body.append(tr2);
     }
   }
   table.append(body);
   pane.append(table);
+}
+
+/** A row from another plan: open that plan, and land on the task. */
+async function openUsagePlan(planId, taskId) {
+  const { openPlan } = await import('../state/sync.js');
+  if (!(await openPlan(planId))) return;
+  act.revealTask(taskId);
+  act.selectTask(taskId);
+  set({ rightOpen: true, rightTab: 'task' });
 }

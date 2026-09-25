@@ -79,7 +79,7 @@ the duration.
 | Gantt Chart | editable task grid beside the timeline: bars, summary brackets, milestones, dependency arrows, progress, deadlines, today. Drag a bar to move it, its right edge to resize, the dot at its end onto another bar to link. Days, weeks or months. |
 | Task Sheet | the full column set: WBS, work, cost, slack, critical, constraint, deadline, notes |
 | Resource Sheet | people and things: type, max units, rate, group; work and cost roll-ups |
-| Resource Usage | hours per resource per week, with each assignment beneath; over-allocated weeks highlighted |
+| Resource Usage | hours per person, by day or by week, across every project, with each task beneath and its project named; over-allocated columns highlighted |
 | Network Diagram | one box per task in dependency order, critical path in red |
 | People | everyone in the shared directory: hours, tasks and plans across the whole shelf, the rate that every plan uses, and the profile summary from Profiler |
 | Projects | every plan in hand as a card, with finished ones folded into the archive: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
@@ -268,6 +268,25 @@ circle walked by the golden angle, in a fixed order, so adding a project never
 recolours the others. A project can name its own hue in Project information,
 and a legend above the grid says which colour is which; clicking a project
 there opens it.
+
+### Usage across projects
+
+A person works on several projects at once, so their load is only meaningful
+added up: forty hours in one plan and thirty in another is not two comfortable
+weeks, it is one impossible one. **Resource Usage** puts every plan in the
+workspace on one sheet, one row per person — matched by the shared directory
+first and the name second, as the calendar matches them — with their tasks
+beneath, each naming the project it came from. A row from another project
+opens it on a double-click.
+
+**By day** or **by week**: a week says whether the month is deliverable, a day
+says whether tomorrow is. A column over the working hours it holds is marked.
+
+The hours counted are the ones the plan really expects, which means a task
+with no stated work counts at the plan's assumed load, exactly as the calendar
+places it. Otherwise usage and the calendar would disagree about the same day.
+Set the assumption to full time and this is Microsoft Project's arithmetic
+again.
 
 ### Why a day is not full
 

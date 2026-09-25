@@ -13,6 +13,7 @@ import { showMenu, confirmDialog, showText, promptText } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { reloadPeople } from './people.js';
+import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
@@ -179,7 +180,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); if (view === 'usage') void reloadUsage(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -436,6 +437,10 @@ export function renderToolbar(root) {
       b('↑', 'Move up (⌥⇧↑)', () => act.moveSelection(-1), { disabled: !sel }), b('↓', 'Move down (⌥⇧↓)', () => act.moveSelection(1), { disabled: !sel }), sep(),
       b('⛓ Link', 'Link the selected tasks in order (⌘L)', act.linkSelection, { disabled: sel < 2 }), b('Unlink', 'Remove links from the selected tasks (⇧⌘L)', act.unlinkSelection, { disabled: !sel }), sep(),
       b('✓ 100%', 'Mark the active task complete', COMMANDS['task.complete'], { disabled: !sel }));
+  } else if (ui.view === 'usage') {
+    root.append(b('↻ Refresh', 'Sync, then re-read every plan', () => { void reloadPlans({ pull: true }).then(() => reloadUsage()); }),
+      b('People…', 'Everyone, shared by every plan', COMMANDS['view.people']),
+      b('Resource Sheet', 'Who is on the open plan', COMMANDS['view.resources']));
   } else if (resView) {
     root.append(b('+ Resource', 'New resource', act.newResource, { primary: true }), b('Delete', 'Delete the selected resource', () => act.deleteResource(), { disabled: !ui.resourceId }), sep(),
       b('People…', 'Everyone, shared by every plan', COMMANDS['view.people']));
