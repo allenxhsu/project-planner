@@ -9,7 +9,7 @@ import { el, clear, formatMoney } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
-import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, syncConfigured, syncStatus } from '../state/sync.js';
+import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 
@@ -17,6 +17,8 @@ import { showMenu, confirmDialog, promptText } from './dialog.js';
 let plans = [];
 let loading = true;
 let loaded = false;
+/** Whether the archive is open. The gallery is about work in hand. */
+let showArchive = false;
 
 /** Re-read the shelf and redraw. `pull` also asks the server first. */
 export async function reloadPlans({ pull = false } = {}) {
@@ -58,6 +60,8 @@ function card(p) {
         if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }
       } },
       '-',
+      { label: p.archived ? 'Bring back from the archive' : 'Archive', 
+        run: async () => { await setPlanArchived(p.id, !p.archived); void reloadPlans(); } },
       { label: p.template ? 'Not a template — put it back on the calendar' : 'Mark as a template', 
         run: async () => { await setPlanTemplate(p.id, !p.template); void reloadPlans(); } },
       '-',
@@ -72,7 +76,7 @@ function card(p) {
     ]);
   };
 
-  return el('article', { class: `plan-card sc-card sc-brackets sc-brackets--hover${isOpen ? ' is-open' : ''}`, onclick: open, title: `Last saved ${formatDate(new Date(p.updatedAt).toISOString().slice(0, 10), 'long')} on ${p.origin || 'this device'}` },
+  return el('article', { class: `plan-card sc-card sc-brackets sc-brackets--hover${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`, onclick: open, title: `Last saved ${formatDate(new Date(p.updatedAt).toISOString().slice(0, 10), 'long')} on ${p.origin || 'this device'}` },
     el('div', { class: 'plan-head' },
       el('h3', { class: 'plan-name', text: p.name }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋮', title: 'Actions', onclick: menu })),
@@ -87,6 +91,7 @@ function card(p) {
       p.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: `${p.critical} critical` }) : null,
       el('span', { class: 'sc-pill', text: `${p.percent || 0}%` }),
       p.template ? el('span', { class: 'sc-pill', title: 'A pattern to copy — its tasks stay off the calendar', text: 'Template' }) : null,
+      p.archived ? el('span', { class: 'sc-pill', title: p.archivedAt ? `Archived ${formatDate(p.archivedAt, 'long')}` : 'Archived', text: 'Archived' }) : null,
       isOpen ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'Open' }) : null));
 }
 
@@ -100,18 +105,36 @@ export function renderProjects(root) {
     el('div', { class: 'sc-display', text: 'Projects' }),
     el('span', { class: 'sc-muted small', text: syncConfigured() ? 'Every plan on this device and on every device you sync with.' : 'Every plan on this device. Turn on Sync… to keep a copy online and see plans from your other devices.' })));
 
+  const live = plans.filter((p) => !p.archived);
+  const archived = plans.filter((p) => p.archived);
+
   const grid = el('div', { class: 'plan-grid' });
   grid.append(el('button', {
     class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(createProject()); set({ view: 'gantt' }); void reloadPlans(); },
   }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'New project' })));
-  if (!plans.length && !loading) {
+  if (!live.length && !loading) {
     grid.append(el('button', { class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(sampleProject()); set({ view: 'gantt' }); void reloadPlans(); } },
       el('div', { class: 'plan-new-mark', text: '◈' }), el('div', { text: 'Open the sample plan' })));
   }
-  for (const p of plans) grid.append(card(p));
+  for (const p of live) grid.append(card(p));
   pane.append(grid);
 
+  // The archive is kept, not hidden: it is one click away and says how much is in it.
+  if (archived.length) {
+    pane.append(el('button', {
+      class: 'sc-button sc-button--ghost sc-button--sm projects-archive-toggle',
+      text: `${showArchive ? '▾' : '▸'} Archive (${archived.length})`,
+      title: 'Finished or shelved plans, kept in full and out of the way',
+      onclick: () => { showArchive = !showArchive; set({}); },
+    }));
+    if (showArchive) {
+      const old = el('div', { class: 'plan-grid' });
+      for (const p of archived) old.append(card(p));
+      pane.append(old);
+    }
+  }
+
   if (loading) pane.append(el('p', { class: 'empty', text: 'Reading the shelf…' }));
-  else if (!plans.length) pane.append(el('p', { class: 'empty', text: 'Nothing on the shelf yet. A plan lands here as soon as you edit it.' }));
-  else pane.append(el('p', { class: 'sc-faint small projects-note', text: `${plans.length} ${plans.length === 1 ? 'plan' : 'plans'}${syncConfigured() && syncStatus().lastSyncAt ? `, last sync ${new Date(syncStatus().lastSyncAt).toLocaleTimeString()}` : ''}` }));
+  else if (!live.length && !archived.length) pane.append(el('p', { class: 'empty', text: 'Nothing on the shelf yet. A plan lands here as soon as you edit it.' }));
+  else pane.append(el('p', { class: 'sc-faint small projects-note', text: `${live.length} ${live.length === 1 ? 'plan' : 'plans'}${archived.length ? `, ${archived.length} archived` : ''}${syncConfigured() && syncStatus().lastSyncAt ? `, last sync ${new Date(syncStatus().lastSyncAt).toLocaleTimeString()}` : ''}` }));
 }

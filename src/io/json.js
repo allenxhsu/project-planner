@@ -60,6 +60,8 @@ export function parse(text) {
   const blockIds = new Set(p.timeBlocks.map((b) => b.id));
 
   p.template = raw.template === true;
+  p.archived = raw.archived === true;
+  p.archivedAt = typeof raw.archivedAt === 'string' ? raw.archivedAt : null;
 
 
   // The plan's calendar defaults, which every task inherits.

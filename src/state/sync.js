@@ -421,6 +421,8 @@ export async function peopleWithLoad() {
     if (seen.includes(record.id)) continue;
     try {
       const project = parse(record.body).project;
+      // An archived plan's hours are history, not what someone is carrying.
+      if (!isCurrentWork(project)) continue;
       count(project, computeSchedule(project), project.name || record.name);
     } catch { /* a plan that cannot be read adds nothing */ }
   }
@@ -511,6 +513,8 @@ export function planSummary(record) {
     startIso: schedule?.startIso || project.start, finishIso: schedule?.finishIso || null,
     percent: schedule?.percent ?? 0, critical: schedule?.criticalCount ?? 0,
     template: project.template === true,
+    archived: project.archived === true,
+    archivedAt: project.archivedAt || null,
     onCalendar: project.tasks.filter((t) => t.calendar?.show).length,
   };
 }
@@ -604,19 +608,40 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
 }
 
 /**
- * Mark a plan as a template, or stop it being one.
+ * Whether a plan counts as work in hand.
  *
- * A template is a shape to copy. Its tasks are not hours anyone is spending,
- * so they stay off the shared calendar however many of them were released
- * before it became one.
+ * A template is a pattern to copy and an archived plan is finished or shelved.
+ * Neither is anyone's current work, so neither belongs on the calendar, in All
+ * Tasks, or in what a person is carrying. Both are kept in full.
  */
-export async function setPlanTemplate(id, on) {
+export const isCurrentWork = (project) => !project?.template && !project?.archived;
+
+/**
+ * Archive a plan, or bring it back.
+ *
+ * Archiving is not deleting: the plan keeps every task, every assignment and
+ * every logged hour, and it stays on the shelf and in sync. It simply stops
+ * being counted among the work in hand, which is what someone means when a
+ * project is over but its record still matters.
+ */
+export async function setPlanArchived(id, on) {
+  const stamp = on ? new Date().toISOString().slice(0, 10) : null;
+  return patchPlan(id, (project) => {
+    project.archived = !!on;
+    project.archivedAt = stamp;
+    // Archived work stops asking for hours in anyone's week.
+    if (on) for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+  }, on ? 'Archive' : 'Bring back from the archive');
+}
+
+/**
+ * Change a plan wherever it is: the open one through the store so the screen
+ * follows, any other through its record on the shelf.
+ */
+async function patchPlan(id, change, label) {
   if (!recordStore) return false;
   if (id === store.project.id) {
-    tryCommit(on ? 'Mark as a template' : 'No longer a template', (p) => {
-      p.template = !!on;
-      if (on) for (const t of p.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
-    });
+    tryCommit(label, (p) => change(p));
     await openDocument();
     if (syncConfigured()) void syncNow();
     return true;
@@ -625,11 +650,24 @@ export async function setPlanTemplate(id, on) {
   if (!record) return false;
   let project;
   try { project = parse(record.body).project; } catch { return false; }
-  project.template = !!on;
-  if (on) for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+  change(project);
   await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
   if (syncConfigured()) void syncNow();
   return true;
+}
+
+/**
+ * Mark a plan as a template, or stop it being one.
+ *
+ * A template is a shape to copy. Its tasks are not hours anyone is spending,
+ * so they stay off the shared calendar however many of them were released
+ * before it became one.
+ */
+export async function setPlanTemplate(id, on) {
+  return patchPlan(id, (project) => {
+    project.template = !!on;
+    if (on) for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+  }, on ? 'Mark as a template' : 'No longer a template');
 }
 
 /** Pull now, so the shelf shows what other devices have added. */

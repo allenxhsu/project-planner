@@ -67,6 +67,9 @@ export function createProject(name = 'Untitled project', start = null) {
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
     // A template is a pattern to copy, not work in anyone's week.
     template: false,
+    // Archived: finished or shelved. Kept in full, but out of the way of
+    // everything that asks what is being worked on now.
+    archived: false, archivedAt: null,
     tasks: [], resources: [], timesheets: [],
   };
 }

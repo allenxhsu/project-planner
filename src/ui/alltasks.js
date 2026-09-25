@@ -12,7 +12,7 @@
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { planRecords, openPlan } from '../state/sync.js';
+import { planRecords, openPlan, isCurrentWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { isSummary, formatAssignments } from '../model/model.js';
@@ -41,6 +41,8 @@ function rowsOf(record) {
   let out = [];
   try {
     const project = parse(record.body).project;
+    // Templates and archived plans are not work in hand, so not in this list.
+    if (!isCurrentWork(project)) { cache.set(record.id, { updatedAt: record.updatedAt, rows: [] }); return []; }
     const schedule = computeSchedule(project);
     const status = project.statusDate ? toDay(project.statusDate) : toDay(today());
     out = project.tasks

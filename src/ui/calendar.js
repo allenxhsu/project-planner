@@ -9,7 +9,7 @@ import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAULT_AGENDA } from '../model/agenda.js';
-import { planRecords } from '../state/sync.js';
+import { planRecords, isCurrentWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, makeCalendar } from '../model/calendar.js';
@@ -43,9 +43,9 @@ export async function reloadCalendarPlans() {
       if (hit && hit.updatedAt === r.updatedAt) { out.push(hit.entry); continue; }
       try {
         const project = parse(r.body).project;
-        // A template's tasks are a pattern to copy, not hours anyone is
-        // spending, so they are not laid against the week.
-        if (project.template) continue;
+        // A template's tasks are a pattern to copy and an archived plan's are
+        // history. Neither is hours anyone is spending this week.
+        if (!isCurrentWork(project)) continue;
         const entry = { project, schedule: computeSchedule(project) };
         planCache.set(r.id, { updatedAt: r.updatedAt, entry });
         out.push(entry);

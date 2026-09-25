@@ -205,6 +205,14 @@ export const COMMANDS = {
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
   'view.appearance': appearance, 'view.sync': settingsDialog,
+  'project.archive': async () => {
+    const { setPlanArchived } = await import('../state/sync.js');
+    const on = !store.project.archived;
+    if (on && !(await confirmDialog('Archive this project?',
+      'It keeps every task and every logged hour, and stays on the shelf. It stops counting as work in hand: off the calendar, out of All Tasks, and out of what anyone is carrying.', 'Archive'))) return;
+    await setPlanArchived(store.project.id, on);
+    reloadPlans();
+  },
   'project.info': () => set({ rightOpen: true, rightTab: 'project' }), 'project.stats': () => set({ bottomOpen: true, bottomTab: 'stats' }),
   'export.svg': guarded(exportSvg), 'export.png': guarded(exportPng), 'export.pdf': guarded(exportPdf),
   'help.guide': help,
@@ -254,7 +262,8 @@ const MENUS = {
     { label: 'Sync…', run: run('view.sync') },
   ],
   Project: () => [
-    { label: 'Project information & working time…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') },
+    { label: 'Project information & working time…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') }, '-',
+    { label: store.project.archived ? 'Bring back from the archive' : 'Archive this project', run: run('project.archive') },
   ],
   Export: () => [
     { label: 'Gantt chart as SVG', run: run('export.svg') }, { label: 'Gantt chart as PNG', run: run('export.png') }, { label: 'Gantt chart as PDF…', run: run('export.pdf') },

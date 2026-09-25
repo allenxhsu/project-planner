@@ -82,7 +82,7 @@ the duration.
 | Resource Usage | hours per resource per week, with each assignment beneath; over-allocated weeks highlighted |
 | Network Diagram | one box per task in dependency order, critical path in red |
 | People | everyone in the shared directory: hours, tasks and plans across the whole shelf, the rate that every plan uses, and the profile summary from Profiler |
-| Projects | every plan on the shelf as a card: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
+| Projects | every plan in hand as a card, with finished ones folded into the archive: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
 | Calendar | the week, with each task's hours laid into blocks. A task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
 | Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
@@ -221,10 +221,15 @@ On top of that, no day is filled wall to wall: the calendar places at most
 that does not fit runs on into the days after, which is the calendar telling
 you the truth about the week rather than hiding it.
 
-A **template** is a pattern to copy, not work in anyone's week, so its tasks
-stay off the shared calendar however many were released before it became one.
-Making a template marks it; any plan can be marked or unmarked from its card on
-the Projects screen.
+Two kinds of plan are not work in hand, and neither reaches the calendar, All
+Tasks, or what a person is carrying:
+
+- A **template** is a pattern to copy. Making one marks it, and any plan can be
+  marked or unmarked from its card.
+- An **archived** plan is finished or shelved. Archiving is not deleting: every
+  task, assignment and logged hour is kept, the plan stays on the shelf and in
+  sync, and it comes back whole. The Projects screen keeps archived plans
+  behind one click, with the date each was archived on its card.
 
 ## Connecting Google and Outlook calendars
 

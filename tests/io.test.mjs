@@ -44,3 +44,36 @@ test('CSV exports every row and imports a plain list', () => {
   assert.equal(formatPredecessors(project, project.tasks[2]), '2');
   assert.deepEqual(skipped, []);
 });
+
+test('an archived plan says so after a round trip, and a plain one does not', async () => {
+  const { createProject } = await import('../src/model/model.js');
+  const { serialize, parse } = await import('../src/io/json.js');
+  const p = createProject('Finished job');
+  assert.equal(p.archived, false);
+  assert.equal(p.template, false);
+
+  p.archived = true;
+  p.archivedAt = '2026-09-25';
+  const back = parse(serialize(p)).project;
+  assert.equal(back.archived, true);
+  assert.equal(back.archivedAt, '2026-09-25');
+
+  // A plan written before archiving existed is not archived by accident.
+  const older = JSON.parse(serialize(createProject('Older plan')));
+  delete older.archived;
+  delete older.archivedAt;
+  const read = parse(JSON.stringify(older)).project;
+  assert.equal(read.archived, false);
+  assert.equal(read.archivedAt, null);
+});
+
+test('work in hand is neither a template nor an archive', async () => {
+  const { createProject } = await import('../src/model/model.js');
+  const { isCurrentWork } = await import('../src/state/sync.js');
+  const live = createProject('Live');
+  const template = { ...createProject('Pattern'), template: true };
+  const archived = { ...createProject('Done'), archived: true };
+  assert.equal(isCurrentWork(live), true);
+  assert.equal(isCurrentWork(template), false);
+  assert.equal(isCurrentWork(archived), false);
+});
