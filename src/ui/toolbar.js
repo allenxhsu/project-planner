@@ -11,6 +11,8 @@ import { exportCsv, importCsv } from '../io/csv.js';
 import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
 import { showMenu, confirmDialog, showText } from './dialog.js';
 import { settingsDialog } from './settings.js';
+import { reloadPlans } from './projects.js';
+import { GROUPINGS } from './kanban.js';
 import { syncAfterSave, syncConfigured, syncStatus } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -158,7 +160,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => set({ view, editing: null });
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -173,6 +175,8 @@ export const COMMANDS = {
   'task.link': act.linkSelection, 'task.unlink': act.unlinkSelection, 'task.info': () => set({ rightOpen: true, rightTab: 'task' }),
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
   'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ rightOpen: true, rightTab: 'resource' }),
+  'view.projects': goView('projects'), 'view.kanban': goView('kanban'),
+  'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
   'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
@@ -276,7 +280,7 @@ export function renderHeader() {
 export function renderViewTabs(root) {
   clear(root);
   for (const [id, v] of Object.entries(VIEWS)) {
-    root.append(el('button', { class: `sc-tab${store.ui.view === id ? ' is-active' : ''}`, onclick: goView(id) }, el('span', { class: 'tab-glyph', text: v.glyph }), el('span', { text: v.label })));
+    root.append(el('button', { class: `sc-tab${store.ui.view === id ? ' is-active' : ''}`, title: v.label, onclick: goView(id) }, el('span', { class: 'tab-glyph', text: v.glyph }), el('span', { text: v.short || v.label })));
   }
 }
 
@@ -285,10 +289,21 @@ export function renderToolbar(root) {
   const { ui } = store;
   const taskView = ['gantt', 'sheet'].includes(ui.view);
   const resView = ['resources', 'usage'].includes(ui.view);
+  const planView = ui.view === 'projects';
   const b = (text, title, run, { on = false, disabled = false, primary = false } = {}) => el('button', { class: `sc-button sc-button--sm${primary ? ' sc-button--primary' : ''}${on ? ' is-on' : ''}`, text, title, disabled, onclick: run });
   const sep = () => el('span', { class: 'tb-sep' });
   const sel = ui.selection.length;
-  if (taskView || ui.view === 'network') {
+  if (planView) {
+    root.append(
+      b('+ Project', 'Start a new plan', () => { COMMANDS['file.new'](); }, { primary: true }),
+      b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
+      b('Sync…', 'Where plans are kept online', settingsDialog));
+  } else if (ui.view === 'kanban') {
+    root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
+      b('Delete', 'Delete the selected tasks', act.deleteSelection, { disabled: !sel }), sep(),
+      el('span', { class: 'sc-label tb-label', text: 'Group by' }),
+      ...Object.entries(GROUPINGS).map(([id, label]) => b(label, `Column by ${label.toLowerCase()}`, () => set({ kanbanGroup: id }), { on: (ui.kanbanGroup || 'status') === id })));
+  } else if (taskView || ui.view === 'network') {
     root.append(
       b('+ Task', 'New task below the selection (Insert)', act.newTaskBelow, { primary: true }), b('◆ Milestone', 'New milestone', act.newMilestone),
       b('Delete', 'Delete the selected tasks (Del)', act.deleteSelection, { disabled: !sel }), sep(),

@@ -10,6 +10,8 @@ import { renderGantt, zoomGantt, scrollToToday } from './ui/gantt.js';
 import { renderTaskSheet, editActiveCell, moveActiveCol } from './ui/taskgrid.js';
 import { renderResourceSheet, renderResourceUsage } from './ui/resources.js';
 import { renderNetwork, zoomNetwork } from './ui/network.js';
+import { renderProjects, reloadPlans } from './ui/projects.js';
+import { renderKanban } from './ui/kanban.js';
 import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, openFile, loadText, COMMANDS } from './ui/toolbar.js';
@@ -27,7 +29,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { gantt: renderGantt, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork };
+const VIEW_RENDERERS = { projects: renderProjects, gantt: renderGantt, kanban: renderKanban, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork };
 
 function render() {
   const { ui } = store;
@@ -115,4 +117,4 @@ if (!hosted) {
 } else render();
 
 // After the first plan is on screen: the record store, the engine and the timer.
-initSync().catch((err) => console.error('sync could not start', err));
+initSync().then(() => reloadPlans()).catch((err) => console.error('sync could not start', err));

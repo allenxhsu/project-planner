@@ -13,12 +13,16 @@ import { hosted } from '../host.js';
 const MAX_HISTORY = 100;
 const AUTOSAVE_KEY = 'project-planner:autosave';
 
+// `label` names the view in menus and the status line; `short` is what fits in
+// the tab strip once there are seven of them.
 export const VIEWS = {
-  gantt: { label: 'Gantt Chart', glyph: '▤' },
-  sheet: { label: 'Task Sheet', glyph: '☰' },
-  resources: { label: 'Resource Sheet', glyph: '◧' },
-  usage: { label: 'Resource Usage', glyph: '▦' },
-  network: { label: 'Network Diagram', glyph: '⬡' },
+  projects: { label: 'Projects', short: 'Projects', glyph: '▢' },
+  gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },
+  kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
+  sheet: { label: 'Task Sheet', short: 'Tasks', glyph: '☰' },
+  resources: { label: 'Resource Sheet', short: 'Resources', glyph: '◧' },
+  usage: { label: 'Resource Usage', short: 'Usage', glyph: '▦' },
+  network: { label: 'Network Diagram', short: 'Network', glyph: '⬡' },
 };
 
 export const store = {
@@ -32,6 +36,7 @@ export const store = {
     resourceId: null,       // selected resource (resource views)
     collapsed: {},          // taskId → true when its subtasks are hidden
     zoom: 'day',            // gantt: 'day' | 'week' | 'month'
+    kanbanGroup: 'status',  // kanban: 'status' | 'resource'
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     bottomTab: 'checks',

@@ -15,7 +15,8 @@ import {
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
 } from '../../sync-kit/js/index.js';
 import { store, set, loadProject, markSaved, subscribe, revision } from './store.js';
-import { serialize, parse, FILE_EXT } from '../io/json.js';
+import { serialize, parse } from '../io/json.js';
+import { computeSchedule } from '../model/schedule.js';
 
 export const WORKSPACE = 'project';
 const SETTINGS_KEY = 'project-planner:sync';
@@ -215,6 +216,74 @@ function load(remote) {
   } finally {
     adopting = false;
   }
+}
+
+// ---------------------------------------------------------------- the shelf
+//
+// Every plan this device has opened is a record, and a sync brings back every
+// plan any device has opened. That set — not the file system — is what the
+// Projects screen lists.
+
+/** What a card needs, read out of a record. Pure, and never throws on a bad body. */
+export function planSummary(record) {
+  const base = { id: record.id, name: record.name || 'Untitled project', updatedAt: record.updatedAt, origin: record.origin, ok: false };
+  let project;
+  try { project = parse(record.body).project; } catch { return base; }
+  let schedule = null;
+  try { schedule = computeSchedule(project); } catch { /* an unreadable plan still gets a card */ }
+  return {
+    ...base, ok: true, name: project.name || base.name,
+    tasks: project.tasks.length, resources: project.resources.length,
+    startIso: schedule?.startIso || project.start, finishIso: schedule?.finishIso || null,
+    percent: schedule?.percent ?? 0, critical: schedule?.criticalCount ?? 0,
+  };
+}
+
+/** Every plan on the shelf, the most recently touched first. */
+export async function listPlans() {
+  if (!recordStore) return [];
+  const all = await recordStore.all();
+  return all
+    .filter((r) => r && r.type === 'document' && !r.deletedAt && typeof r.body === 'string')
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(planSummary);
+}
+
+/** Put one of them on screen. */
+export async function openPlan(id) {
+  if (!recordStore) return false;
+  const record = await recordStore.get(id);
+  if (!record || record.deletedAt) { set({ hint: 'That plan is no longer on the shelf.' }); return false; }
+  let parsed;
+  try { parsed = parse(record.body); } catch { set({ hint: 'That plan could not be read.' }); return false; }
+  adopting = true;
+  try {
+    loadProject(parsed.project, null);
+    markSaved(null);
+  } finally {
+    adopting = false;
+  }
+  await openDocument();
+  return true;
+}
+
+/**
+ * Take a plan off the shelf everywhere. A tombstone, not a hole: the record
+ * stays so the deletion reaches the other devices too.
+ */
+export async function deletePlan(id) {
+  if (!recordStore) return;
+  const record = await recordStore.get(id);
+  if (!record) return;
+  const at = Math.max(Date.now(), record.updatedAt + 1);
+  await recordStore.put([{ ...record, body: '', deletedAt: at, updatedAt: at, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+}
+
+/** Pull now, so the shelf shows what other devices have added. */
+export async function refreshPlans() {
+  if (syncConfigured()) await syncNow();
+  return listPlans();
 }
 
 /** Stop everything. Only tests need this. */

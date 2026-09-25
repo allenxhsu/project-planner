@@ -26,7 +26,9 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 
 /* ---------- centre ---------- */
 #center { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--sc-bg); }
-.view-tabs { background: var(--sc-panel); padding-left: var(--sc-space-2); min-height: 37px; }
+.view-tabs { background: var(--sc-panel); padding-left: var(--sc-space-2); min-height: 37px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.view-tabs::-webkit-scrollbar { display: none; }
+.view-tabs .sc-tab { flex: none; white-space: nowrap; }
 #toolbar { flex: none; display: flex; align-items: center; gap: 4px; padding: 5px var(--sc-space-2); box-shadow: none; border-width: 0 0 1px; overflow-x: auto; scrollbar-width: none; }
 #toolbar .is-on { box-shadow: inset 0 0 0 1px var(--sc-accent); color: var(--sc-accent); background: rgb(var(--sc-accent-rgb) / 0.14); }
 .tb-sep { width: 1px; height: 18px; background: var(--sc-line); margin: 0 4px; flex: none; }
@@ -183,6 +185,47 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .insp-actions { display: flex; justify-content: flex-end; }
 .workdays { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 4px 0; }
 #inspector .sc-section-title { margin: var(--sc-space-2) 0 0; }
+
+/* ---------- projects ---------- */
+.projects-pane { flex: 1; min-width: 0; overflow-y: auto; padding: var(--sc-space-4); }
+.projects-head { display: grid; gap: 4px; margin-bottom: var(--sc-space-4); }
+.projects-head .sc-display { font-size: 17px; }
+.projects-note { margin: var(--sc-space-4) 0 0; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sc-space-3); }
+.plan-card { display: grid; gap: 8px; align-content: start; padding: var(--sc-space-3); cursor: pointer; text-align: left; min-height: 132px; }
+.plan-card:hover { border-color: var(--sc-accent); }
+.plan-card.is-open { box-shadow: inset 0 0 0 1px var(--sc-app); }
+.plan-head { display: flex; align-items: flex-start; gap: 8px; }
+.plan-name { margin: 0; flex: 1; min-width: 0; font: 600 14px var(--sc-font-display); letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.plan-dates { font-size: 11.5px; color: var(--sc-text-2); }
+.plan-dates.warn { color: var(--sc-danger); }
+.plan-meter { margin: 2px 0; }
+.plan-foot { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--sc-text-3); flex-wrap: wrap; }
+.plan-count { color: var(--sc-text-2); }
+.plan-new { display: grid; place-content: center; justify-items: center; gap: 6px; color: var(--sc-text-3); border-style: dashed; font: inherit; }
+.plan-new:hover { color: var(--sc-accent); }
+.plan-new-mark { font-size: 24px; line-height: 1; }
+
+/* ---------- kanban ---------- */
+.kanban-pane { flex: 1; min-width: 0; display: flex; gap: var(--sc-space-3); padding: var(--sc-space-3); overflow-x: auto; align-items: flex-start; }
+.kb-col { flex: 0 0 300px; display: flex; flex-direction: column; max-height: 100%; background: var(--sc-panel); border: 1px solid var(--sc-line); }
+.kb-col.is-over { border-color: var(--sc-accent); background: rgb(var(--sc-accent-rgb) / 0.06); }
+.kb-col-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--sc-line); background: var(--sc-panel-2); }
+.kb-col-head .sc-label { flex: 1; min-width: 0; }
+.kb-body { display: grid; gap: 8px; padding: 8px; overflow-y: auto; min-height: 60px; }
+.kb-card { display: grid; gap: 6px; padding: 10px; cursor: grab; }
+.kb-card:hover { border-color: var(--sc-accent); }
+.kb-card.is-sel { box-shadow: inset 0 0 0 1px var(--sc-accent); }
+.kb-card.is-critical { border-left: 2px solid var(--sc-danger); }
+.kb-card.is-milestone { border-left: 2px solid var(--sc-text-2); }
+.kb-card.is-drag { opacity: 0.5; }
+.kb-card-head { display: flex; align-items: center; gap: 6px; }
+.kb-id { font-size: 10.5px; color: var(--sc-text-3); }
+.kb-flag { font-size: 10px; color: var(--sc-text-2); }
+.kb-name { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.kb-dates { font-size: 11px; color: var(--sc-text-3); }
+.kb-foot { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.kb-who { font-family: var(--sc-font-mono); font-size: 10.5px; color: var(--sc-accent); }
 
 /* ---------- sync ---------- */
 .sync-status { padding: 8px 10px; border: 1px solid var(--sc-line); background: var(--sc-panel-2); font-size: 11.5px; color: var(--sc-text-2); }
