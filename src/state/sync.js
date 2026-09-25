@@ -122,6 +122,13 @@ async function openDocument() {
  */
 async function commit() {
   if (!doc || adopting || store.project.id !== docPlanId) return;
+  // An empty, untitled plan is what every new window starts as. Giving each one
+  // a record would put a row on the shelf — and on every other device — for the
+  // act of opening the app, so a plan earns its record by having something in it.
+  const untouched = store.project.tasks.length === 0
+    && store.project.name === 'Untitled project'
+    && !doc.record.updatedAt;
+  if (untouched) return;
   const body = serialize(store.project);
   if (body === doc.body && store.project.name === doc.name) return;
   doc.edit(body, store.project.name);

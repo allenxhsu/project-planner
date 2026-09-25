@@ -643,3 +643,32 @@ test('duration is how long a task is open; work is how much of it is spent', asy
   assert.equal(new Set(big.map((b) => b.dateIso)).size, 3, 'one four-hour block a day');
   assert.ok(big.every((b) => b.minutes === 240));
 });
+
+test('an empty untitled plan does not put a row on the shelf', async () => {
+  const { SyncedDocument, MemoryStore } = await import('../sync-kit/js/index.js');
+  const { createProject } = await import('../src/model/model.js');
+  const { serialize } = await import('../src/io/json.js');
+  // The rule sync.js applies before it writes: a plan earns its record by
+  // having something in it. Opening the app should not fill anyone's shelf.
+  const earnsRecord = (project, doc) => !(project.tasks.length === 0 && project.name === 'Untitled project' && !doc.record.updatedAt);
+
+  const store = new MemoryStore();
+  await store.open();
+  const fresh = createProject();
+  const doc = new SyncedDocument(store, { id: fresh.id, origin: 'test', format: fresh.format, name: fresh.name });
+  await doc.load();
+  assert.equal(earnsRecord(fresh, doc), false, 'a new window is not a plan yet');
+
+  fresh.name = 'Zipline';
+  assert.equal(earnsRecord(fresh, doc), true, 'naming it makes it one');
+
+  const withTask = createProject();
+  withTask.tasks.push({ id: 't', name: 'A', level: 1, duration: 1, predecessors: [], assignments: [] });
+  assert.equal(earnsRecord(withTask, doc), true, 'so does putting a task in it');
+
+  // Once it has a record, it keeps it even if emptied again.
+  doc.edit(serialize(fresh), fresh.name);
+  await doc.save();
+  const emptied = createProject();
+  assert.equal(earnsRecord(emptied, doc), true);
+});
