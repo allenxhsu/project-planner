@@ -293,11 +293,14 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
           };
           blocks.push(block);
           mine.push(block);
-          // The gap is booked with the block, so the next thing — this task's
-          // or anyone's — starts after it rather than back to back. Booked for
-          // every person on the task, which is what stops the double-booking.
-          for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + size + a.gap }); fill(lane, day, minutes); }
-          at += size + a.gap;
+          // What is booked is the time actually used, not the nominal block:
+          // half an hour of work in an hour-long block takes half an hour, and
+          // reserving the other half leaves a hole nobody asked for. The gap is
+          // booked with it, so the next thing — this task's or anyone's —
+          // starts after it rather than back to back. Booked for every person
+          // on the task, which is what stops the double-booking.
+          for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + minutes + a.gap }); fill(lane, day, minutes); }
+          at += minutes + a.gap;
           left -= minutes;
           usedToday += minutes;
           placedToday++;

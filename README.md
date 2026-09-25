@@ -219,6 +219,11 @@ holds, because thirty days of an hour grid is unreadable. Double-clicking a
 day, or its "+n more", opens that day. The arrows move by whatever is on
 screen: a day, a week or a month.
 
+A day has one column and room to spare, so each block reads as a line: the
+hours it runs, who is on it, the task, the project it belongs to, how long it
+takes, its urgency, how far along it is and any deadline. A week keeps to the
+task's name, because half an hour of a week is too short to stack all that.
+
 ### Why a week is not full
 
 Duration is how long a task is open. Work is how much of that time goes into

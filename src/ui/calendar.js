@@ -276,8 +276,13 @@ export function renderCalendar(root) {
       // Two people can work the same hour, so their blocks sit side by side
       // rather than one hiding the other.
       const width = 100 / lanes;
+      // A day has one column and room to spare, so the block reads as a line:
+      // time, who, task, project, how long, how far along. A half-hour block in
+      // a week is too short to stack that, which is why the week keeps to the
+      // task's name and the day says the rest.
+      const oneDay = range === 'day';
       col.append(el('div', {
-        class: `cal-block${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
@@ -303,10 +308,17 @@ export function renderCalendar(root) {
         },
       },
         el('div', { class: 'cal-block-time sc-mono' },
-          formatClock(b.start),
+          oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
           person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
         el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),
-        (planCount > 1 && !who) || foreign ? el('div', { class: 'cal-block-plan', text: b.planName }) : null));
+        (planCount > 1 && !who) || foreign ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
+        oneDay ? el('div', { class: 'cal-block-facts sc-mono sc-faint' },
+          `${b.minutes % 60 ? `${b.minutes}m` : `${b.minutes / 60}h`}`,
+          person.names.length ? el('span', { text: person.names.join(', ') }) : null,
+          urgencyOf(t) !== 'normal' ? el('span', { class: `sc-pill urg-${urgencyOf(t)}`, text: URGENCIES[urgencyOf(t)].label }) : null,
+          info.percent ? el('span', { text: `${info.percent}%` }) : null,
+          info.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : null,
+          t.deadline ? el('span', { text: `deadline ${formatDate(t.deadline, 'day')}` }) : null) : null));
     }
     body.append(col);
   }

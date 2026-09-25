@@ -945,3 +945,33 @@ test('one plan, once: the same plan given twice does not book its hours twice', 
   const both = planBlocksAcross([{ project: p, schedule: s }, { project: copy, schedule: computeSchedule(copy) }]);
   assert.equal(both.blocks.length, 2, 'two real plans are two bookings');
 });
+
+test('half an hour of work takes half an hour, not the whole block it sits in', async () => {
+  const { planBlocksAcross, formatClock } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  p.timeBlocks = [{ id: 'tb', name: 'Day', from: '08:00', to: '17:00', days: [0, 1, 2, 3, 4, 5, 6] }];
+  // Hour-long blocks by default, and no gap asked for.
+  p.agenda = { blockHours: 1, timeBlockId: 'tb', gapMinutes: 0, assumedLoad: 100, dailyCap: 8 };
+
+  // Four errands of half an hour each.
+  for (const name of ['Light bracket', 'Gas bracket', 'Aluminium panel', 'Camera']) {
+    const t = task(p, name, 1);
+    assign(p, t.id, r.id, 1);
+    setTaskField(p, t.id, 'work', 0.5);
+    setTaskField(p, t.id, 'calendarShow', true);
+  }
+
+  const { blocks } = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }]);
+  const first = blocks.filter((b) => b.dateIso === MON).sort((a, b) => a.start - b.start);
+  assert.equal(first.length, 4);
+  assert.ok(first.every((b) => b.minutes === 30), 'each is half an hour of work');
+  assert.deepEqual(first.map((b) => formatClock(b.start)), ['8 AM', '8:30 AM', '9 AM', '9:30 AM'],
+    'one after another — a half-hour task does not hold the rest of the hour');
+
+  // The gap, when asked for, is still honoured and is the only space left.
+  p.agenda = { ...p.agenda, gapMinutes: 15 };
+  const spaced = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }]).blocks
+    .filter((b) => b.dateIso === MON).sort((a, b) => a.start - b.start);
+  assert.deepEqual(spaced.map((b) => formatClock(b.start)), ['8 AM', '8:45 AM', '9:30 AM', '10:15 AM']);
+});
