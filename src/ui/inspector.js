@@ -3,8 +3,8 @@
 import { el, clear, formatMoney, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource } from '../model/model.js';
-import { formatDate, formatDuration, fromDay, WEEKDAY_NAMES } from '../model/calendar.js';
+import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
+import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -44,6 +44,7 @@ function renderTask(root) {
       field('Duration', text(formatDuration(t.duration), setF('duration')), '5d · 2w · 8h'),
       field('% complete', text(String(t.percent), setF('percent')))));
     form.append(el('label', { class: 'row check-row' }, el('input', { class: 'sc-check', type: 'checkbox', checked: !!t.milestone, onchange: (e) => act.editTask(id, 'milestone', e.target.checked) }), el('span', { text: 'Milestone (zero duration)' })));
+    form.append(field('Stage', select(stageOf(project, t).id, stages(project).map((st) => ({ value: st.id, label: st.name })), (v) => act.setTaskStage(id, v)), 'the Kanban column this task sits in'));
   } else form.append(el('p', { class: 'sc-muted small', text: `Summary of ${s.children.length} subtasks: ${formatDuration(s.duration)}, ${s.percent}% complete. Its dates come from them.` }));
   form.append(el('div', { class: 'two' },
     field('Start', date(s.startIso, setF('start')), s.summary ? 'from subtasks' : 'typing a date pins it'),
@@ -99,6 +100,39 @@ function renderTask(root) {
     else if (v) act.assignResource(id, v, 1);
   }));
   root.append(res);
+
+  // ---- time: what was expected, what was spent, what is left
+  if (!s.summary || timesheetsFor(project, id).length) {
+    root.append(el('div', { class: 'sc-section-title', text: 'Time' }));
+    root.append(readout([
+      ['Allocated', formatHours(s.work)],
+      ['Spent', formatHours(s.spent)],
+      ['Remaining', formatHours(s.remaining)],
+    ]));
+    const lines = el('div', { class: 'link-list' });
+    for (const line of timesheetsFor(project, id)) {
+      const who = getResource(project, line.resourceId);
+      lines.append(el('div', { class: 'time-row' },
+        date(line.date, (v) => act.editTimeLine(line.id, 'date', v)),
+        select(line.resourceId || '', [{ value: '', label: '—' }, ...project.resources.map((r) => ({ value: r.id, label: r.initials || r.name }))], (v) => act.editTimeLine(line.id, 'resourceId', v)),
+        text(String(line.hours), (v) => act.editTimeLine(line.id, 'hours', v), { class: 'sc-input lag', title: 'Hours' }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Remove this line', onclick: () => act.deleteTimeLine(line.id) })));
+      if (line.note) lines.append(el('div', { class: 'sc-faint small time-note', text: line.note }));
+    }
+    const newDate = el('input', { class: 'sc-input', type: 'date', value: today() });
+    const newWho = el('select', { class: 'sc-select' }, el('option', { value: '', text: '—' }),
+      ...project.resources.map((r) => el('option', { value: r.id, text: r.initials || r.name })));
+    const newHours = el('input', { class: 'sc-input lag', type: 'text', placeholder: 'h' });
+    if (t.assignments.length) newWho.value = t.assignments[0].resourceId;
+    for (const input of [newHours]) input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') addLine(); });
+    const addLine = () => {
+      if (!newHours.value.trim()) { act.hint('How many hours?'); newHours.focus(); return; }
+      if (act.logTime({ taskId: id, resourceId: newWho.value || null, date: newDate.value || null, hours: newHours.value })) newHours.value = '';
+    };
+    lines.append(el('div', { class: 'time-row' }, newDate, newWho, newHours,
+      el('button', { class: 'sc-button sc-button--sm', text: '+', title: 'Log this time', onclick: addLine })));
+    root.append(lines);
+  }
 }
 
 function renderResource(root) {

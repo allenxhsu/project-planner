@@ -1,22 +1,26 @@
 // Kanban: the open plan's tasks as cards in columns.
 //
-// A Microsoft Project plan has no "stage" field, so the honest column is the
-// one the plan already keeps: how far along a task is. Dragging a card between
-// columns sets its progress, which is a real edit to the plan — it moves the
-// bar on the Gantt chart and the roll-up on its summary.
+// Columns are the plan's own stages, which the plan stores and you can rename,
+// reorder, add to and delete. Grouping by progress or by resource is there too,
+// for when the question is "how far along is everything?" rather than "where is
+// it in our process?".
+//
+// Every drop is a real edit. Moving a card to another stage writes that stage
+// on the task; moving it to a stage marked *finished* also completes it, so the
+// board and the schedule can never disagree about what is done.
 //
 // Summary tasks are not cards. They are the columns' subject matter, not items
-// in them: their percent is computed from their children, so dropping one in
-// "Done" would be a lie the scheduler immediately overwrites.
+// in them: their percent is computed from their children, so dropping one in a
+// finished column would be a lie the scheduler immediately overwrites.
 
 import { el, clear, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { formatAssignments, isSummary, getResource } from '../model/model.js';
+import { formatAssignments, isSummary, getResource, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration } from '../model/calendar.js';
-import { showMenu } from './dialog.js';
+import { showMenu, promptText, confirmDialog } from './dialog.js';
 
-export const GROUPINGS = { status: 'Progress', resource: 'Resource' };
+export const GROUPINGS = { stage: 'Stage', status: 'Progress', resource: 'Resource' };
 
 const STATUS_COLUMNS = [
   { id: 'todo', label: 'Not started', percent: 0, match: (p) => p === 0 },
@@ -32,6 +36,7 @@ function cardTasks() {
 
 function columnsFor(grouping) {
   const { project } = store;
+  if (grouping === 'stage') return stages(project).map((st) => ({ id: st.id, label: st.name, stage: st }));
   if (grouping === 'resource') {
     const cols = project.resources.map((r) => ({ id: r.id, label: r.name, resourceId: r.id }));
     cols.push({ id: '__none', label: 'Unassigned', resourceId: null });
@@ -41,8 +46,9 @@ function columnsFor(grouping) {
 }
 
 function tasksIn(column, grouping) {
-  const { schedule } = store;
+  const { project, schedule } = store;
   const tasks = cardTasks();
+  if (grouping === 'stage') return tasks.filter((t) => stageOf(project, t).id === column.id);
   if (grouping === 'resource') {
     if (column.resourceId === null) return tasks.filter((t) => !t.assignments.length);
     return tasks.filter((t) => t.assignments.some((a) => a.resourceId === column.resourceId));
@@ -54,6 +60,7 @@ function tasksIn(column, grouping) {
 function applyDrop(taskId, column, grouping) {
   const t = store.project.tasks.find((x) => x.id === taskId);
   if (!t) return;
+  if (grouping === 'stage') { act.setTaskStage(taskId, column.id); return; }
   if (grouping === 'resource') {
     if (column.resourceId === null) {
       for (const a of [...t.assignments]) act.unassignResource(taskId, a.resourceId);
@@ -113,7 +120,8 @@ function card(t, grouping) {
     el('div', { class: 'kb-meter sc-meter' }, el('span', { style: { '--value': `${s.percent}%` } })),
     el('div', { class: 'kb-foot' },
       el('span', { class: 'sc-faint', text: s.milestone ? 'Milestone' : formatDuration(s.duration) }),
-      s.work ? el('span', { class: 'sc-faint', text: formatHours(s.work) }) : null,
+      s.work ? el('span', { class: 'sc-faint', title: 'Allocated', text: formatHours(s.work) }) : null,
+      s.spent ? el('span', { class: 'kb-spent', title: `Spent, of ${formatHours(s.work)} allocated`, text: formatHours(s.spent) }) : null,
       el('span', { class: 'sc-spacer' }),
       names ? el('span', { class: 'kb-who', title: names, text: initialsOf(project, t) }) : null));
   return node;
@@ -129,7 +137,7 @@ function initialsOf(project, task) {
 
 export function renderKanban(root) {
   const { ui } = store;
-  const grouping = ui.kanbanGroup || 'status';
+  const grouping = ui.kanbanGroup || 'stage';
   clear(root);
   const pane = el('div', { class: 'kanban-pane' });
   root.append(pane);
@@ -143,11 +151,33 @@ export function renderKanban(root) {
   for (const column of columnsFor(grouping)) {
     const items = tasksIn(column, grouping);
     const body = el('div', { class: 'kb-body' });
-    const col = el('section', { class: 'kb-col' },
-      el('header', { class: 'kb-col-head' },
-        el('span', { class: 'sc-label', text: column.label }),
-        el('span', { class: 'sc-badge', text: String(items.length) })),
-      body);
+    const head = el('header', { class: 'kb-col-head' },
+      el('span', { class: 'sc-label', text: column.label }),
+      column.stage?.done ? el('span', { class: 'kb-done-mark', title: 'Tasks here count as finished', text: '✓' }) : null,
+      el('span', { class: 'sc-badge', text: String(items.length) }));
+    if (column.stage) {
+      head.append(el('button', {
+        class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋮', title: 'Column',
+        onclick: (e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          const st = column.stage;
+          showMenu(r.left - 150, r.bottom + 4, [
+            { label: 'Rename…', run: async () => { const name = await promptText('Rename column', 'What is this stage called?', st.name); if (name) act.renameStageColumn(st.id, name); } },
+            { label: st.done ? 'Stop meaning finished' : 'Tasks here are finished', run: () => act.setStageIsDone(st.id, !st.done) },
+            '-',
+            { label: 'Move left', run: () => act.moveStageColumn(st.id, -1) },
+            { label: 'Move right', run: () => act.moveStageColumn(st.id, 1) },
+            '-',
+            { label: 'New column…', run: async () => { const name = await promptText('New column', 'What is this stage called?', 'New stage'); if (name) act.newStageColumn(name); } },
+            { label: 'Delete column', danger: true, run: async () => {
+              if (items.length && !(await confirmDialog('Delete this column?', `Its ${items.length} ${items.length === 1 ? 'task goes' : 'tasks go'} back to the first column. No task is deleted.`))) return;
+              act.deleteStageColumn(st.id);
+            } },
+          ]);
+        },
+      }));
+    }
+    const col = el('section', { class: `kb-col${column.stage?.done ? ' is-done' : ''}` }, head, body);
     for (const t of items) body.append(card(t, grouping));
 
     const over = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; col.classList.add('is-over'); };
@@ -161,5 +191,12 @@ export function renderKanban(root) {
       if (id) applyDrop(id, column, grouping);
     });
     pane.append(col);
+  }
+
+  if (grouping === 'stage') {
+    pane.append(el('button', {
+      class: 'kb-add-col sc-card sc-brackets',
+      onclick: async () => { const name = await promptText('New column', 'What is this stage called?', 'New stage'); if (name) act.newStageColumn(name); },
+    }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'Add column' })));
   }
 }

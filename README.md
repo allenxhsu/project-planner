@@ -71,6 +71,9 @@ the duration.
 | Resource Sheet | people and things: type, max units, rate, group; work and cost roll-ups |
 | Resource Usage | hours per resource per week, with each assignment beneath; over-allocated weeks highlighted |
 | Network Diagram | one box per task in dependency order, critical path in red |
+| Projects | every plan on the shelf as a card: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
+| Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
+| All Tasks | every task in every plan, filtered by late / unfinished / critical / unassigned, searchable, and a row opens the plan it belongs to |
 
 The details panel on the right edits the selected task (including its
 predecessors and assignments), the selected resource, or the project itself.
@@ -101,6 +104,27 @@ deadlines, over-allocation, tasks with no predecessor or resource, late tasks
   drawing without a browser: `node tools/gantt-svg.mjs plan.project.json > gantt.svg`
   (`--sample`, `--zoom day|week|month`). [doc/sample-gantt.svg](doc/sample-gantt.svg)
   is the sample plan rendered that way.
+
+## Stages, and time actually spent
+
+Two things the schedule does not have, because they are about how a team works
+rather than about arithmetic:
+
+**Stages** are the plan's own Kanban columns — rename them, reorder them, add
+and delete them. One or more is marked *finished*, and that flag is what keeps
+the board and the schedule honest: dropping a card in a finished column
+completes the task, and completing a task moves it there. A plan written before
+stages existed opens with the default three, with everything already complete
+sitting in Done.
+
+**Timesheets** are hours logged against a task, in the Time section of the task
+details. `Work` stays what the plan *expects* (duration × units); `Spent` is
+what was logged; `Remaining` is the difference, never below zero. Both roll up
+through summary tasks, and both have columns in the Task Sheet.
+
+Neither travels in Microsoft Project XML — MSPDI has no column for either — so
+a plan that round-trips through Project keeps its dates and loses its stages
+and timesheets. They are in `*.project.json`, and they sync.
 
 ## Sync
 

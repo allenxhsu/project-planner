@@ -6,7 +6,7 @@
 // task under it. Nothing here is stored: it is recomputed from the plan.
 
 import { makeCalendar, toDay, fromDay } from './calendar.js';
-import { dependencyGraph, topoOrder, isSummary, childrenOf, ancestors, wbsCodes, parentIndex } from './model.js';
+import { dependencyGraph, topoOrder, isSummary, childrenOf, ancestors, wbsCodes, parentIndex, spentOn } from './model.js';
 
 /**
  * @returns {{ tasks: Object<string, TaskInfo>, order: string[], start, finish, duration, work, cost, percent, cyclic: string[] }}
@@ -31,7 +31,7 @@ export function computeSchedule(p) {
       milestone: !summary && (t.milestone || dur === 0),
       duration: dur, span: summary ? 0 : Math.max(0, Math.ceil(dur) - 1),
       start: projStart, finish: projStart, ls: projStart, lf: projStart, slack: 0, critical: false,
-      percent: t.percent || 0, work: 0, cost: 0, deadlineMissed: false, cyclic: false,
+      percent: t.percent || 0, work: 0, cost: 0, spent: 0, remaining: 0, deadlineMissed: false, cyclic: false,
     };
   });
 
@@ -151,12 +151,18 @@ export function computeSchedule(p) {
     }
     info.work = work;
     info.cost = cost;
+    info.spent = spentOn(p, info.id);
+    // What the plan still expects, after what has been logged. Never negative:
+    // overrunning an estimate means nothing is left, not that time is owed back.
+    info.remaining = Math.max(0, work - info.spent);
   }
   for (const info of [...all].filter((i) => i.summary).sort((a, b) => b.level - a.level)) {
     const kids = info.children.map((c) => infos[c]);
     const t = p.tasks[byId.get(info.id)];
     info.work = kids.reduce((s, k) => s + k.work, 0);
     info.cost = kids.reduce((s, k) => s + k.cost, 0) + (t.fixedCost || 0);
+    info.spent = kids.reduce((s, k) => s + k.spent, 0) + spentOn(p, info.id);
+    info.remaining = Math.max(0, info.work - info.spent);
     const wsum = kids.reduce((s, k) => s + Math.max(k.duration, 0.01), 0);
     info.percent = Math.round(kids.reduce((s, k) => s + k.percent * Math.max(k.duration, 0.01), 0) / wsum) || 0;
     info.duration = cal.between(info.start, info.finish);
@@ -171,6 +177,7 @@ export function computeSchedule(p) {
     start: projStart, finish: projFinish, startIso: fromDay(projStart), finishIso: fromDay(projFinish),
     duration: all.length ? cal.between(projStart, projFinish) : 0,
     work: tops.reduce((s, k) => s + k.work, 0), cost: tops.reduce((s, k) => s + k.cost, 0),
+    spent: (p.timesheets || []).reduce((s, x) => s + (Number(x.hours) || 0), 0),
     percent: leaves.length ? Math.round(leaves.reduce((s, k) => s + k.percent * Math.max(k.duration, 0.01), 0) / wsum) : 0,
     criticalCount: leaves.filter((l) => l.critical).length,
   };

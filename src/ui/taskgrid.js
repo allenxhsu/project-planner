@@ -3,7 +3,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { formatPredecessors, formatAssignments, isSummary, taskIndex, CONSTRAINTS } from '../model/model.js';
+import { formatPredecessors, formatAssignments, isSummary, taskIndex, CONSTRAINTS, stageOf } from '../model/model.js';
 import { formatDate, formatDuration } from '../model/calendar.js';
 import { formatMoney, formatHours, clear } from '../util.js';
 import { renderGrid } from './grid.js';
@@ -21,6 +21,9 @@ export const COLUMN_DEFS = {
   resources: { label: 'Resource Names', width: 180, edit: 'text' },
   percent: { label: '% Complete', width: 84, edit: 'text', align: 'right' },
   work: { label: 'Work', width: 70, readonly: true, align: 'right' },
+  spent: { label: 'Spent', width: 70, readonly: true, align: 'right' },
+  remaining: { label: 'Left', width: 70, readonly: true, align: 'right' },
+  stage: { label: 'Stage', width: 120, readonly: true },
   cost: { label: 'Cost', width: 90, readonly: true, align: 'right' },
   slack: { label: 'Slack', width: 60, readonly: true, align: 'right' },
   critical: { label: 'Critical', width: 62, readonly: true },
@@ -30,7 +33,7 @@ export const COLUMN_DEFS = {
   notes: { label: 'Notes', width: 260, edit: 'text' },
 };
 export const GANTT_COLUMNS = ['id', 'ind', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources'];
-export const SHEET_COLUMNS = ['id', 'ind', 'wbs', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources', 'percent', 'work', 'cost', 'slack', 'critical', 'constraint', 'constraintDate', 'deadline', 'notes'];
+export const SHEET_COLUMNS = ['id', 'ind', 'wbs', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources', 'percent', 'stage', 'work', 'spent', 'remaining', 'cost', 'slack', 'critical', 'constraint', 'constraintDate', 'deadline', 'notes'];
 export const columnsForView = (view) => (view === 'sheet' ? SHEET_COLUMNS : GANTT_COLUMNS);
 
 export const taskColumns = (keys) => keys.map((key) => ({ key, ...COLUMN_DEFS[key] }));
@@ -61,7 +64,8 @@ export function taskRows(ids) {
       cells: {
         id: s.index, ind: indicators(t, s), wbs: s.wbs, name: t.name, duration: summary ? formatDuration(s.duration) : formatDuration(t.duration),
         start: formatDate(s.startIso), finish: formatDate(s.finishIso), predecessors: formatPredecessors(project, t), resources: formatAssignments(project, t),
-        percent: `${s.percent}%`, work: s.work ? formatHours(s.work) : '', cost: s.cost ? formatMoney(s.cost, project.currency) : '',
+        percent: `${s.percent}%`, stage: stageOf(project, t).name, work: s.work ? formatHours(s.work) : '',
+        spent: s.spent ? formatHours(s.spent) : '', remaining: s.work ? formatHours(s.remaining) : '', cost: s.cost ? formatMoney(s.cost, project.currency) : '',
         slack: summary ? '' : `${s.slack}d`, critical: s.critical ? 'Yes' : '', constraint: t.constraint?.type === 'ASAP' ? '' : CONSTRAINTS[t.constraint.type].label,
         constraintDate: t.constraint?.date ? formatDate(t.constraint.date) : '', deadline: t.deadline ? formatDate(t.deadline) : '', notes: t.notes,
       },

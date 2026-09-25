@@ -4,6 +4,8 @@ import { store, set, commit, tryCommit, emit } from './store.js';
 import {
   insertTask, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
+  setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
+  addTimesheet, removeTimesheet, setTimesheetField,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -183,6 +185,23 @@ export function editResource(id, field, value) {
 }
 export function assignResource(taskId, resourceId, units = 1) { return attempt('Assign', (p) => assign(p, taskId, resourceId, units)); }
 export function unassignResource(taskId, resourceId) { tryCommit('Unassign', (p) => unassign(p, taskId, resourceId)); }
+
+// ---------------------------------------------------------------- timesheets
+
+export function logTime({ taskId, resourceId, date, hours, note }) {
+  return attempt('Log time', (p) => addTimesheet(p, { taskId, resourceId, date, hours, note }));
+}
+export function editTimeLine(id, field, value) { return attempt('Edit timesheet', (p) => setTimesheetField(p, id, field, value)); }
+export function deleteTimeLine(id) { return attempt('Delete timesheet line', (p) => removeTimesheet(p, id)); }
+
+// ---------------------------------------------------------------- stages
+
+export function setTaskStage(taskId, stageId) { return attempt('Move task', (p) => setStage(p, taskId, stageId)); }
+export function newStageColumn(name) { return commit('New stage', (p) => addStage(p, name)); }
+export function renameStageColumn(id, name) { return attempt('Rename stage', (p) => renameStage(p, id, name)); }
+export function deleteStageColumn(id) { return attempt('Delete stage', (p) => removeStage(p, id)); }
+export function moveStageColumn(id, dir) { return attempt('Move stage', (p) => { if (!moveStage(p, id, dir)) throw new Error('There is no column that way.'); }); }
+export function setStageIsDone(id, done) { return attempt('Stage means finished', (p) => setStageDone(p, id, done)); }
 
 // ---------------------------------------------------------------- project
 

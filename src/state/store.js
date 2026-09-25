@@ -19,6 +19,7 @@ export const VIEWS = {
   projects: { label: 'Projects', short: 'Projects', glyph: '▢' },
   gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },
   kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
+  alltasks: { label: 'All Tasks', short: 'All Tasks', glyph: '≣' },
   sheet: { label: 'Task Sheet', short: 'Tasks', glyph: '☰' },
   resources: { label: 'Resource Sheet', short: 'Resources', glyph: '◧' },
   usage: { label: 'Resource Usage', short: 'Usage', glyph: '▦' },
@@ -36,7 +37,7 @@ export const store = {
     resourceId: null,       // selected resource (resource views)
     collapsed: {},          // taskId → true when its subtasks are hidden
     zoom: 'day',            // gantt: 'day' | 'week' | 'month'
-    kanbanGroup: 'status',  // kanban: 'status' | 'resource'
+    kanbanGroup: 'stage',   // kanban: 'stage' | 'status' | 'resource'
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     bottomTab: 'checks',

@@ -239,6 +239,15 @@ export function planSummary(record) {
   };
 }
 
+/** The raw records, for a caller that wants the plans themselves, not a summary. */
+export async function planRecords() {
+  if (!recordStore) return [];
+  const all = await recordStore.all();
+  return all
+    .filter((r) => r && r.type === 'document' && !r.deletedAt && typeof r.body === 'string')
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 /** Every plan on the shelf, the most recently touched first. */
 export async function listPlans() {
   if (!recordStore) return [];

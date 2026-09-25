@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 
 export const FILE_EXT = '.project.json';
@@ -27,6 +27,20 @@ export function parse(text) {
     p.calendar.hoursPerDay = Number(c.hoursPerDay) > 0 ? Number(c.hoursPerDay) : 8;
     p.calendar.holidays = Array.isArray(c.holidays) ? c.holidays.filter(isoValid) : [];
   }
+  // Stages, when the file has them. A plan written before stages existed keeps
+  // the defaults, and every task falls into them by its percent.
+  if (Array.isArray(raw.stages) && raw.stages.length) {
+    const seen = new Set();
+    const list = raw.stages
+      .filter((st) => st && typeof st === 'object' && typeof st.id === 'string' && st.id && !seen.has(st.id) && seen.add(st.id))
+      .map((st) => ({ id: st.id, name: String(st.name || 'Stage'), done: !!st.done }));
+    if (list.length) {
+      if (!list.some((st) => st.done)) { list[list.length - 1].done = true; repairs.push('No stage meant “finished”; the last one now does.'); }
+      p.stages = list;
+    } else repairs.push('The stage list could not be read; the default columns are used.');
+  }
+  const stageIds = new Set(p.stages.map((st) => st.id));
+
   const resIds = new Set();
   for (const r of Array.isArray(raw.resources) ? raw.resources : []) {
     if (!r || typeof r !== 'object') continue;
@@ -46,6 +60,7 @@ export function parse(text) {
       duration: Number.isFinite(+t.duration) && +t.duration >= 0 ? +t.duration : 1, milestone: !!t.milestone,
       percent: Math.max(0, Math.min(100, Math.round(+t.percent) || 0)), notes: String(t.notes || ''), fixedCost: Number(t.fixedCost) || 0,
       deadline: isoValid(t.deadline) ? t.deadline : null,
+      stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
       assignments: Array.isArray(t.assignments) ? t.assignments.filter((a) => a && resIds.has(a.resourceId)).map((a) => ({ resourceId: a.resourceId, units: Number.isFinite(+a.units) ? +a.units : 1 })) : [],
@@ -61,6 +76,20 @@ export function parse(text) {
     t.predecessors = t.predecessors.filter((l) => ids.has(l.id) && l.id !== t.id);
     if (t.predecessors.length !== before) repairs.push(`Task “${t.name}”: ${before - t.predecessors.length} link(s) to missing tasks were dropped.`);
   }
+  // Timesheet lines, once the tasks and resources they point at are known.
+  const taskIds = new Set(p.tasks.map((t) => t.id));
+  if (Array.isArray(raw.timesheets)) {
+    const before = raw.timesheets.length;
+    p.timesheets = raw.timesheets
+      .filter((x) => x && typeof x === 'object' && taskIds.has(x.taskId) && Number.isFinite(+x.hours) && +x.hours >= 0)
+      .map((x) => ({
+        id: typeof x.id === 'string' && x.id ? x.id : newTimesheet().id,
+        taskId: x.taskId, resourceId: resIds.has(x.resourceId) ? x.resourceId : null,
+        date: isoValid(x.date) ? x.date : null, hours: Math.round(+x.hours * 100) / 100, note: String(x.note || ''),
+      }));
+    if (p.timesheets.length !== before) repairs.push(`${before - p.timesheets.length} timesheet line(s) pointing at missing tasks were dropped.`);
+  }
+
   repairs.push(...normalizeLevels(p));
   return { project: p, repairs };
 }

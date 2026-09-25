@@ -306,3 +306,93 @@ test('a plan keeps its id through save and load, and the sample has a fixed one'
   const fresh = parse(JSON.stringify({ name: 'X', tasks: [{ name: 'A' }] })).project;
   assert.match(fresh.id, /^plan_/, 'a plan written before ids existed gets one');
 });
+
+// ---------------------------------------------------------------------------
+// Stages (the Kanban columns the plan owns) and timesheets (time actually
+// spent, as against the work the plan expects).
+// ---------------------------------------------------------------------------
+
+test('a task sits in a stage, and a finished stage means finished', async () => {
+  const { stages, stageOf, setStage, addStage, removeStage, moveStage, setStageDone, DEFAULT_STAGES } = await import('../src/model/model.js');
+  const p = plan();
+  const a = task(p, 'A', 2), b = task(p, 'B', 2);
+  assert.deepEqual(stages(p).map((s) => s.name), DEFAULT_STAGES.map((s) => s.name));
+  assert.equal(stageOf(p, a).id, 'stage_todo', 'a task nobody moved is in the first column');
+
+  setStage(p, a.id, 'stage_done');
+  assert.equal(a.percent, 100, 'a stage that means finished finishes the task');
+  setTaskField(p, a.id, 'percent', '40');
+  assert.notEqual(stageOf(p, a).id, 'stage_done', '...and taking it off 100% moves it back out');
+
+  setTaskField(p, b.id, 'percent', '100');
+  assert.equal(stageOf(p, b).id, 'stage_done', 'completing a task puts it in the finished column');
+
+  const review = addStage(p, 'Review');
+  assert.deepEqual(stages(p).map((s) => s.name), ['To do', 'In progress', 'Review', 'Done'], 'a new column goes before the finished ones');
+  assert.ok(moveStage(p, review.id, -1));
+  assert.deepEqual(stages(p).map((s) => s.name), ['To do', 'Review', 'In progress', 'Done']);
+
+  setStage(p, a.id, review.id);
+  removeStage(p, review.id);
+  assert.equal(stageOf(p, a).id, stages(p)[0].id, 'deleting a column sends its tasks back to the first');
+  assert.throws(() => setStageDone(p, 'stage_done', false), /one column that means finished/);
+});
+
+test('timesheets record what was spent, and roll up', async () => {
+  const { addTimesheet, spentOn, removeTimesheet, setTimesheetField } = await import('../src/model/model.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann', rate: 100 });
+  const sum = task(p, 'Phase', 0);
+  const a = task(p, 'A', 2, 2), b = task(p, 'B', 2, 2);
+  assign(p, a.id, r.id, 1);
+  assign(p, b.id, r.id, 1);
+
+  addTimesheet(p, { taskId: a.id, resourceId: r.id, date: MON, hours: 5 });
+  addTimesheet(p, { taskId: a.id, resourceId: r.id, date: '2026-09-22', hours: 2.5 });
+  addTimesheet(p, { taskId: b.id, resourceId: r.id, date: MON, hours: 20 });
+  assert.equal(spentOn(p, a.id), 7.5);
+
+  const s = computeSchedule(p);
+  assert.equal(s.tasks[a.id].work, 16, 'work is what the plan expects');
+  assert.equal(s.tasks[a.id].spent, 7.5);
+  assert.equal(s.tasks[a.id].remaining, 8.5);
+  assert.equal(s.tasks[b.id].remaining, 0, 'overrunning an estimate leaves nothing, never a negative');
+  assert.equal(s.tasks[sum.id].spent, 27.5, 'a summary adds up its children');
+  assert.equal(s.spent, 27.5);
+
+  assert.throws(() => addTimesheet(p, { taskId: a.id, hours: -1 }), /never negative/);
+  assert.throws(() => addTimesheet(p, { taskId: 'nope', hours: 1 }), /belongs to a task/);
+  assert.throws(() => setTimesheetField(p, p.timesheets[0].id, 'date', 'yesterday'), /is a date/);
+
+  // Deleting the task takes its lines with it; nothing is left pointing nowhere.
+  removeTasks(p, [a.id]);
+  assert.equal(p.timesheets.length, 1);
+  removeTimesheet(p, p.timesheets[0].id);
+  assert.equal(p.timesheets.length, 0);
+});
+
+test('stages and timesheets survive the file, and a damaged one is repaired', async () => {
+  const { addTimesheet, addStage, stageOf } = await import('../src/model/model.js');
+  const p = sampleProject();
+  const review = addStage(p, 'Review');
+  p.tasks[2].stageId = review.id;
+  addTimesheet(p, { taskId: p.tasks[2].id, resourceId: p.resources[0].id, date: '2026-09-22', hours: 6 });
+
+  const { project, repairs } = parse(serialize(p));
+  assert.deepEqual(repairs, []);
+  assert.deepEqual(project.stages.map((s) => s.name), p.stages.map((s) => s.name));
+  assert.equal(stageOf(project, project.tasks[2]).name, 'Review');
+  assert.equal(project.timesheets.length, 1);
+  assert.equal(computeSchedule(project).tasks[project.tasks[2].id].spent, 6);
+
+  // A file whose stage list has no finished column, and lines pointing nowhere.
+  const damaged = JSON.parse(serialize(p));
+  damaged.stages = damaged.stages.map((s) => ({ ...s, done: false }));
+  damaged.tasks[0].stageId = 'stage_that_never_was';
+  damaged.timesheets.push({ id: 'x', taskId: 'no_such_task', hours: 3 });
+  const out = parse(JSON.stringify(damaged));
+  assert.ok(out.project.stages[out.project.stages.length - 1].done, 'the last column is made to mean finished');
+  assert.equal(out.project.tasks[0].stageId, null, 'a stage that does not exist is dropped');
+  assert.equal(out.project.timesheets.length, 1, 'a line pointing at no task is dropped');
+  assert.ok(out.repairs.length >= 2);
+});

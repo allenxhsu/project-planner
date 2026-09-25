@@ -206,12 +206,26 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .plan-new:hover { color: var(--sc-accent); }
 .plan-new-mark { font-size: 24px; line-height: 1; }
 
+/* ---------- all tasks ---------- */
+.alltasks-pane { flex: 1; min-width: 0; overflow-y: auto; padding: var(--sc-space-3); }
+.alltasks-head { display: flex; align-items: center; gap: var(--sc-space-2); margin-bottom: var(--sc-space-3); }
+.alltasks-head .sc-input { width: 220px; }
+.alltasks-head .is-on { box-shadow: inset 0 0 0 1px var(--sc-accent); color: var(--sc-accent); background: rgb(var(--sc-accent-rgb) / 0.14); }
+.alltasks td { font-size: 12.5px; }
+.at-plan { color: var(--sc-app); }
+.at-name.is-milestone::before { content: '◆ '; font-size: 9px; color: var(--sc-text-2); }
+.alltasks .warn { color: var(--sc-warning); }
+
 /* ---------- kanban ---------- */
 .kanban-pane { flex: 1; min-width: 0; display: flex; gap: var(--sc-space-3); padding: var(--sc-space-3); overflow-x: auto; align-items: flex-start; }
 .kb-col { flex: 0 0 300px; display: flex; flex-direction: column; max-height: 100%; background: var(--sc-panel); border: 1px solid var(--sc-line); }
 .kb-col.is-over { border-color: var(--sc-accent); background: rgb(var(--sc-accent-rgb) / 0.06); }
 .kb-col-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--sc-line); background: var(--sc-panel-2); }
 .kb-col-head .sc-label { flex: 1; min-width: 0; }
+.kb-col.is-done .kb-col-head { background: rgb(var(--sc-success-rgb) / 0.12); }
+.kb-done-mark { color: var(--sc-success); font-size: 11px; }
+.kb-add-col { flex: 0 0 200px; display: grid; place-content: center; justify-items: center; gap: 6px; padding: var(--sc-space-3); color: var(--sc-text-3); border-style: dashed; font: inherit; cursor: pointer; }
+.kb-add-col:hover { color: var(--sc-accent); }
 .kb-body { display: grid; gap: 8px; padding: 8px; overflow-y: auto; min-height: 60px; }
 .kb-card { display: grid; gap: 6px; padding: 10px; cursor: grab; }
 .kb-card:hover { border-color: var(--sc-accent); }
@@ -226,6 +240,10 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .kb-dates { font-size: 11px; color: var(--sc-text-3); }
 .kb-foot { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .kb-who { font-family: var(--sc-font-mono); font-size: 10.5px; color: var(--sc-accent); }
+.kb-spent { color: var(--sc-accent-2); }
+.time-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px 56px 26px; gap: 4px; align-items: center; }
+.time-row .sc-input, .time-row .sc-select { min-width: 0; padding-left: 6px; padding-right: 6px; }
+.time-note { padding-left: 4px; }
 
 /* ---------- sync ---------- */
 .sync-status { padding: 8px 10px; border: 1px solid var(--sc-line); background: var(--sc-panel-2); font-size: 11.5px; color: var(--sc-text-2); }

@@ -23,20 +23,37 @@ export const CONSTRAINTS = {
 };
 export const RESOURCE_TYPES = { work: 'Work', material: 'Material', cost: 'Cost' };
 
+/**
+ * Kanban stages: the plan's own columns, the way a board has them.
+ *
+ * A stage says where a task stands in the way this team works; `done` marks
+ * the columns that mean finished, so the board and the schedule cannot drift
+ * apart — dropping a task in a done column completes it, and completing a task
+ * puts it there.
+ */
+export const DEFAULT_STAGES = [
+  { id: 'stage_todo', name: 'To do', done: false },
+  { id: 'stage_doing', name: 'In progress', done: false },
+  { id: 'stage_done', name: 'Done', done: true },
+];
+export const newStage = (name = 'New stage', done = false) => ({ id: uid('stage'), name, done });
+
 export function createProject(name = 'Untitled project', start = null) {
   return {
     // The id travels with the plan and never changes: it is what sync uses to
     // know that this plan and the one on another device are the same plan.
     id: uid('plan'),
     format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
-    currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] }, tasks: [], resources: [],
+    currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
+    stages: DEFAULT_STAGES.map((st) => ({ ...st })), tasks: [], resources: [], timesheets: [],
   };
 }
 
 export function newTask(props = {}) {
   return {
     id: uid('t'), name: 'New task', level: 1, duration: 1, milestone: false, predecessors: [],
-    constraint: { type: 'ASAP', date: null }, deadline: null, percent: 0, notes: '', assignments: [], fixedCost: 0, ...props,
+    constraint: { type: 'ASAP', date: null }, deadline: null, percent: 0, notes: '', assignments: [], fixedCost: 0,
+    stageId: null, ...props,
   };
 }
 export function newResource(props = {}) {
@@ -124,6 +141,7 @@ export function removeTasks(p, ids) {
   }
   p.tasks = p.tasks.filter((t) => !gone.has(t.id));
   for (const t of p.tasks) t.predecessors = t.predecessors.filter((l) => !gone.has(l.id));
+  if (Array.isArray(p.timesheets)) p.timesheets = p.timesheets.filter((x) => !gone.has(x.taskId));
   return gone.size;
 }
 
@@ -330,6 +348,126 @@ export function formatAssignments(p, task) {
   }).filter(Boolean).join(', ');
 }
 
+// ---------------------------------------------------------------- timesheets
+//
+// Work is what the plan *expects* a task to take; a timesheet line is what
+// somebody actually spent. Keeping them apart is the whole point: the
+// difference between the two is the only honest way to say whether an estimate
+// was any good, and it is what "remaining" means.
+
+export function newTimesheet(props = {}) {
+  return { id: uid('ts'), taskId: null, resourceId: null, date: null, hours: 0, note: '', ...props };
+}
+
+export function addTimesheet(p, props = {}) {
+  if (!Array.isArray(p.timesheets)) p.timesheets = [];
+  const t = getTask(p, props.taskId);
+  if (!t) throw new Error('A timesheet line belongs to a task.');
+  if (props.resourceId && !getResource(p, props.resourceId)) throw new Error('No such resource.');
+  const hours = Number(props.hours);
+  if (!Number.isFinite(hours) || hours < 0) throw new Error('Hours is a number, and never negative.');
+  if (props.date && !isoValid(props.date)) throw new Error('A timesheet date is a date (YYYY-MM-DD).');
+  const line = newTimesheet({ ...props, hours: Math.round(hours * 100) / 100 });
+  p.timesheets.push(line);
+  return line;
+}
+
+export function removeTimesheet(p, id) {
+  p.timesheets = (p.timesheets || []).filter((x) => x.id !== id);
+}
+
+export function setTimesheetField(p, id, field, value) {
+  const line = (p.timesheets || []).find((x) => x.id === id);
+  if (!line) throw new Error('No such timesheet line.');
+  switch (field) {
+    case 'hours': {
+      const n = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+      if (!Number.isFinite(n) || n < 0) throw new Error('Hours is a number, and never negative.');
+      line.hours = Math.round(n * 100) / 100;
+      break;
+    }
+    case 'date': if (value && !isoValid(value)) throw new Error('A timesheet date is a date (YYYY-MM-DD).'); line.date = value || null; break;
+    case 'resourceId': if (value && !getResource(p, value)) throw new Error('No such resource.'); line.resourceId = value || null; break;
+    case 'note': line.note = String(value ?? ''); break;
+    default: throw new Error(`“${field}” is not part of a timesheet line.`);
+  }
+}
+
+export const timesheetsFor = (p, taskId) => (p.timesheets || []).filter((x) => x.taskId === taskId);
+/** Hours spent on one task, its own lines only. */
+export const spentOn = (p, taskId) => timesheetsFor(p, taskId).reduce((sum, x) => sum + (Number(x.hours) || 0), 0);
+
+// ---------------------------------------------------------------- stages
+
+export const stages = (p) => (Array.isArray(p.stages) && p.stages.length ? p.stages : DEFAULT_STAGES);
+export const getStage = (p, id) => stages(p).find((st) => st.id === id) || null;
+const firstDoneStage = (p) => stages(p).find((st) => st.done) || null;
+
+/**
+ * Which column a task sits in. A task that was never dropped anywhere is in
+ * the first stage — or, if it is already complete, in the first done stage, so
+ * a plan made before stages existed opens on a board that tells the truth.
+ */
+export function stageOf(p, task) {
+  const explicit = task.stageId && getStage(p, task.stageId);
+  if (explicit) return explicit;
+  if ((task.percent ?? 0) === 100) return firstDoneStage(p) || stages(p)[0];
+  return stages(p)[0];
+}
+
+/** Put a task in a stage. A done stage completes it; that is what done means. */
+export function setStage(p, taskId, stageId) {
+  const t = getTask(p, taskId);
+  const st = getStage(p, stageId);
+  if (!t || !st) throw new Error('No such task or stage.');
+  t.stageId = st.id;
+  if (st.done) { t.percent = 100; if (t.milestone) t.duration = 0; }
+}
+
+export function addStage(p, name = 'New stage') {
+  if (!Array.isArray(p.stages) || !p.stages.length) p.stages = DEFAULT_STAGES.map((st) => ({ ...st }));
+  const st = newStage(String(name).trim() || 'New stage');
+  // Before the done columns: a new column is somewhere work passes through.
+  const at = p.stages.findIndex((x) => x.done);
+  p.stages.splice(at < 0 ? p.stages.length : at, 0, st);
+  return st;
+}
+
+export function renameStage(p, id, name) {
+  const st = getStage(p, id);
+  if (!st) throw new Error('No such stage.');
+  st.name = String(name).trim() || st.name;
+}
+
+export function setStageDone(p, id, done) {
+  const st = getStage(p, id);
+  if (!st) throw new Error('No such stage.');
+  if (!done && stages(p).filter((x) => x.done).length === 1 && st.done) throw new Error('A board needs one column that means finished.');
+  st.done = !!done;
+  if (st.done) for (const t of p.tasks) if (t.stageId === st.id) t.percent = 100;
+}
+
+/** Remove a stage; its tasks fall back to the first one. */
+export function removeStage(p, id) {
+  const list = stages(p);
+  if (list.length <= 1) throw new Error('A board needs at least one column.');
+  const st = getStage(p, id);
+  if (!st) return;
+  p.stages = list.filter((x) => x.id !== id);
+  const fallback = p.stages[0].id;
+  for (const t of p.tasks) if (t.stageId === id) t.stageId = fallback;
+}
+
+export function moveStage(p, id, dir) {
+  const list = stages(p);
+  const i = list.findIndex((x) => x.id === id);
+  const j = i + (dir < 0 ? -1 : 1);
+  if (i < 0 || j < 0 || j >= list.length) return false;
+  p.stages = [...list];
+  [p.stages[i], p.stages[j]] = [p.stages[j], p.stages[i]];
+  return true;
+}
+
 // ---------------------------------------------------------------- field edits
 
 /**
@@ -359,7 +497,12 @@ export function setTaskField(p, id, field, value) {
     case 'percent': {
       const n = Math.round(parseFloat(String(value).replace('%', '')));
       if (Number.isNaN(n) || n < 0 || n > 100) throw new Error('Percent complete is a number from 0 to 100.');
+      const wasDone = getStage(p, t.stageId)?.done ?? false;
       t.percent = n;
+      // Completing a task moves it to the finished column, and taking it back
+      // off 100% moves it out of one — otherwise the board would lie.
+      if (n === 100 && !wasDone) { const done = firstDoneStage(p); if (done) t.stageId = done.id; }
+      if (n < 100 && wasDone) t.stageId = stages(p).find((st) => !st.done)?.id ?? null;
       break;
     }
     case 'predecessors': t.predecessors = parsePredecessors(p, value, id); break;

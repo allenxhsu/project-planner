@@ -13,6 +13,7 @@ import { showMenu, confirmDialog, showText } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { GROUPINGS } from './kanban.js';
+import { reloadAllTasks } from './alltasks.js';
 import { syncAfterSave, syncConfigured, syncStatus } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -160,7 +161,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -175,7 +176,7 @@ export const COMMANDS = {
   'task.link': act.linkSelection, 'task.unlink': act.unlinkSelection, 'task.info': () => set({ rightOpen: true, rightTab: 'task' }),
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
   'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ rightOpen: true, rightTab: 'resource' }),
-  'view.projects': goView('projects'), 'view.kanban': goView('kanban'),
+  'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'),
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
   'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
@@ -298,11 +299,14 @@ export function renderToolbar(root) {
       b('+ Project', 'Start a new plan', () => { COMMANDS['file.new'](); }, { primary: true }),
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
+  } else if (ui.view === 'alltasks') {
+    root.append(b('↻ Refresh', 'Sync, then re-read every plan', () => { void reloadPlans({ pull: true }).then(() => reloadAllTasks()); }),
+      b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'kanban') {
     root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
       b('Delete', 'Delete the selected tasks', act.deleteSelection, { disabled: !sel }), sep(),
       el('span', { class: 'sc-label tb-label', text: 'Group by' }),
-      ...Object.entries(GROUPINGS).map(([id, label]) => b(label, `Column by ${label.toLowerCase()}`, () => set({ kanbanGroup: id }), { on: (ui.kanbanGroup || 'status') === id })));
+      ...Object.entries(GROUPINGS).map(([id, label]) => b(label, `Column by ${label.toLowerCase()}`, () => set({ kanbanGroup: id }), { on: (ui.kanbanGroup || 'stage') === id })));
   } else if (taskView || ui.view === 'network') {
     root.append(
       b('+ Task', 'New task below the selection (Insert)', act.newTaskBelow, { primary: true }), b('◆ Milestone', 'New milestone', act.newMilestone),
