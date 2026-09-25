@@ -8,7 +8,6 @@ import {
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
-  addTimeBlock, setTimeBlockField, removeTimeBlock,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
 } from '../model/model.js';
 
@@ -323,9 +322,45 @@ export function setCurrentPhase(id) {
 
 // ---------------------------------------------------------------- time blocks
 
-export function newTimeBlock(props) { return commit('New time block', (p) => addTimeBlock(p, props)); }
-export function editTimeBlock(id, field, value) { return attempt('Edit time block', (p) => setTimeBlockField(p, id, field, value)); }
-export function deleteTimeBlock(id) { return attempt('Delete time block', (p) => removeTimeBlock(p, id)); }
+// Time blocks are hours in a week, not properties of a project, so these go to
+// the shared set and are written back into every plan (state/sync.js).
+export async function newTimeBlock(props = {}) {
+  const { saveTimeBlock } = await import('./sync.js');
+  const made = await saveTimeBlock({ name: 'New block', from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], ...props });
+  if (!made) hint('Time blocks need the record store; this one could not be saved.');
+  set({});
+  return made;
+}
+export async function editTimeBlock(id, field, value) {
+  const { listTimeBlocks, saveTimeBlock } = await import('./sync.js');
+  const block = (await listTimeBlocks()).find((b) => b.id === id);
+  if (!block) { hint('No such time block.'); return false; }
+  const next = { ...block };
+  if (field === 'name') next.name = String(value).trim() || block.name;
+  else if (field === 'from' || field === 'to') next[field] = String(value).trim();
+  else if (field === 'days') next.days = [...new Set((value || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
+  try {
+    checkBlock(next);
+  } catch (err) { hint(err.message); return false; }
+  await saveTimeBlock(next);
+  set({});
+  return true;
+}
+export async function deleteTimeBlock(id) {
+  const { removeTimeBlockEverywhere } = await import('./sync.js');
+  const ok = await removeTimeBlockEverywhere(id);
+  if (!ok) hint('There has to be one time block left.');
+  set({});
+  return ok;
+}
+
+/** The same rules the model applied, now that the blocks live outside a plan. */
+function checkBlock(b) {
+  const { parseTime } = agendaModule;
+  if (parseTime(b.from) === null || parseTime(b.to) === null) throw new Error('A time of day looks like 09:00.');
+  if (parseTime(b.to) <= parseTime(b.from)) throw new Error('A time block has to end after it starts.');
+  if (!Array.isArray(b.days) || !b.days.length) throw new Error('A time block needs at least one day.');
+}
 export function setTaskTimeBlock(taskId, blockId) { return editTask(taskId, 'timeBlock', blockId); }
 
 // ---------------------------------------------------------------- calendar

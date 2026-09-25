@@ -273,9 +273,13 @@ Three things keep work off an afternoon. A task is not on the calendar until
 it asks to be. A task is never placed before the day its plan schedules it to
 start. And a task belongs to a time block, so one in **Deep focus,
 08:00–10:00** can only ever land in those two hours, however free the rest of
-the day looks. Time blocks are edited in Project information, reachable from
-**Time blocks…** on the calendar toolbar and from **Edit time blocks…** beside
-a task's own time block.
+the day looks. Time blocks are **shared by every project**, because they are hours in your
+week and not properties of a plan: study from six, work from eight, deep focus
+until ten, the weekend. Editing one changes it everywhere at once. They are
+edited in Project information, reachable from **Time blocks…** on the calendar
+toolbar and from **Edit time blocks…** beside a task's own time block. Each
+plan still carries a copy of the list, so a `*.project.json` opened on its own
+schedules exactly as it did here.
 
 ### Why a week is not full
 

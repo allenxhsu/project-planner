@@ -19,6 +19,7 @@ import { uid } from '../util.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
+import { parseTime } from '../model/agenda.js';
 import { readProfile } from '../io/profile.js';
 
 export const WORKSPACE = 'project';
@@ -103,6 +104,10 @@ export async function initSync() {
     window.addEventListener('focus', () => { if (syncConfigured()) void syncNow(); });
   }
   rebuild();
+  // The blocks used to live in each plan. Gather them once, then keep every
+  // plan in step with the shared set.
+  await seedTimeBlocks();
+  await spreadTimeBlocks();
 }
 
 /** Point the document at the open plan, reading what the store already holds. */
@@ -276,6 +281,114 @@ function load(remote) {
 
 const PERSON_TYPE = 'person';
 const WORKSPACE_TYPE = 'workspace';
+const TIMEBLOCK_TYPE = 'timeblock';
+
+// -------------------------------------------------------------- time blocks
+//
+// The hours you study, the hours you work, the morning you keep for deep work:
+// those belong to a week, not to a project. Defining them once per project was
+// asking the same question of every plan and getting a different answer.
+//
+// So the blocks are records, like people and workspaces, and every plan keeps a
+// copy of the list so a `.project.json` opened on its own still schedules.
+// Editing goes to the records and is written through to every plan.
+
+export async function listTimeBlocks() {
+  if (!recordStore) return [];
+  const all = await recordStore.all();
+  return all
+    .filter((r) => r && r.type === TIMEBLOCK_TYPE && !r.deletedAt && r.block)
+    .map((r) => ({ ...r.block, id: r.id }))
+    // By the clock, not by the text: "6:00" sorts after "18:00" as a string.
+    .sort((a, b) => (parseTime(a.from) ?? 0) - (parseTime(b.from) ?? 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** Write a block — new or changed — and push it into every plan. */
+export async function saveTimeBlock(block) {
+  if (!recordStore) return null;
+  const id = block.id || `tb_${globalThis.crypto?.randomUUID?.().slice(0, 10) || Math.random().toString(36).slice(2, 12)}`;
+  const existing = await recordStore.get(id);
+  const record = {
+    ...(existing || {}), id, type: TIMEBLOCK_TYPE, name: block.name,
+    block: { id, name: block.name, from: block.from, to: block.to, days: [...block.days] },
+    updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId(),
+  };
+  await recordStore.put([record]);
+  await spreadTimeBlocks();
+  if (syncConfigured()) void syncNow();
+  return record.block;
+}
+
+/** Take a block out. Tasks that used it fall back to the plan's default. */
+export async function removeTimeBlockEverywhere(id) {
+  if (!recordStore) return false;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== TIMEBLOCK_TYPE) return false;
+  if ((await listTimeBlocks()).length <= 1) return false;
+  await recordStore.put([{ ...record, deletedAt: Date.now(), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  await spreadTimeBlocks();
+  if (syncConfigured()) void syncNow();
+  return true;
+}
+
+/** Put the shared list into a plan, keeping what still points at it valid. */
+export function applyTimeBlocks(project, list) {
+  if (!list.length) return false;
+  const before = JSON.stringify(project.timeBlocks || []);
+  project.timeBlocks = list.map((b) => ({ ...b, days: [...b.days] }));
+  const ids = new Set(list.map((b) => b.id));
+  for (const t of project.tasks) {
+    if (t.calendar?.timeBlockId && !ids.has(t.calendar.timeBlockId)) t.calendar = { ...t.calendar, timeBlockId: null };
+  }
+  if (project.agenda?.timeBlockId && !ids.has(project.agenda.timeBlockId)) {
+    project.agenda = { ...project.agenda, timeBlockId: list[0].id };
+  }
+  return JSON.stringify(project.timeBlocks) !== before;
+}
+
+/** The shared list, into the open plan and every plan on the shelf. */
+export async function spreadTimeBlocks() {
+  const list = await listTimeBlocks();
+  if (!list.length) return;
+  if (applyTimeBlocks(store.project, list)) {
+    tryCommit('Time blocks', (p) => { applyTimeBlocks(p, list); });
+  }
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    if (!applyTimeBlocks(project, list)) continue;
+    await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  }
+}
+
+/**
+ * First run: the blocks live in the plans, so collect them into records.
+ *
+ * Every plan's blocks are taken, keyed by id, so the ones a plan invented —
+ * Study, Late day study, Weekend — survive the move rather than being lost to
+ * whichever plan happened to be open.
+ */
+async function seedTimeBlocks() {
+  if (!recordStore) return;
+  if ((await listTimeBlocks()).length) return;
+  const seen = new Map();
+  const take = (project) => { for (const b of project.timeBlocks || []) if (b?.id && !seen.has(b.id)) seen.set(b.id, b); };
+  take(store.project);
+  for (const record of await planRecords()) {
+    try { take(parse(record.body).project); } catch { /* unreadable */ }
+  }
+  if (!seen.size) return;
+  const at = Date.now();
+  await recordStore.put([...seen.values()].map((b, i) => ({
+    id: b.id, type: TIMEBLOCK_TYPE, name: b.name,
+    block: { id: b.id, name: b.name, from: b.from, to: b.to, days: [...b.days] },
+    updatedAt: at + i, deletedAt: null, origin: deviceId(),
+  })));
+  await spreadTimeBlocks();
+  if (syncConfigured()) void syncNow();
+}
+
 
 // ------------------------------------------------------------- workspaces
 //

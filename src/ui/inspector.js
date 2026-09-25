@@ -285,13 +285,13 @@ function renderProject(root) {
 
   // ---- time blocks: the hours of the week that are for a kind of work
   root.append(el('div', { class: 'sc-section-title', text: 'Time blocks' }));
-  root.append(el('p', { class: 'sc-muted small', text: 'The hours a kind of work is allowed. A task belongs to one, and the calendar releases it into those hours by itself.' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'The hours a kind of work is allowed — shared by every project, because they are hours in your week, not properties of a plan. A task belongs to one, and the calendar releases it into those hours by itself.' }));
   const blocks = el('div', { class: 'link-list' });
   for (const b of timeBlocks(project)) {
     const days = el('div', { class: 'workdays tb-days' }, ...[1, 2, 3, 4, 5, 6, 0].map((d) => el('label', { class: 'row check-row', title: WEEKDAY_NAMES[d] },
       el('input', { class: 'sc-check', type: 'checkbox', checked: b.days.includes(d), onchange: (e) => {
         const next = e.target.checked ? [...b.days, d] : b.days.filter((x) => x !== d);
-        if (!act.editTimeBlock(b.id, 'days', next)) e.target.checked = !e.target.checked;
+        void act.editTimeBlock(b.id, 'days', next).then((ok) => { if (!ok) e.target.checked = !e.target.checked; });
       } }),
       el('span', { text: WEEKDAY_NAMES[d][0] }))));
     blocks.append(el('div', { class: 'tb-card sc-card' },
@@ -299,10 +299,10 @@ function renderProject(root) {
         text(b.name, (v) => act.editTimeBlock(b.id, 'name', v)),
         text(b.from, (v) => act.editTimeBlock(b.id, 'from', v), { class: 'sc-input lag', title: 'Starts' }),
         text(b.to, (v) => act.editTimeBlock(b.id, 'to', v), { class: 'sc-input lag', title: 'Ends' }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this block', onclick: () => act.deleteTimeBlock(b.id) })),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this block', onclick: () => { void act.deleteTimeBlock(b.id); } })),
       days));
   }
-  blocks.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New time block', onclick: () => act.newTimeBlock({ name: 'New block' }) }));
+  blocks.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New time block', onclick: () => { void act.newTimeBlock({ name: 'New block' }); } }));
   root.append(blocks);
 
   root.append(el('div', { class: 'sc-section-title', text: 'Statistics' }));
