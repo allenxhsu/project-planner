@@ -9,7 +9,7 @@ import { el, clear, formatMoney } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
-import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, syncConfigured, syncStatus } from '../state/sync.js';
+import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 
@@ -58,6 +58,9 @@ function card(p) {
         if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }
       } },
       '-',
+      { label: p.template ? 'Not a template — put it back on the calendar' : 'Mark as a template', 
+        run: async () => { await setPlanTemplate(p.id, !p.template); void reloadPlans(); } },
+      '-',
       { label: 'Delete from the shelf', danger: true, run: async () => {
         const yes = await confirmDialog('Delete this plan?',
           `“${p.name}” goes from this device and, on the next sync, from every other one. A file you saved with File ▸ Save is not touched.`);
@@ -83,6 +86,7 @@ function card(p) {
       el('span', { class: 'sc-spacer' }),
       p.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: `${p.critical} critical` }) : null,
       el('span', { class: 'sc-pill', text: `${p.percent || 0}%` }),
+      p.template ? el('span', { class: 'sc-pill', title: 'A pattern to copy — its tasks stay off the calendar', text: 'Template' }) : null,
       isOpen ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'Open' }) : null));
 }
 

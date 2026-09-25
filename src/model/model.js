@@ -64,7 +64,9 @@ export function createProject(name = 'Untitled project', start = null) {
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
-    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0 },
+    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
+    // A template is a pattern to copy, not work in anyone's week.
+    template: false,
     tasks: [], resources: [], timesheets: [],
   };
 }

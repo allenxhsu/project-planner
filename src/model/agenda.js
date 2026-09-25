@@ -16,9 +16,21 @@ import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
 /** A plan's defaults, which a task inherits until it says otherwise. */
-export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0 };
+export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 };
 /** Breathing room between one block and the next, in minutes. */
 export const GAP_CHOICES = [0, 5, 10, 15, 30];
+/**
+ * How much of a day a task uses when it does not say how many hours it takes.
+ *
+ * Duration is how long a task is open; work is how much of that time goes into
+ * it. They are not the same thing, and assuming they were is what filled every
+ * hour of every day: a five-day design task claimed forty hours and left no
+ * room for anything else. Unless a task states its work, the calendar now
+ * assumes it uses this share of each day.
+ */
+export const LOAD_CHOICES = [25, 50, 75, 100];
+/** The most planned work the calendar will put in one person's day, in hours. */
+export const CAP_CHOICES = [2, 4, 6, 8, 12];
 
 export const parseTime = (s) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
@@ -57,15 +69,28 @@ export function agendaOf(project, task) {
     days: named?.days?.length ? [...named.days] : null,   // null: any working day
     timeBlock: named,
     gap: GAP_CHOICES.includes(+base.gapMinutes) ? +base.gapMinutes : 0,
+    assumedLoad: LOAD_CHOICES.includes(+base.assumedLoad) ? +base.assumedLoad : DEFAULT_AGENDA.assumedLoad,
+    dailyCap: CAP_CHOICES.includes(+base.dailyCap) ? +base.dailyCap : DEFAULT_AGENDA.dailyCap,
   };
 }
 
-/** Hours this task still needs: what the plan expects, less what was logged. */
-export function hoursLeft(project, info) {
+/**
+ * Hours this task still needs: what the plan expects, less what was logged.
+ *
+ * What the plan expects is the task's own work when it states it. When it does
+ * not, the work the scheduler implies is duration at full time, which is the
+ * wrong thing to put on a calendar — a five-day task is rarely five days of
+ * doing it. An implied figure is taken at the plan's assumed load instead,
+ * and a stated one is used exactly as stated.
+ */
+export function hoursLeft(project, info, task = null) {
   if (info.milestone) return 0;
   const hpd = project.calendar?.hoursPerDay || 8;
+  const load = (task ? agendaOf(project, task).assumedLoad : (LOAD_CHOICES.includes(+project.agenda?.assumedLoad) ? +project.agenda.assumedLoad : DEFAULT_AGENDA.assumedLoad)) / 100;
+  const stated = task && Number.isFinite(+task.work) && task.work !== null && task.work !== undefined && +task.work >= 0;
   // A task with nobody on it still takes time; the duration is the estimate.
-  const expected = info.work > 0 ? info.work : info.duration * hpd;
+  const full = info.work > 0 ? info.work : info.duration * hpd;
+  const expected = stated ? +task.work : full * load;
   const left = expected - info.spent;
   // Progress is the other claim on how much is left; take the smaller.
   const byPercent = expected * (1 - (info.percent || 0) / 100);
@@ -151,6 +176,14 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
   const overflow = [];
   /** laneKey → day → [{start, end}] */
   const booked = new Map();
+  /** laneKey → day → minutes of planned work already placed there. */
+  const filled = new Map();
+  const filledOn = (lane, day) => filled.get(lane)?.get(day) || 0;
+  const fill = (lane, day, minutes) => {
+    if (!filled.has(lane)) filled.set(lane, new Map());
+    const days = filled.get(lane);
+    days.set(day, (days.get(day) || 0) + minutes);
+  };
 
   /**
    * A connected calendar's meetings are booked before any task is placed, so
@@ -205,7 +238,7 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     const a = agendaOf(project, t);
     const windowMinutes = Math.max(0, a.to - a.from);
     const size = Math.round(a.blockHours * 60);
-    let left = Math.round(hoursLeft(project, info) * 60);
+    let left = Math.round(hoursLeft(project, info, t) * 60);
     const mine = [];
     if (left <= 0 || size <= 0 || windowMinutes < size) {
       if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });
@@ -230,11 +263,18 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       // task's to use, however free it looks.
       if (a.days && !a.days.includes(weekday(day))) { day = cal.next(day + 1); continue; }
       let placedToday = 0;
+      // Nobody's day is filled wall to wall. The cap is what is left of the
+      // day's allowance for the person who has the least of it left, because a
+      // block belongs to everyone on the task.
+      const capMinutes = Math.round(a.dailyCap * 60);
+      const roomToday = Math.min(...people.map((lane) => capMinutes - filledOn(lane, day)));
+      if (roomToday < size) { day = cal.next(day + 1); continue; }
+      let usedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
       const busyForAll = people.flatMap((lane) => bookedOn(lane, day));
       for (const [from, to] of freeSlots(busyForAll, a.from, a.to)) {
         let at = from;
-        while (left > 0 && at + size <= to && placedToday < perDayBlocks) {
+        while (left > 0 && at + size <= to && placedToday < perDayBlocks && usedToday + size <= roomToday) {
           const minutes = Math.min(size, left);
           const block = {
             taskId: t.id, planId: project.id, planName: project.name,
@@ -246,12 +286,13 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
           // The gap is booked with the block, so the next thing — this task's
           // or anyone's — starts after it rather than back to back. Booked for
           // every person on the task, which is what stops the double-booking.
-          for (const lane of people) bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
+          for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + size + a.gap }); fill(lane, day, minutes); }
           at += size + a.gap;
           left -= minutes;
+          usedToday += minutes;
           placedToday++;
         }
-        if (left <= 0 || placedToday >= perDayBlocks) break;
+        if (left <= 0 || placedToday >= perDayBlocks || usedToday + size > roomToday) break;
       }
       day = cal.next(day + 1);
     }

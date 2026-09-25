@@ -51,7 +51,7 @@ function row(r, rank) {
       el('div', { class: 'pri-why sc-muted', text: r.reasons.join(' · ') || 'scheduled work' }),
       el('div', { class: 'pri-meta sc-mono sc-faint' },
         `${formatDate(info.startIso, 'day')} → ${formatDate(info.finishIso, 'day')}`,
-        info.work ? ` · ${formatHours(hoursLeft(project, info))} left` : '',
+        info.work ? ` · ${formatHours(hoursLeft(project, info, t))} left` : '',
         who ? ` · ${who}` : '')),
     el('div', { class: 'pri-right' },
       el('div', { class: 'pri-score sc-mono', title: 'How this was ranked', text: String(r.score) }),

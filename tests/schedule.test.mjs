@@ -407,6 +407,9 @@ test('a task asking for the calendar is laid into blocks of the size it asks for
   const r = addResource(p, { name: 'Ann' });
   const a = task(p, 'Design', 2);           // 2 days × 8h = 16 hours of work
   assign(p, a.id, r.id, 1);
+  // This one is about laying blocks, so it says outright that the two days are
+  // two days of work and that a day may be filled.
+  p.agenda = { ...p.agenda, assumedLoad: 100, dailyCap: 8 };
   setTaskField(p, a.id, 'calendarShow', true);
   setTaskField(p, a.id, 'blockHours', 2);
   setTaskField(p, a.id, 'calendarFrom', '09:00');
@@ -516,6 +519,7 @@ test('a named time block decides which hours and which days a task may use', asy
   const study = addTimeBlock(p, { name: 'Study', from: '06:00', to: '08:00', days: [0, 1, 2, 3, 4, 5, 6] });
   const focus = addTimeBlock(p, { name: 'Deep focus', from: '08:00', to: '10:00', days: [1, 2, 3, 4, 5] });
 
+  p.agenda = { ...p.agenda, assumedLoad: 100, dailyCap: 8 };
   const reading = task(p, 'Reading', 3);   // 24 hours, at two a morning: twelve mornings
   setTaskField(p, reading.id, 'calendarShow', true);
   setTaskField(p, reading.id, 'blockHours', 2);
@@ -582,7 +586,7 @@ test('a gap keeps blocks off each other’s heels', async () => {
   setTaskField(p, a.id, 'calendarShow', true);
   setTaskField(p, a.id, 'blockHours', 2);
   p.timeBlocks = [{ id: 'tb', name: 'Day', from: '09:00', to: '17:00', days: [0, 1, 2, 3, 4, 5, 6] }];
-  p.agenda = { blockHours: 2, timeBlockId: 'tb', gapMinutes: 0 };
+  p.agenda = { blockHours: 2, timeBlockId: 'tb', gapMinutes: 0, assumedLoad: 100, dailyCap: 8 };
 
   const back = planBlocks(p, computeSchedule(p)).blocks.filter((b) => b.dateIso === MON);
   assert.deepEqual(back.map((b) => formatTime(b.start)), ['09:00', '11:00', '13:00', '15:00'], 'back to back by default');
@@ -839,4 +843,79 @@ test('urgency decides who gets the earliest hours', async () => {
   assert.equal(fresh.calendar.show, true);
   assert.throws(() => setTaskField(p, fresh.id, 'urgency', 'whenever'), /Urgency is one of/);
   assert.deepEqual(Object.keys(URGENCIES), ['now', 'high', 'normal', 'low']);
+});
+
+test('a duration is not an estimate of work: an unstated task takes half a day, not all of it', async () => {
+  const { planBlocks, hoursLeft } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  // Five days of design, with nothing said about how many hours it takes. The
+  // scheduler implies forty hours for costing; the calendar must not book
+  // every one of them, or the week has room for nothing else.
+  const design = task(p, 'Design', 5);
+  assign(p, design.id, r.id, 1);
+  setTaskField(p, design.id, 'calendarShow', true);
+  setTaskField(p, design.id, 'blockHours', 2);
+
+  const s = computeSchedule(p);
+  assert.equal(s.tasks[design.id].work, 40, 'the plan still costs it at full time');
+  assert.equal(hoursLeft(p, s.tasks[design.id], design), 20, 'the calendar assumes half of it by default');
+  const { blocks } = planBlocks(p, s);
+  assert.equal(blocks.reduce((n, b) => n + b.minutes, 0) / 60, 20);
+
+  // Stated work is used exactly as stated, whatever the assumption is.
+  setTaskField(p, design.id, 'work', 12);
+  const s2 = computeSchedule(p);
+  assert.equal(hoursLeft(p, s2.tasks[design.id], design), 12, 'a task that says how long it takes is believed');
+
+  // …and the assumption is the plan's to set.
+  setTaskField(p, design.id, 'work', '');
+  p.agenda = { ...p.agenda, assumedLoad: 100 };
+  assert.equal(hoursLeft(p, computeSchedule(p).tasks[design.id], design), 40);
+});
+
+test('no day is filled wall to wall: the calendar keeps to the day’s limit', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  p.timeBlocks = [{ id: 'tb', name: 'Day', from: '09:00', to: '21:00', days: [0, 1, 2, 3, 4, 5, 6] }];
+  p.calendar.workDays = [0, 1, 2, 3, 4, 5, 6];
+  p.agenda = { blockHours: 2, timeBlockId: 'tb', gapMinutes: 0, assumedLoad: 100, dailyCap: 4 };
+  const long = task(p, 'Marathon', 3);
+  assign(p, long.id, r.id, 1);
+  setTaskField(p, long.id, 'calendarShow', true);
+  setTaskField(p, long.id, 'blockHours', 2);
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  const perDay = new Map();
+  for (const b of blocks) perDay.set(b.dateIso, (perDay.get(b.dateIso) || 0) + b.minutes);
+  assert.ok([...perDay.values()].every((m) => m <= 240), 'four hours a day, though the window holds twelve');
+  assert.equal(blocks.reduce((n, b) => n + b.minutes, 0) / 60, 24, 'the work does not vanish, it runs on');
+  assert.ok(perDay.size >= 6, 'twenty-four hours at four a day is six days');
+});
+
+test('the day’s limit is shared: two people on one task each spend the same day', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan();
+  const ann = addResource(p, { name: 'Ann' });
+  const bo = addResource(p, { name: 'Bo' });
+  p.timeBlocks = [{ id: 'tb', name: 'Day', from: '09:00', to: '17:00', days: [0, 1, 2, 3, 4, 5, 6] }];
+  p.agenda = { blockHours: 2, timeBlockId: 'tb', gapMinutes: 0, assumedLoad: 100, dailyCap: 4 };
+  const together = task(p, 'Workshop', 1);
+  assign(p, together.id, ann.id, 1);
+  assign(p, together.id, bo.id, 1);
+  setTaskField(p, together.id, 'calendarShow', true);
+  setTaskField(p, together.id, 'blockHours', 2);
+  const alone = task(p, 'Ann alone', 1);
+  assign(p, alone.id, ann.id, 1);
+  setTaskField(p, alone.id, 'calendarShow', true);
+  setTaskField(p, alone.id, 'blockHours', 2);
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  const annMinutes = new Map();
+  for (const b of blocks) {
+    if (!b.people.some((k) => k.includes('ann'))) continue;
+    annMinutes.set(b.dateIso, (annMinutes.get(b.dateIso) || 0) + b.minutes);
+  }
+  assert.ok([...annMinutes.values()].every((m) => m <= 240), 'a shared block counts against both their days');
 });

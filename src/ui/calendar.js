@@ -43,6 +43,9 @@ export async function reloadCalendarPlans() {
       if (hit && hit.updatedAt === r.updatedAt) { out.push(hit.entry); continue; }
       try {
         const project = parse(r.body).project;
+        // A template's tasks are a pattern to copy, not hours anyone is
+        // spending, so they are not laid against the week.
+        if (project.template) continue;
         const entry = { project, schedule: computeSchedule(project) };
         planCache.set(r.id, { updatedAt: r.updatedAt, entry });
         out.push(entry);

@@ -510,6 +510,8 @@ export function planSummary(record) {
     tasks: project.tasks.length, resources: project.resources.length,
     startIso: schedule?.startIso || project.start, finishIso: schedule?.finishIso || null,
     percent: schedule?.percent ?? 0, critical: schedule?.criticalCount ?? 0,
+    template: project.template === true,
+    onCalendar: project.tasks.filter((t) => t.calendar?.show).length,
   };
 }
 
@@ -582,10 +584,14 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
     project.start = today();
     project.statusDate = null;
     project.timesheets = [];
+    // A template is a pattern, not this week's work. Left on the shared
+    // calendar it books hours twice: once for the plan and once for its copy.
+    project.template = true;
     for (const t of project.tasks) {
       t.percent = 0;
       t.stageId = null;
       t.deadline = null;
+      if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
       // A date pinned to last quarter would drag the whole copy back with it.
       if (t.constraint?.date) t.constraint = { type: 'ASAP', date: null };
     }
@@ -595,6 +601,35 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
   await openDocument();
   if (syncConfigured()) void syncNow();
   return project;
+}
+
+/**
+ * Mark a plan as a template, or stop it being one.
+ *
+ * A template is a shape to copy. Its tasks are not hours anyone is spending,
+ * so they stay off the shared calendar however many of them were released
+ * before it became one.
+ */
+export async function setPlanTemplate(id, on) {
+  if (!recordStore) return false;
+  if (id === store.project.id) {
+    tryCommit(on ? 'Mark as a template' : 'No longer a template', (p) => {
+      p.template = !!on;
+      if (on) for (const t of p.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+    });
+    await openDocument();
+    if (syncConfigured()) void syncNow();
+    return true;
+  }
+  const record = await recordStore.get(id);
+  if (!record) return false;
+  let project;
+  try { project = parse(record.body).project; } catch { return false; }
+  project.template = !!on;
+  if (on) for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+  await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return true;
 }
 
 /** Pull now, so the shelf shows what other devices have added. */

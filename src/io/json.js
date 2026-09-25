@@ -2,7 +2,7 @@
 
 import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
-import { BLOCK_CHOICES, GAP_CHOICES, parseTime } from '../model/agenda.js';
+import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
 
 export const FILE_EXT = '.project.json';
 
@@ -59,6 +59,9 @@ export function parse(text) {
   }
   const blockIds = new Set(p.timeBlocks.map((b) => b.id));
 
+  p.template = raw.template === true;
+
+
   // The plan's calendar defaults, which every task inherits.
   if (raw.agenda && typeof raw.agenda === 'object') {
     const a = raw.agenda;
@@ -66,6 +69,8 @@ export function parse(text) {
       blockHours: BLOCK_CHOICES.includes(+a.blockHours) ? +a.blockHours : 1,
       timeBlockId: blockIds.has(a.timeBlockId) ? a.timeBlockId : p.timeBlocks[0].id,
       gapMinutes: GAP_CHOICES.includes(+a.gapMinutes) ? +a.gapMinutes : 0,
+      assumedLoad: LOAD_CHOICES.includes(+a.assumedLoad) ? +a.assumedLoad : DEFAULT_AGENDA.assumedLoad,
+      dailyCap: CAP_CHOICES.includes(+a.dailyCap) ? +a.dailyCap : DEFAULT_AGENDA.dailyCap,
     };
   }
 

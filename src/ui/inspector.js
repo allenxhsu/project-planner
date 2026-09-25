@@ -5,7 +5,7 @@ import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
-import { BLOCK_CHOICES, GAP_CHOICES, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
+import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
 import { timeBlocks, phases, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
@@ -80,7 +80,7 @@ function renderTask(root) {
     if (a.show) {
       cal.append(el('div', { class: 'two' },
         field('Block size', select(String(a.blockHours), BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.editTask(id, 'blockHours', v)),
-          `${Math.ceil((hoursLeft(project, s) || 0) / a.blockHours)} block(s) to place`),
+          `${Math.ceil((hoursLeft(project, s, t) || 0) / a.blockHours)} block(s) to place`),
         el('span')));
       cal.append(field('Time block',
         select(t.calendar?.timeBlockId || '', [{ value: '', label: `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}` },
@@ -218,9 +218,16 @@ function renderProject(root) {
     field('Default time block', select((project.agenda || {}).timeBlockId || '',
       timeBlocks(project).map((b) => ({ value: b.id, label: b.name })), (v) => act.setAgenda({ timeBlockId: v })),
       'the hours a task uses unless it says otherwise')));
-  form.append(field('Gap between blocks', select(String((project.agenda || {}).gapMinutes ?? 0),
-    GAP_CHOICES.map((m) => ({ value: String(m), label: m === 0 ? 'None — back to back' : `${m} minutes` })), (v) => act.setAgenda({ gapMinutes: +v })),
-    'breathing room after every block on the calendar'));
+  form.append(el('div', { class: 'two' },
+    field('Gap between blocks', select(String((project.agenda || {}).gapMinutes ?? 0),
+      GAP_CHOICES.map((m) => ({ value: String(m), label: m === 0 ? 'None — back to back' : `${m} minutes` })), (v) => act.setAgenda({ gapMinutes: +v })),
+      'breathing room after every block'),
+    field('Most work in a day', select(String((project.agenda || {}).dailyCap ?? DEFAULT_AGENDA.dailyCap),
+      CAP_CHOICES.map((h) => ({ value: String(h), label: `${h} hours` })), (v) => act.setAgenda({ dailyCap: +v })),
+      'per person, so a day is never filled wall to wall')));
+  form.append(field('When a task does not say its hours', select(String((project.agenda || {}).assumedLoad ?? DEFAULT_AGENDA.assumedLoad),
+    LOAD_CHOICES.map((n) => ({ value: String(n), label: n === 100 ? 'All of its duration — full time' : `${n}% of its duration` })), (v) => act.setAgenda({ assumedLoad: +v })),
+    'a five-day task is rarely five days of doing it; state a task’s work to override this'));
   form.append(field('Holidays', stopKeys(el('textarea', { class: 'sc-textarea sc-mono', rows: 4, value: project.calendar.holidays.join('\n'), onchange: (e) => {
     const list = e.target.value.split(/[\n,;\s]+/).map((x) => x.trim()).filter(Boolean);
     const bad = list.filter((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x));

@@ -208,6 +208,24 @@ On the Portal origin, where every app is served from one place, `Profiler ↗`
 goes to `/profiler/`; elsewhere it falls back to the `profiler://` scheme the
 Mac app registers.
 
+### Why a week is not full
+
+Duration is how long a task is open. Work is how much of that time goes into
+it. A five-day design task is rarely five days of doing it, so a task that does
+not state its work is put on the calendar at **half its duration** by default,
+not all of it. State a task's work and that number is used exactly as given.
+The plan's own figure is in Project information, from a quarter to full time.
+
+On top of that, no day is filled wall to wall: the calendar places at most
+**six hours** of planned work per person per day, again a plan setting. Work
+that does not fit runs on into the days after, which is the calendar telling
+you the truth about the week rather than hiding it.
+
+A **template** is a pattern to copy, not work in anyone's week, so its tasks
+stay off the shared calendar however many were released before it became one.
+Making a template marks it; any plan can be marked or unmarked from its card on
+the Projects screen.
+
 ## Connecting Google and Outlook calendars
 
 Real meetings become busy hours the calendar schedules around, so a stand-up
