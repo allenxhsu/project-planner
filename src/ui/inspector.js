@@ -3,7 +3,7 @@
 import { el, clear, formatMoney, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
+import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf, timeBlockIdsOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
 import { hueColour } from './calendar.js';
@@ -89,11 +89,26 @@ function renderTask(root) {
         title: 'The hours each kind of work is allowed, in Project information',
         onclick: () => { set({ rightTab: 'project' }); requestAnimationFrame(() => document.querySelector('.tb-card')?.scrollIntoView({ block: 'center' })); },
       }));
-      cal.append(field('Time block',
-        select(t.calendar?.timeBlockId || '', [{ value: '', label: `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}` },
-          ...timeBlocks(project).map((b) => ({ value: b.id, label: `${b.name} · ${b.from}–${b.to}` }))],
-          (v) => act.setTaskTimeBlock(id, v)),
-        a.timeBlock ? `${formatTime(a.from)}–${formatTime(a.to)} on ${dayNames(a.days)}` : 'the hours this task may use'));
+      // A task may be in several blocks — late evenings *and* the weekend — and
+      // is placed in whichever has room first, so this is a set of choices
+      // rather than one.
+      const chosen = timeBlockIdsOf(t);
+      const picker = el('div', { class: 'tb-pick' });
+      for (const b of timeBlocks(project)) {
+        picker.append(el('label', { class: 'row check-row tb-pick-row' },
+          el('input', {
+            class: 'sc-check', type: 'checkbox', checked: chosen.includes(b.id),
+            onchange: (e) => {
+              const next = e.target.checked ? [...chosen, b.id] : chosen.filter((x) => x !== b.id);
+              if (!act.setTaskTimeBlock(id, next)) e.target.checked = !e.target.checked;
+            },
+          }),
+          el('span', { text: `${b.name} · ${b.from}–${b.to}` }),
+          el('span', { class: 'sc-faint small', text: dayNames(b.days?.length ? b.days : null) })));
+      }
+      cal.append(field('Time blocks', picker, chosen.length
+        ? a.windows.map((w) => `${formatTime(w.from)}–${formatTime(w.to)} on ${dayNames(w.days)}`).join(' · ')
+        : `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}. Tick more than one and the task uses whichever has room first.`));
       cal.append(el('button', { class: 'sc-button sc-button--sm', text: 'Break into subtasks…', onclick: () => act.breakUpDialog(id) }));
     }
     root.append(cal);

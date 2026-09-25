@@ -307,7 +307,9 @@ export async function workspaceMenu(x, y) {
     const { reloadCalendarPlans: rc } = await import('./calendar.js');
     const { reloadAllTasks: ra } = await import('./alltasks.js');
     const { reloadPeople: rp } = await import('./people.js');
-    await Promise.all([reload(), rc(), ra(), rp()]);
+    // The button's own label is read from a record, so it has to be re-read
+    // too — otherwise the shelf changes and the header keeps the old name.
+    await Promise.all([refreshWorkspaceLabel(), reload(), rc(), ra(), rp()]);
   };
   const items = [
     { note: 'Workspace' },

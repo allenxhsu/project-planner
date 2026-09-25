@@ -546,7 +546,8 @@ test('a named time block decides which hours and which days a task may use', asy
   assert.throws(() => setTimeBlockField(p, study.id, 'days', []), /at least one day/);
   // Deleting a block sends its tasks back to the plan's default hours.
   removeTimeBlock(p, focus.id);
-  assert.equal(reading.calendar.timeBlockId, null);
+  const { timeBlockIdsOf } = await import('../src/model/model.js');
+  assert.deepEqual(timeBlockIdsOf(reading), [], 'the task is no longer in that block');
   assert.ok(!timeBlocks(p).some((b) => b.id === focus.id));
 });
 
@@ -974,4 +975,42 @@ test('half an hour of work takes half an hour, not the whole block it sits in', 
   const spaced = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }]).blocks
     .filter((b) => b.dateIso === MON).sort((a, b) => a.start - b.start);
   assert.deepEqual(spaced.map((b) => formatClock(b.start)), ['8 AM', '8:45 AM', '9:30 AM', '10:15 AM']);
+});
+
+test('a task can be in several time blocks and uses whichever has room', async () => {
+  const { planBlocks, formatTime, agendaOf } = await import('../src/model/agenda.js');
+  const { addTimeBlock } = await import('../src/model/model.js');
+  const p = plan();                                  // starts Monday 21 Sep 2026
+  p.calendar.workDays = [0, 1, 2, 3, 4, 5, 6];
+  const r = addResource(p, { name: 'Ann' });
+  const evening = addTimeBlock(p, { name: 'Late day study', from: '18:00', to: '21:00', days: [1, 2, 3, 4, 5] });
+  const weekend = addTimeBlock(p, { name: 'Weekend', from: '09:00', to: '18:00', days: [0, 6] });
+
+  const essay = task(p, 'Essay', 3);
+  assign(p, essay.id, r.id, 1);
+  // Twenty hours: more than the five weekday evenings hold, so the weekend
+  // has to take the rest. That is the point of being in two blocks.
+  setTaskField(p, essay.id, 'work', 20);
+  setTaskField(p, essay.id, 'calendarShow', true);
+  setTaskField(p, essay.id, 'blockHours', 1.5);
+  setTaskField(p, essay.id, 'timeBlock', [evening.id, weekend.id]);
+
+  const a = agendaOf(p, essay);
+  assert.equal(a.windows.length, 2, 'two windows, in order of the clock');
+  assert.deepEqual(a.windows.map((w) => formatTime(w.from)), ['09:00', '18:00']);
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  assert.equal(blocks.reduce((n, b) => n + b.minutes, 0) / 60, 20, 'all twenty hours are placed');
+  const weekendBlocks = blocks.filter((b) => [0, 6].includes(((b.day + 4) % 7 + 7) % 7));
+  const eveningBlocks = blocks.filter((b) => !weekendBlocks.includes(b));
+  assert.ok(weekendBlocks.length > 0, 'the weekend block is used');
+  assert.ok(eveningBlocks.length > 0, 'and so are the weekday evenings');
+  assert.ok(eveningBlocks.every((b) => b.start >= 18 * 60 && b.end <= 21 * 60), 'weekday work stays in the evening window');
+  assert.ok(weekendBlocks.every((b) => b.start >= 9 * 60 && b.end <= 18 * 60), 'weekend work stays in its own');
+
+  // One block on its own still behaves exactly as it did.
+  setTaskField(p, essay.id, 'timeBlock', evening.id);
+  const only = planBlocks(p, computeSchedule(p)).blocks;
+  assert.ok(only.every((b) => b.start >= 18 * 60 && b.end <= 21 * 60));
+  assert.ok(only.every((b) => ![0, 6].includes(((b.day + 4) % 7 + 7) % 7)), 'and on weekdays only');
 });

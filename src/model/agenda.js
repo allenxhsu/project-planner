@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource, identityOf, URGENCIES, urgencyOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, inCurrentPhase, feeds, getResource, identityOf, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -58,16 +58,37 @@ export function agendaOf(project, task) {
   const base = { ...DEFAULT_AGENDA, ...(project.agenda || {}) };
   const own = task.calendar || {};
   const blockHours = BLOCK_CHOICES.includes(own.blockHours) ? own.blockHours : base.blockHours;
-  const named = getTimeBlock(project, own.timeBlockId) || getTimeBlock(project, base.timeBlockId) || timeBlocks(project)[0] || null;
-  const from = parseTime(own.from) ?? parseTime(named?.from) ?? parseTime(base.from) ?? 540;
-  const to = parseTime(own.to) ?? parseTime(named?.to) ?? parseTime(base.to) ?? 1020;
+  // A task can belong to several blocks — late evenings *and* the weekend —
+  // and is placed in whichever of them has room first. One block is the
+  // ordinary case and is just a list of one.
+  const chosen = timeBlockIdsOf(task).map((id) => getTimeBlock(project, id)).filter(Boolean);
+  const named = chosen[0] || getTimeBlock(project, base.timeBlockId) || timeBlocks(project)[0] || null;
+  const list = chosen.length ? chosen : (named ? [named] : []);
+  // A task's own hours, when it states them, override every block it is in:
+  // that is how a one-off gets an hour nothing else uses.
+  const ownFrom = parseTime(own.from);
+  const ownTo = parseTime(own.to);
+  const windows = ownFrom !== null && ownTo !== null
+    ? [{ from: ownFrom, to: ownTo, days: null, block: named }]
+    : list.map((b) => ({
+      from: parseTime(b.from) ?? parseTime(base.from) ?? 540,
+      to: parseTime(b.to) ?? parseTime(base.to) ?? 1020,
+      days: b.days?.length ? [...b.days] : null,
+      block: b,
+    })).filter((w) => w.to > w.from).sort((a, b) => a.from - b.from);
+  const safe = windows.length ? windows : [{ from: parseTime(base.from) ?? 540, to: parseTime(base.to) ?? 1020, days: null, block: named }];
+  const from = Math.min(...safe.map((w) => w.from));
+  const to = Math.max(...safe.map((w) => w.to));
   return {
     show: !!own.show,
     blockHours,
+    windows: safe,
+    // The outer bounds of every window, for anything that needs one span.
     from,
     to,
-    days: named?.days?.length ? [...named.days] : null,   // null: any working day
+    days: safe.every((w) => w.days) ? [...new Set(safe.flatMap((w) => w.days))].sort() : null,
     timeBlock: named,
+    timeBlocks: list,
     gap: GAP_CHOICES.includes(+base.gapMinutes) ? +base.gapMinutes : 0,
     assumedLoad: LOAD_CHOICES.includes(+base.assumedLoad) ? +base.assumedLoad : DEFAULT_AGENDA.assumedLoad,
     dailyCap: CAP_CHOICES.includes(+base.dailyCap) ? +base.dailyCap : DEFAULT_AGENDA.dailyCap,
@@ -246,7 +267,8 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
 
   for (const { t, info, project } of candidates) {
     const a = agendaOf(project, t);
-    const windowMinutes = Math.max(0, a.to - a.from);
+    // The longest window is what decides whether a block can fit at all.
+    const windowMinutes = Math.max(0, ...a.windows.map((w) => w.to - w.from));
     const size = Math.round(a.blockHours * 60);
     let left = Math.round(hoursLeft(project, info, t) * 60);
     const mine = [];
@@ -269,9 +291,10 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     let day = cal.next(urgency === 'now' ? Math.min(info.start, todayDay) : info.start);
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
-      // A time block says which days it covers; a day outside it is not this
-      // task's to use, however free it looks.
-      if (a.days && !a.days.includes(weekday(day))) { day = cal.next(day + 1); continue; }
+      // A time block says which days it covers; a day outside every one of
+      // this task's blocks is not its to use, however free it looks.
+      const today = a.windows.filter((w) => !w.days || w.days.includes(weekday(day)));
+      if (!today.length) { day = cal.next(day + 1); continue; }
       let placedToday = 0;
       // Nobody's day is filled wall to wall. The cap is what is left of the
       // day's allowance for the person who has the least of it left, because a
@@ -282,7 +305,8 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       let usedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
       const busyForAll = people.flatMap((lane) => bookedOn(lane, day));
-      for (const [from, to] of freeSlots(busyForAll, a.from, a.to)) {
+      const slots = today.flatMap((w) => freeSlots(busyForAll, w.from, w.to)).sort((x, y) => x[0] - y[0]);
+      for (const [from, to] of slots) {
         let at = from;
         while (left > 0 && at + size <= to && placedToday < perDayBlocks && usedToday + size <= roomToday) {
           const minutes = Math.min(size, left);

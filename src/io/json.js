@@ -107,11 +107,13 @@ export function parse(text) {
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,
-            timeBlockId: blockIds.has(t.calendar.timeBlockId) ? t.calendar.timeBlockId : null,
+            timeBlockIds: (Array.isArray(t.calendar.timeBlockIds)
+              ? t.calendar.timeBlockIds
+              : (t.calendar.timeBlockId ? [t.calendar.timeBlockId] : [])).filter((id) => blockIds.has(id)),
             ...(BLOCK_CHOICES.includes(+t.calendar.blockHours) ? { blockHours: +t.calendar.blockHours } : {}),
             ...(parseTime(t.calendar.from) !== null ? { from: t.calendar.from } : {}),
             ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}) }
-        : { show: false, timeBlockId: null },
+        : { show: false, timeBlockIds: [] },
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
       assignments: Array.isArray(t.assignments) ? t.assignments.filter((a) => a && resIds.has(a.resourceId)).map((a) => ({ resourceId: a.resourceId, units: Number.isFinite(+a.units) ? +a.units : 1 })) : [],

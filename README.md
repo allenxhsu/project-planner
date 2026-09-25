@@ -273,7 +273,13 @@ Three things keep work off an afternoon. A task is not on the calendar until
 it asks to be. A task is never placed before the day its plan schedules it to
 start. And a task belongs to a time block, so one in **Deep focus,
 08:00–10:00** can only ever land in those two hours, however free the rest of
-the day looks. Time blocks are **shared by every project**, because they are hours in your
+the day looks. A task can belong to **several** time blocks — late evenings *and* the
+weekend — and is placed in whichever of them has room first, in order of the
+clock. That is what makes a block a constraint worth setting rather than a
+cage: an essay that may be done any evening or at any hour of the weekend says
+exactly that, and the calendar fills the evenings before it takes a Saturday.
+
+Time blocks are **shared by every project**, because they are hours in your
 week and not properties of a plan: study from six, work from eight, deep focus
 until ten, the weekend. Editing one changes it everywhere at once. They are
 edited in Project information, reachable from **Time blocks…** on the calendar

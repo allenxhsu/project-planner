@@ -91,7 +91,7 @@ export function newTask(props = {}) {
     stageId: null, urgency: 'normal',
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
-    calendar: { show: false, timeBlockId: null },
+    calendar: { show: false, timeBlockIds: [] },
     ...props,
   };
 }
@@ -486,6 +486,19 @@ export const DEFAULT_TIME_BLOCKS = [
 export const timeBlocks = (p) => (Array.isArray(p.timeBlocks) && p.timeBlocks.length ? p.timeBlocks : DEFAULT_TIME_BLOCKS);
 export const getTimeBlock = (p, id) => timeBlocks(p).find((b) => b.id === id) || null;
 
+/**
+ * The time blocks a task belongs to.
+ *
+ * A task may be in several — late evenings and the weekend, say — and is
+ * placed in whichever has room first. `timeBlockId` is what one block used to
+ * be called and is still read, so nothing written before this is lost.
+ */
+export const timeBlockIdsOf = (task) => {
+  const c = task?.calendar || {};
+  if (Array.isArray(c.timeBlockIds)) return c.timeBlockIds.filter(Boolean);
+  return c.timeBlockId ? [c.timeBlockId] : [];
+};
+
 export function addTimeBlock(p, props = {}) {
   if (!Array.isArray(p.timeBlocks) || !p.timeBlocks.length) p.timeBlocks = DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] }));
   const block = { id: uid('tb'), name: 'New block', from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], ...props };
@@ -517,7 +530,11 @@ export function removeTimeBlock(p, id) {
   const list = timeBlocks(p);
   if (list.length <= 1) throw new Error('There has to be one time block left.');
   p.timeBlocks = list.filter((b) => b.id !== id);
-  for (const t of p.tasks) if (t.calendar?.timeBlockId === id) t.calendar = { ...t.calendar, timeBlockId: null };
+  for (const t of p.tasks) {
+    const ids = timeBlockIdsOf(t);
+    if (!ids.includes(id)) continue;
+    t.calendar = { ...t.calendar, timeBlockIds: ids.filter((x) => x !== id), timeBlockId: undefined };
+  }
   if (p.agenda?.timeBlockId === id) p.agenda = { ...p.agenda, timeBlockId: p.timeBlocks[0].id };
 }
 
@@ -755,8 +772,14 @@ export function setTaskField(p, id, field, value) {
       break;
     }
     case 'timeBlock': {
-      if (value && !getTimeBlock(p, value)) throw new Error('No such time block.');
-      t.calendar = { ...t.calendar, timeBlockId: value || null };
+      // One id, or several: every one of them has to be a block this plan has.
+      const wanted = Array.isArray(value) ? value.filter(Boolean) : (value ? [value] : []);
+      for (const id of wanted) if (!getTimeBlock(p, id)) throw new Error('No such time block.');
+      t.calendar = {
+        ...t.calendar,
+        timeBlockIds: [...new Set(wanted)],
+        timeBlockId: undefined,
+      };
       break;
     }
     case 'calendarFrom': case 'calendarTo': {
