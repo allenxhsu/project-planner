@@ -16,7 +16,9 @@ import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase } from './model.js'
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
 /** A plan's defaults, which a task inherits until it says otherwise. */
-export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work' };
+export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0 };
+/** Breathing room between one block and the next, in minutes. */
+export const GAP_CHOICES = [0, 5, 10, 15, 30];
 
 export const parseTime = (s) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
@@ -54,6 +56,7 @@ export function agendaOf(project, task) {
     to,
     days: named?.days?.length ? [...named.days] : null,   // null: any working day
     timeBlock: named,
+    gap: GAP_CHOICES.includes(+base.gapMinutes) ? +base.gapMinutes : 0,
   };
 }
 
@@ -142,8 +145,10 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
           const block = { taskId: t.id, day, start: at, end: at + minutes, minutes, lane, critical: info.critical, dateIso: fromDay(day) };
           blocks.push(block);
           mine.push(block);
-          bookedOn(lane, day).push({ start: at, end: at + size });
-          at += size;
+          // The gap is booked with the block, so the next thing — this task's
+          // or anyone's — starts after it rather than back to back.
+          bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
+          at += size + a.gap;
           left -= minutes;
         }
         if (left <= 0) break;

@@ -48,7 +48,7 @@ export function createProject(name = 'Untitled project', start = null) {
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null,
-    agenda: { blockHours: 1, timeBlockId: 'tb_work' },
+    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0 },
     tasks: [], resources: [], timesheets: [],
   };
 }

@@ -2,7 +2,7 @@
 
 import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
-import { BLOCK_CHOICES, parseTime } from '../model/agenda.js';
+import { BLOCK_CHOICES, GAP_CHOICES, parseTime } from '../model/agenda.js';
 
 export const FILE_EXT = '.project.json';
 
@@ -65,6 +65,7 @@ export function parse(text) {
     p.agenda = {
       blockHours: BLOCK_CHOICES.includes(+a.blockHours) ? +a.blockHours : 1,
       timeBlockId: blockIds.has(a.timeBlockId) ? a.timeBlockId : p.timeBlocks[0].id,
+      gapMinutes: GAP_CHOICES.includes(+a.gapMinutes) ? +a.gapMinutes : 0,
     };
   }
 

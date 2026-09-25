@@ -572,3 +572,28 @@ test('only the phase the plan is in reaches the calendar', async () => {
   p.currentPhaseId = 'gone';
   assert.equal(new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId)).size, 2);
 });
+
+test('a gap keeps blocks off each other’s heels', async () => {
+  const { planBlocks, formatTime } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  const a = task(p, 'Deep work', 1);        // 8 hours
+  assign(p, a.id, r.id, 1);
+  setTaskField(p, a.id, 'calendarShow', true);
+  setTaskField(p, a.id, 'blockHours', 2);
+  p.timeBlocks = [{ id: 'tb', name: 'Day', from: '09:00', to: '17:00', days: [0, 1, 2, 3, 4, 5, 6] }];
+  p.agenda = { blockHours: 2, timeBlockId: 'tb', gapMinutes: 0 };
+
+  const back = planBlocks(p, computeSchedule(p)).blocks.filter((b) => b.dateIso === MON);
+  assert.deepEqual(back.map((b) => formatTime(b.start)), ['09:00', '11:00', '13:00', '15:00'], 'back to back by default');
+
+  p.agenda = { ...p.agenda, gapMinutes: 15 };
+  const all = planBlocks(p, computeSchedule(p)).blocks;
+  const spaced = all.filter((b) => b.dateIso === MON);
+  assert.deepEqual(spaced.map((b) => formatTime(b.start)), ['09:00', '11:15', '13:30'],
+    'a quarter of an hour after each block — which costs the day its fourth');
+  assert.equal(spaced[0].minutes, 120, 'the blocks themselves are the same length');
+  assert.equal(formatTime(spaced[2].end), '15:30');
+  assert.equal(all.length, 4, 'the work does not vanish: the fourth block moves on');
+  assert.equal(all[3].dateIso, '2026-09-22', '…to the next day');
+});

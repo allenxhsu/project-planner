@@ -125,6 +125,9 @@ calendar says *when*: which hours, on which days.
   top-level summary such as Design — and then only that phase's tasks reach
   the calendar. There is no point putting build work in next week's mornings
   while the design is still being argued about.
+- **A gap, if you want one.** Project ▸ details sets the breathing room after
+  every block — none, 5, 10, 15 or 30 minutes — so the day is not back to back.
+  It costs a block a day and the work moves on rather than vanishing.
 - **Nobody is double-booked.** Two tasks for one person never overlap; two
   people working the same hour sit side by side.
 - **A week that does not hold the work says so**, rather than hiding the

@@ -262,9 +262,11 @@ export function setProjectInfo(patch) {
 export function setAgenda(patch) {
   return attempt('Working hours', (p) => {
     const next = { blockHours: 1, ...(p.agenda || {}), ...patch };
-    const { BLOCK_CHOICES } = agendaModule;
+    const { BLOCK_CHOICES, GAP_CHOICES } = agendaModule;
     if (!BLOCK_CHOICES.includes(+next.blockHours)) throw new Error(`A block is one of ${BLOCK_CHOICES.join(', ')} hours.`);
-    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null };
+    const gap = +(next.gapMinutes ?? 0);
+    if (!GAP_CHOICES.includes(gap)) throw new Error(`A gap is one of ${GAP_CHOICES.join(', ')} minutes.`);
+    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap };
   });
 }
 
