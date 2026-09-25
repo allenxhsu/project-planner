@@ -4,6 +4,7 @@
 # macOS package build output
 macos/.build/
 macos/build/
+# the bundle now builds into ~/Library/Caches; see macos/scripts/build-app.sh
 
 # Microsoft Project converter, fetched by tools/setup-converter.sh (about 180 MB)
 tools/jre/

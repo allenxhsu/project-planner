@@ -13,7 +13,7 @@ import { planRecords } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, makeCalendar } from '../model/calendar.js';
-import { isSummary, phases, getTask, getResource } from '../model/model.js';
+import { isSummary, phases, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu } from './dialog.js';
 
 /** Which week is on screen, as a day number inside it. */
@@ -242,6 +242,10 @@ export function renderCalendar(root) {
             { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
             { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
             '-',
+            { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
+            { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
+            { label: 'Urgency: low', run: () => act.editTask(t.id, 'urgency', 'low') },
+            '-',
             { label: 'Break into subtasks…', run: () => act.breakUpDialog(t.id) },
             '-',
             { label: 'Take off the calendar', run: () => act.editTask(t.id, 'calendarShow', false) },
@@ -251,7 +255,7 @@ export function renderCalendar(root) {
         el('div', { class: 'cal-block-time sc-mono' },
           formatClock(b.start),
           person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
-        el('div', { class: 'cal-block-name', text: t.name }),
+        el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),
         (planCount > 1 && !who) || foreign ? el('div', { class: 'cal-block-plan', text: b.planName }) : null));
     }
     body.append(col);

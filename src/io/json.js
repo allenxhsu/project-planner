@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, parseTime } from '../model/agenda.js';
 
@@ -92,6 +92,7 @@ export function parse(text) {
       percent: Math.max(0, Math.min(100, Math.round(+t.percent) || 0)), notes: String(t.notes || ''), fixedCost: Number(t.fixedCost) || 0,
       deadline: isoValid(t.deadline) ? t.deadline : null,
       stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,
+      urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,
             timeBlockId: blockIds.has(t.calendar.timeBlockId) ? t.calendar.timeBlockId : null,

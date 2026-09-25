@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource, identityOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource, identityOf, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -193,7 +193,13 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       // Only the phase each plan says it is in. Work from a phase that has not
       // started yet is real, but it is not this week's business.
       .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
-    .sort((a, b) => (a.info.start - b.info.start) || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
+    // Urgency first, then the dates. Two tasks wanting the same morning is
+    // exactly where a person's judgement has to beat the arithmetic — and
+    // "do it now" jumps the queue outright.
+    .sort((a, b) =>
+      (URGENCIES[urgencyOf(a.t)].rank - URGENCIES[urgencyOf(b.t)].rank)
+      || (a.info.start - b.info.start)
+      || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
 
   for (const { t, info, project } of candidates) {
     const a = agendaOf(project, t);
@@ -214,7 +220,10 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     // rounded up to a whole block.
     const spanDays = Math.max(1, cal.between(info.start, info.finish));
     const perDayBlocks = Math.max(1, Math.ceil(Math.ceil(left / size) / spanDays));
-    let day = cal.next(info.start);
+    // "Do it now" means today, not the day the schedule would have started it.
+    const urgency = urgencyOf(t);
+    const todayDay = toDay(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+    let day = cal.next(urgency === 'now' ? Math.min(info.start, todayDay) : info.start);
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
       // A time block says which days it covers; a day outside it is not this
@@ -285,6 +294,8 @@ export function priorities(project, schedule, { now = null } = {}) {
     const blockedBy = t.predecessors.filter((l) => !done.has(l.id) && schedule.tasks[l.id]).map((l) => l.id);
     const reasons = [];
     let score = 0;
+    const urgency = urgencyOf(t);
+    if (urgency !== 'normal') { score += URGENCIES[urgency].weight; reasons.push(URGENCIES[urgency].label.toLowerCase()); }
 
     if (info.deadlineMissed) { score += 100; reasons.push('past its deadline'); }
     else if (t.deadline) {
@@ -302,7 +313,7 @@ export function priorities(project, schedule, { now = null } = {}) {
     score += Math.max(0, 25 - Math.abs(info.start - todayDay));
 
     out.push({
-      taskId: t.id, index: info.index, name: t.name, score: Math.round(score), reasons,
+      taskId: t.id, index: info.index, name: t.name, score: Math.round(score), reasons, urgency,
       blocked: blockedBy.length > 0, blockedBy, info,
     });
   });

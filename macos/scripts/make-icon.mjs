@@ -126,12 +126,16 @@ const ihdr = Buffer.alloc(13)
 ihdr.writeUInt32BE(N, 0); ihdr.writeUInt32BE(N, 4)
 ihdr[8] = 8; ihdr[9] = 6 // 8-bit RGBA
 
-const out = new URL('../build/icon.png', import.meta.url)
-mkdirSync(new URL('../build/', import.meta.url), { recursive: true })
+// Where to write it. build-app.sh passes its own output directory, which is
+// not inside the repository — a bundle under ~/Documents gets indexed by
+// Spotlight and shows up as a second app.
+const target = process.argv[2]
+const out = target ? new URL(`file://${target}`) : new URL('../build/icon.png', import.meta.url)
+mkdirSync(new URL('./', out), { recursive: true })
 writeFileSync(out, Buffer.concat([
   Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
   chunk('IHDR', ihdr),
   chunk('IDAT', deflateSync(raw, { level: 9 })),
   chunk('IEND', Buffer.alloc(0)),
 ]))
-console.log('wrote macos/build/icon.png')
+console.log(`wrote ${target || 'macos/build/icon.png'}`)

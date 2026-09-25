@@ -788,3 +788,55 @@ test('a person is shared between plans, not copied into each', async () => {
   assert.equal(again.id, a.r.id);
   assert.equal(a.p.resources.length, 1);
 });
+
+test('urgency decides who gets the earliest hours', async () => {
+  const { planBlocks, priorities, formatTime } = await import('../src/model/agenda.js');
+  const { URGENCIES } = await import('../src/model/model.js');
+  const p = plan();
+  const ann = addResource(p, { name: 'Ann' });
+  // Two tasks, same person, same day: only one can have the morning.
+  const dull = task(p, 'Tidy the backlog', 1);
+  const vital = task(p, 'Fix the demo', 1);
+  for (const t of [dull, vital]) {
+    assign(p, t.id, ann.id, 1);
+    setTaskField(p, t.id, 'calendarShow', true);
+    setTaskField(p, t.id, 'blockHours', 4);
+  }
+
+  // Ann has eight hours a day and each task wants eight, so one of them waits
+  // a day. Equal urgency: the one listed first goes first.
+  const firstOf = (bs) => [...bs].sort((x, y) => x.day - y.day || x.start - y.start)[0];
+  let blocks = planBlocks(p, computeSchedule(p)).blocks;
+  assert.equal(formatTime(firstOf(blocks).start), '08:00', 'the working day starts when the time block does');
+  assert.equal(firstOf(blocks).taskId, dull.id);
+
+  // Marked high, the other one takes the first day instead.
+  setTaskField(p, vital.id, 'urgency', 'high');
+  blocks = planBlocks(p, computeSchedule(p)).blocks;
+  assert.equal(firstOf(blocks).taskId, vital.id, 'the urgent task goes first, the dull one waits');
+  const dullDay = firstOf(blocks.filter((b) => b.taskId === dull.id));
+  const vitalDay = firstOf(blocks.filter((b) => b.taskId === vital.id));
+  assert.ok(dullDay.day > vitalDay.day || dullDay.start >= vitalDay.end);
+
+  // Low goes behind everything.
+  setTaskField(p, vital.id, 'urgency', 'low');
+  setTaskField(p, dull.id, 'urgency', 'high');
+  blocks = planBlocks(p, computeSchedule(p)).blocks;
+  assert.equal(firstOf(blocks).taskId, dull.id);
+
+  // And it moves the task up the priority list, with the reason shown.
+  setTaskField(p, vital.id, 'urgency', 'now');
+  const list = priorities(p, computeSchedule(p));
+  assert.equal(list[0].taskId, vital.id, '“do it now” is first');
+  assert.equal(list[0].urgency, 'now');
+  assert.ok(list[0].reasons.includes('do it now'));
+  assert.ok(list[0].score > list[1].score + 100, 'and by a wide margin');
+
+  // "Do it now" also puts the task on the calendar, since that is the point.
+  const fresh = task(p, 'Something else', 1);
+  assert.equal(fresh.calendar.show, false);
+  setTaskField(p, fresh.id, 'urgency', 'now');
+  assert.equal(fresh.calendar.show, true);
+  assert.throws(() => setTaskField(p, fresh.id, 'urgency', 'whenever'), /Urgency is one of/);
+  assert.deepEqual(Object.keys(URGENCIES), ['now', 'high', 'normal', 'low']);
+});

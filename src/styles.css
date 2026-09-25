@@ -206,6 +206,15 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .plan-new:hover { color: var(--sc-accent); }
 .plan-new-mark { font-size: 24px; line-height: 1; }
 
+/* ---------- urgency ---------- */
+.sc-pill.urg-now { --tint: var(--sc-danger); font-weight: 700; }
+.sc-pill.urg-high { --tint: var(--sc-warning); }
+.sc-pill.urg-low { --tint: var(--sc-text-3); }
+.urg-dot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: middle; }
+.urg-dot.urg-now { background: var(--sc-danger); }
+.urg-dot.urg-high { background: var(--sc-warning); }
+.urg-dot.urg-low { background: var(--sc-text-3); }
+
 /* ---------- time blocks ---------- */
 .tb-card { display: grid; gap: 6px; padding: 8px; }
 .tb-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px 62px 26px; gap: 4px; align-items: center; }

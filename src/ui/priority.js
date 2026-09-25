@@ -10,7 +10,7 @@ import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { priorities, hoursLeft, agendaOf } from '../model/agenda.js';
 import { formatDate } from '../model/calendar.js';
-import { formatAssignments, getTask } from '../model/model.js';
+import { formatAssignments, getTask, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu } from './dialog.js';
 
 function row(r, rank) {
@@ -30,6 +30,10 @@ function row(r, rank) {
         { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',
+        { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
+        { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
+        { label: 'Urgency: low', run: () => act.editTask(t.id, 'urgency', 'low') },
+        '-',
         { label: onCalendar ? 'Take off the calendar' : 'Put on the calendar', run: () => act.editTask(t.id, 'calendarShow', !onCalendar) },
         { label: 'Break into subtasks…', run: () => act.breakUpDialog(t.id) },
         '-',
@@ -40,6 +44,7 @@ function row(r, rank) {
     el('div', { class: 'pri-rank sc-mono', text: String(rank) }),
     el('div', { class: 'pri-main' },
       el('div', { class: 'pri-name' }, t.name,
+        urgencyOf(t) !== 'normal' ? el('span', { class: `sc-pill urg-${urgencyOf(t)}`, text: URGENCIES[urgencyOf(t)].label }) : null,
         info.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : null,
         info.deadlineMissed ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Past deadline' }) : null,
         onCalendar ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'On calendar' }) : null),

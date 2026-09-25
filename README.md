@@ -31,7 +31,9 @@ runs the calendar, scheduler, outline, checks and file-format tests under Node.
 macos/scripts/build-app.sh
 ```
 
-builds `macos/build/Project Planner.app`: a native shell that hosts this same
+builds `~/Library/Caches/ProjectPlanner/build/Project Planner.app` (outside
+the repository, where Spotlight will not index it into Launchpad as a second
+app; `OUT_DIR=` puts it elsewhere): a native shell that hosts this same
 web app, with document windows, a real menu bar, Finder file opening, native
 save panels and vector PDF export. The shell itself is the shared
 [ToolkitShell](../shell-kit) package; what is written here is the app's
@@ -47,6 +49,7 @@ working calendar:
 | Input | Effect |
 |---|---|
 | Duration | how long the task is **open** — working days (`5d`, `2w`); `0d` is a milestone |
+| Urgency | `Do it now`, `High`, `Normal`, `Low` — a person's judgement, which the dates cannot supply. It decides who gets the earliest hours when two tasks want the same morning, and weighs into the Priority ranking. `Do it now` starts today and puts the task on the calendar |
 | Work | how many **hours** are actually spent in that time. Left blank it is duration × hours × units, the full-time assumption; said plainly (`12h`) it is the effort, and the difference is what "a five-day task that is three hours a day" means |
 | Predecessors | `3`, `3FS+2d`, `5SS-1d`, `7FF`, `2SF` — row numbers, link type, lag or lead |
 | A link on a summary | binds every task under it |

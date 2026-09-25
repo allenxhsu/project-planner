@@ -16,7 +16,7 @@
 import { el, clear, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { formatAssignments, isSummary, getResource, stages, stageOf } from '../model/model.js';
+import { formatAssignments, isSummary, getResource, stages, stageOf, URGENCIES, urgencyOf } from '../model/model.js';
 import { formatDate, formatDuration } from '../model/calendar.js';
 import { showMenu, promptText, confirmDialog } from './dialog.js';
 
@@ -95,6 +95,10 @@ function card(t, grouping) {
         '-',
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',
+        { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
+        { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
+        { label: 'Urgency: normal', run: () => act.editTask(t.id, 'urgency', 'normal') },
+        '-',
         { label: 'Mark 100% complete', run: () => act.setPercent(t.id, 100) },
         { label: 'Mark 0% complete', run: () => act.setPercent(t.id, 0) },
         '-',
@@ -113,6 +117,7 @@ function card(t, grouping) {
     el('div', { class: 'kb-card-head' },
       el('span', { class: 'kb-id sc-mono', text: `#${s.index}` }),
       s.milestone ? el('span', { class: 'kb-flag', text: '◆', title: 'Milestone' }) : null,
+      urgencyOf(t) !== 'normal' ? el('span', { class: `sc-pill urg-${urgencyOf(t)}`, text: URGENCIES[urgencyOf(t)].label }) : null,
       s.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : null,
       s.deadlineMissed ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Late' }) : null),
     el('h4', { class: 'kb-name', text: t.name }),

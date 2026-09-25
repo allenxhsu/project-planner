@@ -12,7 +12,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PKG="$(cd "$HERE/.." && pwd)"
 REPO="$(cd "$PKG/.." && pwd)"
 CONFIG="${CONFIG:-release}"
-OUT="${OUT_DIR:-$PKG/build}"
+# Out of the way of Spotlight. A bundle anywhere under ~/Documents is indexed
+# and shows up in Launchpad and in search beside the installed copy — two
+# Project Planners, one of them a build artifact. ~/Library/Caches is not
+# indexed, and OUT_DIR still overrides this for anyone who wants it elsewhere.
+OUT="${OUT_DIR:-$HOME/Library/Caches/ProjectPlanner/build}"
 APP="$OUT/Project Planner.app"
 VERSION="${VERSION:-1.0}"
 
@@ -33,18 +37,16 @@ check_copy shell-kit src/host.js
 swift build --package-path "$PKG" -c "$CONFIG" --product ProjectPlanner
 BIN_DIR="$(swift build --package-path "$PKG" -c "$CONFIG" --show-bin-path)"
 
+mkdir -p "$OUT"
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/web"
-# Spotlight indexes anything that looks like an app, so a build here would show
-# up beside the installed one in Launchpad and in search — two Project Planners,
-# one of them a build artifact. This file tells Spotlight to skip the folder.
-touch "$OUT/.metadata_never_index"
 cp "$BIN_DIR/ProjectPlanner" "$APP/Contents/MacOS/Project Planner"
 
 # The Dock icon: the PJ badge the app wears in its own header. Rendered from
 # macos/scripts/make-icon.mjs, then turned into the sizes macOS asks for.
 if command -v node >/dev/null 2>&1; then
-  node "$HERE/make-icon.mjs" >/dev/null
+  node "$HERE/make-icon.mjs" "$OUT/icon.png" >/dev/null
   SET="$OUT/AppIcon.iconset"
   rm -rf "$SET" && mkdir -p "$SET"
   for size in 16 32 128 256 512; do

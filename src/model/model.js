@@ -25,6 +25,22 @@ export const CONSTRAINTS = {
 export const RESOURCE_TYPES = { work: 'Work', material: 'Material', cost: 'Cost' };
 
 /**
+ * How urgent a task is, as a person judges it — which the dates cannot say.
+ *
+ * The schedule knows what is late and what has no slack; it does not know that
+ * this one matters more than that one. Urgency is that judgement, and it
+ * decides who gets the earliest hours when two tasks want the same morning.
+ * `now` is the override: it goes first, today, ahead of everything.
+ */
+export const URGENCIES = {
+  now: { label: 'Do it now', rank: 0, weight: 400 },
+  high: { label: 'High', rank: 1, weight: 120 },
+  normal: { label: 'Normal', rank: 2, weight: 0 },
+  low: { label: 'Low', rank: 3, weight: -60 },
+};
+export const urgencyOf = (task) => (URGENCIES[task?.urgency] ? task.urgency : 'normal');
+
+/**
  * Kanban stages: the plan's own columns, the way a board has them.
  *
  * A stage says where a task stands in the way this team works; `done` marks
@@ -61,7 +77,7 @@ export function newTask(props = {}) {
     // design task — and work is how much of that time is spent on it. Null
     // means "as much as the assignment says", the old full-time assumption.
     work: null,
-    stageId: null,
+    stageId: null, urgency: 'normal',
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
     calendar: { show: false, timeBlockId: null },
@@ -713,6 +729,13 @@ export function setTaskField(p, id, field, value) {
     }
     case 'constraintDate': if (value && !isoValid(value)) throw new Error('A constraint date is a date (YYYY-MM-DD).'); t.constraint.date = value || null; if (!value) t.constraint.type = 'ASAP'; break;
     case 'fixedCost': { const n = parseFloat(String(value).replace(/[^0-9.-]/g, '')); if (Number.isNaN(n)) throw new Error('Fixed cost is a number.'); t.fixedCost = n; break; }
+    case 'urgency': {
+      if (!URGENCIES[value]) throw new Error(`Urgency is one of ${Object.keys(URGENCIES).join(', ')}.`);
+      t.urgency = value;
+      // "Do it now" only means anything if the task is on the calendar at all.
+      if (value === 'now') t.calendar = { ...t.calendar, show: true };
+      break;
+    }
     case 'calendarShow': t.calendar = { ...t.calendar, show: !!value }; break;
     case 'blockHours': {
       const n = parseFloat(value);

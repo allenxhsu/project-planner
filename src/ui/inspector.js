@@ -6,7 +6,7 @@ import * as act from '../state/actions.js';
 import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
-import { timeBlocks, phases, feeds, PROVIDERS } from '../model/model.js';
+import { timeBlocks, phases, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -50,7 +50,10 @@ function renderTask(root) {
       field('Duration', text(formatDuration(t.duration), setF('duration')), 'how long it is open: 5d · 2w'),
       field('Work', text(t.work == null ? '' : String(t.work), setF('work')),
         t.work == null ? `${formatHours(s.work)} implied by the assignment` : `${Math.round((s.work / Math.max(1, s.duration)) * 10) / 10}h a day over ${formatDuration(s.duration)}`)));
-    form.append(field('% complete', text(String(t.percent), setF('percent'))));
+    form.append(el('div', { class: 'two' },
+      field('% complete', text(String(t.percent), setF('percent'))),
+      field('Urgency', select(urgencyOf(t), Object.entries(URGENCIES).map(([value, u]) => ({ value, label: u.label })), setF('urgency')),
+        'who gets the earliest hours')));
     form.append(el('label', { class: 'row check-row' }, el('input', { class: 'sc-check', type: 'checkbox', checked: !!t.milestone, onchange: (e) => act.editTask(id, 'milestone', e.target.checked) }), el('span', { text: 'Milestone (zero duration)' })));
     form.append(field('Stage', select(stageOf(project, t).id, stages(project).map((st) => ({ value: st.id, label: st.name })), (v) => act.setTaskStage(id, v)), 'the Kanban column this task sits in'));
   } else form.append(el('p', { class: 'sc-muted small', text: `Summary of ${s.children.length} subtasks: ${formatDuration(s.duration)}, ${s.percent}% complete. Its dates come from them.` }));
