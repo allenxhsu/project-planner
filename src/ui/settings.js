@@ -46,7 +46,8 @@ export function settingsDialog() {
     if (inPortal()) {
       return [
         el('div', { class: 'sc-section-title', text: 'Sync' }),
-        el('p', { class: 'sc-muted small', text: `This copy is served by the Toolkit at ${location.host}, so it syncs with that server as the account you are signed in as. There is no URL to paste and no token to keep.` }),
+        el('p', { class: 'sc-muted small', text: 'Signed in via the toolkit.' }),
+        el('p', { class: 'sc-faint small', text: `Served at ${location.host}, this app syncs with that origin as the account you are signed in as — there is no URL to paste and no token to keep. The bar at the top of the window switches apps, shows the account and signs out.` }),
         status,
         el('div', { class: 'sc-faint field-hint', text: `This device is ${deviceId()} · plan ${store.project.id}` }),
         foot(

@@ -1,0 +1,26 @@
+{
+  "id": "project",
+  "name": "Project Planner",
+  "mark": "PP",
+  "colorToken": "project",
+  "workspace": "project",
+  "static": {
+    "dir": ".",
+    "build": null,
+    "include": [
+      "index.html",
+      "src/**",
+      "ui-kit/**",
+      "sync-kit/**"
+    ]
+  },
+  "entry": "index.html",
+  "offline": true,
+  "csp": null,
+  "connectScheme": "project",
+  "pwa": {
+    "shortName": "Project",
+    "themeColor": "#03060A",
+    "display": "standalone"
+  }
+}

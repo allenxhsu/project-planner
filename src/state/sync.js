@@ -182,12 +182,22 @@ function rebuild() {
   timer = null;
   engine = null;
   let transport = null;
-  if (portal) transport = new HttpTransport({ baseUrl: portal.baseUrl, label: portal.workspace });
+  if (portal) transport = new HttpTransport({ baseUrl: portal.baseUrl, label: portal.workspace, onUnauthorized });
   else if (settings.url) transport = new HttpTransport({ baseUrl: settings.url, token: settings.token, label: WORKSPACE });
   if (!recordStore || !transport) { announce(); return; }
   engine = new SyncEngine(recordStore, transport, deviceId());
   if (syncConfigured()) timer = setInterval(() => { void syncNow(); }, INTERVAL_MS);
   announce();
+}
+
+/**
+ * The session is gone.
+ *
+ * Nothing here can mend it — signing in is the Portal's business — so this
+ * asks the bar to re-read `/auth/me`, which is what makes it show Sign in.
+ */
+function onUnauthorized() {
+  document.querySelector('sc-portal-bar')?.refresh?.();
 }
 
 function announce() {

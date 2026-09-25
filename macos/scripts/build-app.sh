@@ -33,6 +33,9 @@ check_copy() {  # <kit dir> <copy-script args…>
 check_copy ui-kit ui-kit
 check_copy shell-kit src/host.js
 [ -d "$REPO/sync-kit" ] && check_copy sync-kit sync-kit
+# Pairing ends in a project://connect?… link that Launch Services delivers only
+# to a bundle claiming the scheme.
+URL_TYPES="$(node "$REPO/../shell-kit/scripts/url-types.mjs" project 'Project Planner')"
 
 swift build --package-path "$PKG" -c "$CONFIG" --product ProjectPlanner
 BIN_DIR="$(swift build --package-path "$PKG" -c "$CONFIG" --show-bin-path)"
@@ -161,9 +164,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
       <dict><key>public.filename-extension</key><array><string>mpx</string><string>xer</string><string>pmxml</string><string>pod</string><string>gan</string><string>planner</string><string>pp</string><string>prx</string></array></dict>
     </dict>
   </array>
+$URL_TYPES
 </dict>
 </plist>
 PLIST
+node "$REPO/../shell-kit/scripts/url-types.mjs" --check "$APP/Contents/Info.plist" project
 
 # An ad-hoc signature, so macOS will launch a locally built bundle.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || codesign --force --sign - "$APP" >/dev/null

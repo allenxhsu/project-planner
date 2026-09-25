@@ -20,8 +20,9 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
+import { portalApp } from '../sync-kit/js/portal.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -125,4 +126,12 @@ if (!hosted) {
 } else render();
 
 // After the first plan is on screen: the record store, the engine and the timer.
+// On the Portal the page carries the Portal's bar: the app switcher, the
+// account, and Sign in when the session is gone.
+function mountPortalBar() {
+  if (portalApp() !== APP_ID) return;
+  document.getElementById('app').prepend(el('sc-portal-bar', { app: APP_ID }));
+}
+mountPortalBar();
+
 initSync().then(() => Promise.all([reloadPlans(), refreshWorkspaceLabel()])).catch((err) => console.error('sync could not start', err));
