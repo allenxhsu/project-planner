@@ -235,7 +235,11 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cal-block:hover { background: rgb(var(--sc-accent-rgb) / 0.34); }
 .cal-block.is-sel { box-shadow: inset 0 0 0 1px var(--sc-accent); }
 .cal-block.is-critical { background: rgb(var(--sc-danger-rgb) / 0.2); border-left-color: var(--sc-danger); }
-.cal-block-time { font-size: 10px; color: var(--sc-text-3); }
+.cal-block-time { display: flex; gap: 6px; align-items: baseline; font-size: 10px; color: var(--sc-text-3); }
+.cal-who { color: var(--who, var(--sc-accent)); font-weight: 700; }
+.cal-block-plan { font-size: 10px; color: var(--sc-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-block.is-other-plan { border-left-style: dashed; }
+.cal-phase .sc-select + .sc-select { margin-left: 4px; }
 .cal-block-name { font-size: 11.5px; line-height: 1.25; overflow: hidden; }
 .cal-overflow { margin: var(--sc-space-3); }
 

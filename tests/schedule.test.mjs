@@ -710,3 +710,40 @@ test('a task books everyone on it, so nobody is in two places at once', async ()
   assert.equal(danFirst.day, umaFirst.day);
   assert.equal(danFirst.start, umaFirst.start, 'different people, same hour, which is not a clash');
 });
+
+test('one calendar covers every plan, and a person is the same person in each', async () => {
+  const { planBlocksAcross, personKey } = await import('../src/model/agenda.js');
+  const build = (name) => {
+    const p = plan();
+    p.name = name;
+    const uma = addResource(p, { name: 'Uma Chen' });   // a different id in each plan
+    const t = task(p, `${name} work`, 1);
+    assign(p, t.id, uma.id, 1);
+    setTaskField(p, t.id, 'calendarShow', true);
+    setTaskField(p, t.id, 'blockHours', 4);
+    return { p, uma, t };
+  };
+  const a = build('Alpha');
+  const b = build('Beta');
+  assert.notEqual(a.uma.id, b.uma.id, 'the same person, two ids');
+  assert.equal(personKey(a.uma.name), personKey(b.uma.name), 'and one name');
+
+  const entries = [{ project: a.p, schedule: computeSchedule(a.p) }, { project: b.p, schedule: computeSchedule(b.p) }];
+  const { blocks } = planBlocksAcross(entries);
+  assert.equal(new Set(blocks.map((x) => x.planId)).size, 2, 'both plans are on the calendar');
+  assert.ok(blocks.every((x) => x.planName && x.people.includes(personKey('Uma Chen'))));
+
+  // Her hours are hers: the two plans cannot both take the same morning.
+  const hers = blocks.sort((x, y) => x.day - y.day || x.start - y.start);
+  for (let i = 1; i < hers.length; i++) {
+    const prev = hers[i - 1], now = hers[i];
+    assert.ok(now.day > prev.day || now.start >= prev.end,
+      `two projects booked Uma at once: ${prev.planName} and ${now.planName} on ${now.dateIso}`);
+  }
+  // Left to itself, each plan would have claimed the very same hour.
+  const alone = planBlocksAcross([entries[0]]).blocks[0];
+  const together = hers[0];
+  assert.equal(alone.start, together.start, 'the first plan keeps the hour it would have had');
+  assert.ok(hers.some((x) => x.planId === b.p.id && (x.day > together.day || x.start >= together.end)),
+    'and the second is placed after it, not on top of it');
+});

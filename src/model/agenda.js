@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -84,6 +84,24 @@ const lanesOf = (task) => {
   return ids.length ? [...new Set(ids)] : ['__unassigned'];
 };
 
+/**
+ * Who someone *is*, across plans.
+ *
+ * One calendar covers every plan on the shelf, and a person is in several of
+ * them — but each plan keeps its own resource list, so Uma Chen is a different
+ * id in each. The name is what carries across, which is why booking is keyed
+ * on it: two plans asking for Uma's Tuesday morning are one clash, not two
+ * bookings that never meet.
+ */
+export const personKey = (name) => `who:${String(name || '').trim().toLowerCase()}`;
+const peopleOf = (project, task) => {
+  const keys = task.assignments
+    .map((a) => getResource(project, a.resourceId))
+    .filter(Boolean)
+    .map((r) => personKey(r.name));
+  return keys.length ? [...new Set(keys)] : ['__unassigned'];
+};
+
 /** Free stretches of `[from, to)` on one day, given what is already booked. */
 function freeSlots(booked, from, to) {
   const busy = [...booked].sort((a, b) => a.start - b.start);
@@ -108,8 +126,24 @@ function freeSlots(booked, from, to) {
  *
  * @returns {{ blocks: Array, byTask: Map, overflow: Array }}
  */
-export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
-  const cal = makeCalendar(project.calendar);
+/** One plan's blocks — the whole shelf's calendar, narrowed to this plan. */
+export function planBlocks(project, schedule, opts = {}) {
+  return planBlocksAcross([{ project, schedule }], opts);
+}
+
+/**
+ * Every plan's blocks, on one calendar.
+ *
+ * The hours of a week are shared by everything a person is working on, so the
+ * placement has to be too: plans are laid out together, in schedule order,
+ * against one booking sheet. Otherwise two plans would each think Tuesday
+ * morning was free and both take it.
+ *
+ * @param {Array<{project: object, schedule: object}>} entries
+ */
+export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
+  const first = entries[0]?.project;
+  const cal = makeCalendar(first?.calendar);
   const blocks = [];
   const byTask = new Map();
   const overflow = [];
@@ -122,8 +156,10 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
    * hours; one that names nobody books the unassigned lane.
    */
   const meetings = [];
-  for (const feed of feeds(project)) {
-    const lane = feed.resourceId || '__unassigned';
+  const seenMeetings = new Set();
+  for (const { project } of entries) for (const feed of feeds(project)) {
+    const owner = feed.resourceId ? getResource(project, feed.resourceId) : null;
+    const lane = owner ? personKey(owner.name) : '__unassigned';
     for (const e of feed.events || []) {
       const startDay = Math.floor(e.start / 86400000 - new Date(e.start).getTimezoneOffset() / 1440);
       const d = new Date(e.start);
@@ -131,6 +167,10 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       const startMin = e.allDay ? 0 : d.getHours() * 60 + d.getMinutes();
       const length = Math.max(15, Math.round((e.end - e.start) / 60000));
       const endMin = e.allDay ? 24 * 60 : Math.min(24 * 60, startMin + length);
+      // The same calendar connected to two plans is still one meeting.
+      const seal = `${lane}|${day}|${startMin}|${e.uid || e.title}`;
+      if (seenMeetings.has(seal)) continue;
+      seenMeetings.add(seal);
       meetings.push({ lane, day, start: startMin, end: endMin, title: e.title, allDay: !!e.allDay });
       void startDay;
     }
@@ -145,25 +185,27 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
     return days.get(day);
   };
 
-  const candidates = project.tasks
-    .map((t, i) => ({ t, i, info: schedule.tasks[t.id] }))
-    // Only the phase the plan says it is in. Work from a phase that has not
-    // started yet is real, but it is not this week's business.
-    .filter(({ t, i, info }) => info && !info.cyclic && !isSummary(project, i) && agendaOf(project, t).show && inCurrentPhase(project, t.id))
+  const candidates = entries
+    .flatMap(({ project, schedule }) => project.tasks
+      .map((t, i) => ({ t, i, info: schedule.tasks[t.id], project }))
+      // Only the phase each plan says it is in. Work from a phase that has not
+      // started yet is real, but it is not this week's business.
+      .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
     .sort((a, b) => (a.info.start - b.info.start) || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
 
-  for (const { t, info } of candidates) {
+  for (const { t, info, project } of candidates) {
     const a = agendaOf(project, t);
     const windowMinutes = Math.max(0, a.to - a.from);
     const size = Math.round(a.blockHours * 60);
     let left = Math.round(hoursLeft(project, info) * 60);
     const mine = [];
     if (left <= 0 || size <= 0 || windowMinutes < size) {
-      if (left > 0) overflow.push({ taskId: t.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });
+      if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });
       byTask.set(t.id, mine);
       continue;
     }
     const lanes = lanesOf(t);
+    const people = peopleOf(project, t);
     // Duration is how long the task is open; work is how much of that time is
     // spent on it. A five-day design task of twelve hours is three hours a day,
     // not three full days and two idle ones — so each day takes its share,
@@ -178,18 +220,22 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       if (a.days && !a.days.includes(weekday(day))) { day = cal.next(day + 1); continue; }
       let placedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
-      const busyForAll = lanes.flatMap((lane) => bookedOn(lane, day));
+      const busyForAll = people.flatMap((lane) => bookedOn(lane, day));
       for (const [from, to] of freeSlots(busyForAll, a.from, a.to)) {
         let at = from;
         while (left > 0 && at + size <= to && placedToday < perDayBlocks) {
           const minutes = Math.min(size, left);
-          const block = { taskId: t.id, day, start: at, end: at + minutes, minutes, lanes, lane: lanes[0], critical: info.critical, dateIso: fromDay(day) };
+          const block = {
+            taskId: t.id, planId: project.id, planName: project.name,
+            day, start: at, end: at + minutes, minutes,
+            lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day),
+          };
           blocks.push(block);
           mine.push(block);
           // The gap is booked with the block, so the next thing — this task's
           // or anyone's — starts after it rather than back to back. Booked for
           // every person on the task, which is what stops the double-booking.
-          for (const lane of lanes) bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
+          for (const lane of people) bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
           at += size + a.gap;
           left -= minutes;
           placedToday++;
@@ -198,7 +244,7 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       }
       day = cal.next(day + 1);
     }
-    if (left > 0) overflow.push({ taskId: t.id, minutes: left, reason: 'horizon' });
+    if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: 'horizon' });
     byTask.set(t.id, mine);
   }
 

@@ -14,7 +14,7 @@ import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
-import { shiftWeek, showThisWeek } from './calendar.js';
+import { shiftWeek, showThisWeek, reloadCalendarPlans } from './calendar.js';
 import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -178,7 +178,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -325,6 +325,7 @@ export function renderToolbar(root) {
       b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'calendar') {
     root.append(b('‹ Week', 'The week before', () => shiftWeek(-1)), b('Today', 'Back to this week', showThisWeek), b('Week ›', 'The week after', () => shiftWeek(1)), sep(),
+      b('↻ Plans', 'Re-read every plan on the shelf', () => { void reloadCalendarPlans(); }),
       b('+ Task', 'New task below the selection', act.newTaskBelow),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
       b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar));

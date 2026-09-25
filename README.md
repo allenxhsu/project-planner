@@ -135,9 +135,15 @@ calendar says *when*: which hours, on which days.
 - **A gap, if you want one.** Project ▸ details sets the breathing room after
   every block — none, 5, 10, 15 or 30 minutes — so the day is not back to back.
   It costs a block a day and the work moves on rather than vanishing.
+- **One calendar, every plan.** The hours of a week are shared by everything a
+  person is working on, so all the plans on the shelf are laid out together.
+  Each block carries the person's initials in their own colour and the plan it
+  came from; clicking one from another plan opens it there. **Calendar for**
+  narrows to one person, and a second menu to the open project alone. People
+  are matched across plans by name, since each plan has its own resource list.
 - **Nobody is double-booked.** A task books the hours of *everyone* on it, so
   two tasks that share a person never overlap; two people working the same hour
-  sit side by side. **Calendar for** narrows the week to one person.
+  sit side by side.
 - **A week that does not hold the work says so**, rather than hiding the
   overflow.
 
