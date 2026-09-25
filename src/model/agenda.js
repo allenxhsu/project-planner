@@ -155,15 +155,22 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
       continue;
     }
     const lane = laneOf(t);
+    // Duration is how long the task is open; work is how much of that time is
+    // spent on it. A five-day design task of twelve hours is three hours a day,
+    // not three full days and two idle ones — so each day takes its share,
+    // rounded up to a whole block.
+    const spanDays = Math.max(1, cal.between(info.start, info.finish));
+    const perDayBlocks = Math.max(1, Math.ceil(Math.ceil(left / size) / spanDays));
     let day = cal.next(info.start);
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
       // A time block says which days it covers; a day outside it is not this
       // task's to use, however free it looks.
       if (a.days && !a.days.includes(weekday(day))) { day = cal.next(day + 1); continue; }
+      let placedToday = 0;
       for (const [from, to] of freeSlots(bookedOn(lane, day), a.from, a.to)) {
         let at = from;
-        while (left > 0 && at + size <= to) {
+        while (left > 0 && at + size <= to && placedToday < perDayBlocks) {
           const minutes = Math.min(size, left);
           const block = { taskId: t.id, day, start: at, end: at + minutes, minutes, lane, critical: info.critical, dateIso: fromDay(day) };
           blocks.push(block);
@@ -173,8 +180,9 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
           bookedOn(lane, day).push({ start: at, end: at + size + a.gap });
           at += size + a.gap;
           left -= minutes;
+          placedToday++;
         }
-        if (left <= 0) break;
+        if (left <= 0 || placedToday >= perDayBlocks) break;
       }
       day = cal.next(day + 1);
     }

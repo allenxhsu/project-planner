@@ -57,6 +57,10 @@ export function newTask(props = {}) {
   return {
     id: uid('t'), name: 'New task', level: 1, duration: 1, milestone: false, predecessors: [],
     constraint: { type: 'ASAP', date: null }, deadline: null, percent: 0, notes: '', assignments: [], fixedCost: 0,
+    // Hours of effort. Duration is how long the task is open — five days for a
+    // design task — and work is how much of that time is spent on it. Null
+    // means "as much as the assignment says", the old full-time assumption.
+    work: null,
     stageId: null,
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
@@ -506,6 +510,7 @@ export function breakIntoSubtasks(p, taskId, parts, names = [], { chain = true }
     made.push(newTask({
       name: (names[k] || '').trim() || `${parent.name} ${k + 1}`,
       level: parent.level + 1, duration: each,
+      work: parent.work == null ? null : Math.round((parent.work / n) * 100) / 100,
       assignments: parent.assignments.map((a) => ({ ...a })),
       calendar: { ...parent.calendar },
       stageId: parent.stageId,
@@ -516,6 +521,7 @@ export function breakIntoSubtasks(p, taskId, parts, names = [], { chain = true }
   // The parent keeps its links and its deadline; the rest is now its children's.
   parent.percent = 0;
   parent.milestone = false;
+  parent.work = null;   // a summary's work is its children's, added up
   return made;
 }
 
@@ -665,6 +671,16 @@ export function setTaskField(p, id, field, value) {
       break;
     }
     case 'finish': throw new Error('Use setFinish(): a finish date needs the scheduled start.');
+    case 'work': {
+      const raw = String(value).trim();
+      if (!raw) { t.work = null; break; }          // back to whatever the assignment implies
+      const m = /^(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|hour|hours|d|day|days)?$/i.exec(raw);
+      if (!m) throw new Error('Work is a number of hours, like 12 or 12h (or 2d).');
+      const n = parseFloat(m[1].replace(',', '.'));
+      const unit = (m[2] || 'h').toLowerCase();
+      t.work = Math.round((unit.startsWith('d') ? n * (p.calendar?.hoursPerDay || 8) : n) * 100) / 100;
+      break;
+    }
     case 'percent': {
       const n = Math.round(parseFloat(String(value).replace('%', '')));
       if (Number.isNaN(n) || n < 0 || n > 100) throw new Error('Percent complete is a number from 0 to 100.');

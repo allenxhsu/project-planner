@@ -86,6 +86,8 @@ export function parse(text) {
     const task = newTask({
       id: String(t.id || ''), name: String(t.name ?? 'Untitled task'), level: Number(t.level) || 1,
       duration: Number.isFinite(+t.duration) && +t.duration >= 0 ? +t.duration : 1, milestone: !!t.milestone,
+      // `+null` is 0, which would quietly turn "as much as the assignment says" into "no work at all".
+      work: t.work !== null && t.work !== undefined && Number.isFinite(+t.work) && +t.work >= 0 ? +t.work : null,
       percent: Math.max(0, Math.min(100, Math.round(+t.percent) || 0)), notes: String(t.notes || ''), fixedCost: Number(t.fixedCost) || 0,
       deadline: isoValid(t.deadline) ? t.deadline : null,
       stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,

@@ -20,7 +20,7 @@ export const COLUMN_DEFS = {
   predecessors: { label: 'Predecessors', width: 110, edit: 'text' },
   resources: { label: 'Resource Names', width: 180, edit: 'text' },
   percent: { label: '% Complete', width: 84, edit: 'text', align: 'right' },
-  work: { label: 'Work', width: 70, readonly: true, align: 'right' },
+  work: { label: 'Work', width: 70, edit: 'text', align: 'right' },
   spent: { label: 'Spent', width: 70, readonly: true, align: 'right' },
   remaining: { label: 'Left', width: 70, readonly: true, align: 'right' },
   stage: { label: 'Stage', width: 120, readonly: true },
@@ -71,7 +71,8 @@ export function taskRows(ids) {
       },
       raw: {
         name: t.name, duration: formatDuration(t.duration), start: s.startIso, finish: s.finishIso, predecessors: formatPredecessors(project, t),
-        resources: formatAssignments(project, t), percent: String(s.percent), constraint: t.constraint?.type || 'ASAP', constraintDate: t.constraint?.date || '',
+        resources: formatAssignments(project, t), percent: String(s.percent), work: t.work == null ? '' : String(t.work),
+        constraint: t.constraint?.type || 'ASAP', constraintDate: t.constraint?.date || '',
         deadline: t.deadline || '', notes: t.notes,
       },
     };

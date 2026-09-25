@@ -597,3 +597,49 @@ test('a gap keeps blocks off each other’s heels', async () => {
   assert.equal(all.length, 4, 'the work does not vanish: the fourth block moves on');
   assert.equal(all[3].dateIso, '2026-09-22', '…to the next day');
 });
+
+test('duration is how long a task is open; work is how much of it is spent', async () => {
+  const { planBlocks, formatTime } = await import('../src/model/agenda.js');
+  const { resourceLoad } = await import('../src/model/schedule.js');
+  const p = plan();
+  const ann = addResource(p, { name: 'Ann', rate: 100 });
+  const design = task(p, 'Design the layout', 5);     // open for a working week
+  assign(p, design.id, ann.id, 1);
+
+  // Left alone, the old rule applies: five days of one person is forty hours.
+  assert.equal(computeSchedule(p).tasks[design.id].work, 40);
+
+  // Said plainly: five days open, twelve hours of actual work.
+  setTaskField(p, design.id, 'work', '12h');
+  const s = computeSchedule(p);
+  assert.equal(s.tasks[design.id].duration, 5, 'the bar on the chart is unchanged');
+  assert.equal(s.tasks[design.id].work, 12);
+  assert.equal(s.tasks[design.id].cost, 1200, 'and it costs twelve hours, not forty');
+  assert.equal(Math.round(s.tasks[design.id].unitsByResource.get(ann.id) * 100) / 100, 0.3,
+    'which is a third of Ann’s day, not all of it');
+
+  // So she is not over-allocated, where the old rule would have said she was.
+  const load = resourceLoad(p, s);
+  for (const [, items] of load.get(ann.id)) {
+    assert.ok(items.reduce((sum, x) => sum + x.units, 0) <= 1.0001);
+    assert.equal(Math.round(items[0].hours * 100) / 100, 2.4, 'two and a half hours a day, near enough');
+  }
+  assert.ok(!validate(p, s).some((i) => i.code === 'overallocated'));
+
+  // On the calendar that is blocks spread across the five days, not three full ones.
+  setTaskField(p, design.id, 'calendarShow', true);
+  setTaskField(p, design.id, 'blockHours', 1);
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  assert.equal(blocks.length, 12, 'twelve hours in one-hour blocks');
+  const perDay = new Map();
+  for (const b of blocks) perDay.set(b.dateIso, (perDay.get(b.dateIso) || 0) + 1);
+  assert.equal(perDay.size, 4, 'spread over the days it is open, three a day');
+  assert.ok([...perDay.values()].every((n) => n <= 3));
+
+  // Bigger blocks, same twelve hours: four-hour blocks land one a day.
+  setTaskField(p, design.id, 'blockHours', 4);
+  const big = planBlocks(p, computeSchedule(p)).blocks;
+  assert.equal(big.length, 3);
+  assert.equal(new Set(big.map((b) => b.dateIso)).size, 3, 'one four-hour block a day');
+  assert.ok(big.every((b) => b.minutes === 240));
+});

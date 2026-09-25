@@ -141,16 +141,38 @@ export function computeSchedule(p) {
   for (const info of all) {
     if (info.summary) continue;
     const t = p.tasks[byId.get(info.id)];
-    let work = 0, cost = t.fixedCost || 0;
+    let cost = t.fixedCost || 0;
+    const workPeople = t.assignments.filter((a) => resById.get(a.resourceId)?.type === 'work');
+    const unitSum = workPeople.reduce((sum, a) => sum + (a.units || 0), 0);
+    // Work is the task's own figure when it has one: five days open and twelve
+    // hours of effort is an ordinary thing to say, and the old rule — duration
+    // times units — could only ever say full-time.
+    const stated = Number.isFinite(t.work) && t.work >= 0 ? t.work : null;
+    const implied = info.duration * hpd * unitSum;
+    let work = stated ?? implied;
+    if (info.milestone) work = stated ?? 0;
+    // Each person's share of it, for cost and for how busy they are.
+    const shares = new Map();
+    for (const a of workPeople) {
+      const share = stated === null
+        ? info.duration * hpd * (a.units || 0)
+        : work * (unitSum > 0 ? (a.units || 0) / unitSum : 1 / (workPeople.length || 1));
+      shares.set(a.resourceId, share);
+      cost += share * (resById.get(a.resourceId)?.rate || 0);
+    }
     for (const a of t.assignments) {
       const r = resById.get(a.resourceId);
-      if (!r) continue;
-      if (r.type === 'work') { const h = info.duration * hpd * (a.units || 0); work += h; cost += h * (r.rate || 0); }
-      else if (r.type === 'material') cost += (a.units || 0) * (r.rate || 0);
+      if (!r || r.type === 'work') continue;
+      if (r.type === 'material') cost += (a.units || 0) * (r.rate || 0);
       else cost += a.units || 0; // a cost resource: units is the amount
     }
     info.work = work;
+    info.workShares = shares;
     info.cost = cost;
+    // How much of a working day this task actually asks of each person: a
+    // twelve-hour task open for five days is a third of a day, not all of it.
+    // A map rather than a function, so two schedules of the same plan compare equal.
+    info.unitsByResource = new Map([...shares].map(([id, share]) => [id, share / (Math.max(1, info.duration) * hpd)]));
     info.spent = spentOn(p, info.id);
     // What the plan still expects, after what has been logged. Never negative:
     // overrunning an estimate means nothing is left, not that time is owed back.
@@ -199,11 +221,14 @@ export function resourceLoad(p, sched) {
       if (!days) continue;
       const r = p.resources.find((x) => x.id === a.resourceId);
       if (r.type !== 'work') continue;
-      const perDay = info.milestone ? 0 : cal.hoursPerDay * (a.units || 0);
+      // The hours this person really puts in each day, from the task's work.
+      const share = info.workShares?.get(a.resourceId);
+      const span = Math.max(1, info.duration);
+      const perDay = info.milestone ? 0 : (share !== undefined ? share / span : cal.hoursPerDay * (a.units || 0));
       for (let d = info.start; d <= info.finish; d++) {
         if (!cal.isWorking(d)) continue;
         if (!days.has(d)) days.set(d, []);
-        days.get(d).push({ taskId: t.id, hours: perDay, units: a.units || 0 });
+        days.get(d).push({ taskId: t.id, hours: perDay, units: perDay / cal.hoursPerDay });
       }
     }
   }

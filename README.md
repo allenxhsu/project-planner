@@ -46,12 +46,19 @@ working calendar:
 
 | Input | Effect |
 |---|---|
-| Duration | working days (`5d`, `2w`, `8h`); `0d` is a milestone |
+| Duration | how long the task is **open** — working days (`5d`, `2w`); `0d` is a milestone |
+| Work | how many **hours** are actually spent in that time. Left blank it is duration × hours × units, the full-time assumption; said plainly (`12h`) it is the effort, and the difference is what "a five-day task that is three hours a day" means |
 | Predecessors | `3`, `3FS+2d`, `5SS-1d`, `7FF`, `2SF` — row numbers, link type, lag or lead |
 | A link on a summary | binds every task under it |
 | Constraint | As Soon As Possible, Start/Finish No Earlier/Later Than, Must Start/Finish On |
 | Deadline | a marker on the chart and a check; a missed deadline shows as negative slack |
 | Calendar | working weekdays, hours per day, holidays (Project ▸ Information) |
+
+Work matters beyond the total: it is what the resource checks measure (twelve
+hours over five days is a third of someone's day, not all of it, so it no
+longer reads as over-allocated), and it is what the calendar lays out — twelve
+hours in two-hour blocks is one block a day across the days the task is open,
+not three full days and two idle ones.
 
 A forward pass gives early dates, a backward pass late dates; total slack is
 the difference, and tasks with none are **critical** (red). Work is duration ×
@@ -136,10 +143,11 @@ calendar says *when*: which hours, on which days.
 Nothing here is stored. Blocks are computed from the plan, as the schedule is,
 so logging four hours or moving a task re-lays the week by itself.
 
-**Breaking work up.** A multi-day task — "design the layout" — can be cut into
+**Work breakdown.** A multi-day task — "design the layout" — can be cut into
 subtasks from its details, the calendar or the Task menu. The parts divide its
-duration, inherit its people and its calendar settings, and run one after
-another, so the parent keeps the same span and becomes a summary of them.
+duration **and its hours**, inherit its people and its calendar settings, and
+run one after another, so the parent keeps the same span and becomes a summary
+of them — which is the WBS: the elapsed span at the top, the hours underneath.
 
 ## Connecting Google and Outlook calendars
 
