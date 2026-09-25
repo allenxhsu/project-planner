@@ -12,15 +12,59 @@ import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAUL
 import { planRecords, isCurrentWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
-import { weekStart, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, makeCalendar } from '../model/calendar.js';
+import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu } from './dialog.js';
 
-/** Which week is on screen, as a day number inside it. */
+/**
+ * How much of the calendar is on screen.
+ *
+ * A day for the hour-by-hour of it, the working week for the ordinary answer,
+ * the whole week when the weekend is being worked, and a month to see the
+ * shape of it. The first three are the same hour grid over a different set of
+ * columns; a month is a different drawing, because thirty days of hours is
+ * not something anyone reads.
+ */
+export const RANGES = {
+  day: { label: 'Day', step: 1, unit: 'day' },
+  work: { label: 'Work week', step: 7, unit: 'week' },
+  week: { label: 'Week', step: 7, unit: 'week' },
+  month: { label: 'Month', step: 1, unit: 'month' },
+};
+export const rangeOf = () => (RANGES[store.ui.calendarRange] ? store.ui.calendarRange : 'work');
+
+/** Which day is on screen, or a day inside the week or month that is. */
 let anchor = null;
 export function goToWeek(day) { anchor = day; set({}); }
 export const showThisWeek = () => goToWeek(toDay(today()));
-export const shiftWeek = (weeks) => goToWeek((anchor ?? toDay(today())) + weeks * 7);
+/** Move by whatever the current range is: a day, a week, or a month. */
+export const shiftWeek = (steps) => {
+  const at = anchor ?? toDay(today());
+  const range = RANGES[rangeOf()];
+  goToWeek(range.unit === 'month' ? addMonths(at, steps) : at + steps * range.step);
+};
+/** The days on screen, and where they start, for the range in force. */
+export function daysOnScreen(project) {
+  const at = anchor ?? toDay(today());
+  const range = rangeOf();
+  if (range === 'day') return { days: [at], start: at };
+  if (range === 'month') {
+    const first = monthStart(at);
+    const gridStart = weekStart(first);
+    const days = [];
+    // Six rows always, so the grid does not change height from month to month.
+    for (let d = gridStart; d < gridStart + 42; d++) days.push(d);
+    return { days, start: first, gridStart };
+  }
+  const start = weekStart(at);
+  const days = [];
+  for (let d = start; d < start + 7; d++) days.push(d);
+  if (range === 'week') return { days, start };
+  // The working week is the plan's own idea of one, not Monday to Friday by decree.
+  const cal = makeCalendar(project.calendar);
+  const working = days.filter((d) => cal.isWorking(d));
+  return { days: working.length ? working : days, start };
+}
 
 const HOUR_H = 46;
 
@@ -132,7 +176,12 @@ export function renderCalendar(root) {
   if (!loadedPlans) void reloadCalendarPlans();
   // The open plan comes from the store, the rest from the shelf: one calendar
   // over everything, because the hours of a week are shared by all of it.
-  const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others)];
+  // The open plan comes from the store and must not also arrive from the shelf.
+  // The shelf list is filtered when it is read, but opening a different plan
+  // does not re-read it, so the newly opened plan would still be in there —
+  // and every one of its tasks would be booked twice, which looks like a task
+  // taking twice the time it asked for.
+  const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
   const all = planBlocksAcross(entries);
   // Whose week this is, by name — the same person is a different id in each plan.
   const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
@@ -173,12 +222,10 @@ export function renderCalendar(root) {
     return;
   }
 
-  const start = weekStart(anchor ?? toDay(today()));
-  const days = [];
-  for (let d = start; d < start + 7; d++) days.push(d);
-  const cal = makeCalendar(project.calendar);
-  const workDays = days.filter((d) => cal.isWorking(d));
-  const columns = workDays.length ? workDays : days;
+  const range = rangeOf();
+  const screen = daysOnScreen(project);
+  if (range === 'month') { renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount }); return; }
+  const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
   const base = { ...DEFAULT_AGENDA, ...(project.agenda || {}) };
@@ -273,4 +320,88 @@ export function renderCalendar(root) {
         ? 'One task asks for blocks longer than the hours it is allowed — widen its window, or use a smaller block.'
         : 'There are more hours of work than there are working hours to put them in.' })));
   }
+}
+
+
+/**
+ * A month: one cell a day, each listing what is on it.
+ *
+ * Thirty days of an hour grid is unreadable and mostly empty, so a month shows
+ * what a month is for — which days are heavy, which are free, what is on each
+ * one. A cell says the hours it holds, lists its blocks in order, and clicking
+ * one goes to that day.
+ */
+function renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount }) {
+  const { ui } = store;
+  const todayDay = toDay(today());
+  const monthOf = (d) => fromDay(d).slice(0, 7);
+  const thisMonth = fromDay(screen.start).slice(0, 7);
+  const cal = makeCalendar(project.calendar);
+
+  const byDay = new Map();
+  for (const b of blocks) {
+    if (!byDay.has(b.day)) byDay.set(b.day, []);
+    byDay.get(b.day).push(b);
+  }
+  const meetingsByDay = new Map();
+  for (const m of (meetings || [])) {
+    if (!meetingsByDay.has(m.day)) meetingsByDay.set(m.day, []);
+    meetingsByDay.get(m.day).push(m);
+  }
+
+  const head = el('div', { class: 'cal-month-head' });
+  for (let i = 0; i < 7; i++) {
+    head.append(el('div', { class: 'cal-col-head' },
+      el('span', { class: 'sc-label', text: WEEKDAY_NAMES[(i + 1) % 7].slice(0, 3) })));
+  }
+  pane.append(el('div', { class: 'cal-month-title sc-display', text: `${MONTH_NAMES[+thisMonth.slice(5, 7) - 1]} ${thisMonth.slice(0, 4)}` }));
+  pane.append(head);
+
+  const grid = el('div', { class: 'cal-month' });
+  for (const d of screen.days) {
+    const mine = (byDay.get(d) || []).sort((a, b) => a.start - b.start);
+    const meets = (meetingsByDay.get(d) || []).sort((a, b) => a.start - b.start);
+    const hours = mine.reduce((n, b) => n + b.minutes, 0) / 60;
+    const outside = monthOf(d) !== thisMonth;
+    const cell = el('div', {
+      class: `cal-month-cell${d === todayDay ? ' is-today' : ''}${outside ? ' is-outside' : ''}${cal.isWorking(d) ? '' : ' is-off'}`,
+      ondblclick: () => { goToWeek(d); set({ calendarRange: 'day' }); },
+    },
+      el('div', { class: 'cal-month-day' },
+        el('span', { class: 'sc-mono', text: String(+fromDay(d).slice(8, 10)) }),
+        hours ? el('span', { class: 'sc-faint sc-mono small', text: `${Math.round(hours * 10) / 10}h` }) : null));
+
+    for (const m of meets.slice(0, 2)) {
+      cell.append(el('div', { class: 'cal-month-item is-meeting', title: `${m.title}\n${m.allDay ? 'All day' : formatClock(m.start)}`, text: m.allDay ? m.title : `${formatClock(m.start)} ${m.title}` }));
+    }
+    const room = Math.max(1, 4 - meets.slice(0, 2).length);
+    for (const b of mine.slice(0, room)) {
+      const entry = entries.find((e) => e.project.id === b.planId) || entries[0];
+      const t = entry?.project.tasks.find((x) => x.id === b.taskId);
+      if (!t) continue;
+      const person = whoOf(entries, b);
+      const colour = personColour(person.names[0] || 'unassigned');
+      const foreign = b.planId !== project.id;
+      cell.append(el('div', {
+        class: `cal-month-item${b.critical ? ' is-critical' : ''}`,
+        style: { background: colour.fill, borderLeftColor: colour.line },
+        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h`,
+        onclick: (e) => { e.stopPropagation(); if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); set({ rightOpen: true, rightTab: 'task' }); },
+      },
+        el('span', { class: 'cal-month-time sc-mono', text: formatClock(b.start) }),
+        el('span', { class: 'cal-month-name', text: t.name }),
+        person.initials && !who ? el('span', { class: 'cal-who', text: person.initials }) : null));
+    }
+    const hidden = mine.length + meets.length - Math.min(mine.length, room) - Math.min(meets.length, 2);
+    if (hidden > 0) {
+      cell.append(el('button', {
+        class: 'cal-month-more sc-button sc-button--ghost sc-button--sm',
+        text: `+${hidden} more`,
+        onclick: (e) => { e.stopPropagation(); goToWeek(d); set({ calendarRange: 'day' }); },
+      }));
+    }
+    grid.append(cell);
+  }
+  pane.append(grid);
+  void planCount;
 }

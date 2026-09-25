@@ -919,3 +919,29 @@ test('the day’s limit is shared: two people on one task each spend the same da
   }
   assert.ok([...annMinutes.values()].every((m) => m <= 240), 'a shared block counts against both their days');
 });
+
+test('one plan, once: the same plan given twice does not book its hours twice', async () => {
+  const { planBlocksAcross } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  const t1 = task(p, 'Download the USB item', 1);
+  assign(p, t1.id, r.id, 1);
+  setTaskField(p, t1.id, 'work', 1);
+  setTaskField(p, t1.id, 'calendarShow', true);
+  setTaskField(p, t1.id, 'blockHours', 1);
+
+  const s = computeSchedule(p);
+  const once = planBlocksAcross([{ project: p, schedule: s }]);
+  assert.equal(once.blocks.length, 1, 'an hour of work is one hour-long block');
+
+  // The open plan comes from the store and its own record is on the shelf. If
+  // both reach the calendar, the task looks like it takes twice as long.
+  const twice = planBlocksAcross([{ project: p, schedule: s }, { project: p, schedule: s }]);
+  assert.equal(twice.blocks.length, 1, 'the same plan twice is still one plan');
+  assert.deepEqual(twice.blocks.map((b) => [b.dateIso, b.start, b.minutes]), once.blocks.map((b) => [b.dateIso, b.start, b.minutes]));
+
+  // A copy of the plan under its own id is a different plan, and does count.
+  const copy = { ...p, id: 'plan_copy', name: 'Copy' };
+  const both = planBlocksAcross([{ project: p, schedule: s }, { project: copy, schedule: computeSchedule(copy) }]);
+  assert.equal(both.blocks.length, 2, 'two real plans are two bookings');
+});

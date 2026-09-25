@@ -43,6 +43,7 @@ export const store = {
     kanbanGroup: 'stage',   // kanban: 'stage' | 'status' | 'resource'
     calendarWho: '',        // calendar: '' is everyone, otherwise a person key
     calendarScope: 'all',   // calendar: 'all' plans, or 'plan' for the open one
+    calendarRange: 'work',  // calendar: 'day', 'work' week, whole 'week', or 'month'
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     bottomTab: 'checks',

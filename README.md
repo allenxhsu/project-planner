@@ -84,7 +84,7 @@ the duration.
 | People | everyone in the shared directory: hours, tasks and plans across the whole shelf, the rate that every plan uses, and the profile summary from Profiler |
 | Projects | every plan in hand as a card, with finished ones folded into the archive: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
-| Calendar | the week, with each task's hours laid into blocks. A task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
+| Calendar | a day, the working week, the whole week including the weekend, or a month. Each task's hours are laid into blocks: a task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
 | Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
 | All Tasks | every task in every plan, filtered by late / unfinished / critical / unassigned, searchable, and a row opens the plan it belongs to |
 
@@ -207,6 +207,17 @@ Nothing is read out of Profiler's storage and nothing is written back to it.
 On the Portal origin, where every app is served from one place, `Profiler ↗`
 goes to `/profiler/`; elsewhere it falls back to the `profiler://` scheme the
 Mac app registers.
+
+### How much of it is on screen
+
+Four ranges, from the toolbar or the View menu. **Day** is one day hour by
+hour. **Work week** is the plan's own working days, which is not Monday to
+Friday by decree — it follows the working days in Project information.
+**Week** is all seven, for when the weekend is being worked. **Month** is a
+different drawing: a cell a day, each listing what is on it with the hours it
+holds, because thirty days of an hour grid is unreadable. Double-clicking a
+day, or its "+n more", opens that day. The arrows move by whatever is on
+screen: a day, a week or a month.
 
 ### Why a week is not full
 

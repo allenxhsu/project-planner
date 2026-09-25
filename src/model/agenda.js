@@ -169,6 +169,16 @@ export function planBlocks(project, schedule, opts = {}) {
  * @param {Array<{project: object, schedule: object}>} entries
  */
 export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
+  // One plan, once. The same plan arriving twice — the open copy and its own
+  // record from the shelf — would book every hour of it twice over.
+  const seenPlans = new Set();
+  entries = entries.filter(({ project }) => {
+    const key = project?.id;
+    if (!key) return true;
+    if (seenPlans.has(key)) return false;
+    seenPlans.add(key);
+    return true;
+  });
   const first = entries[0]?.project;
   const cal = makeCalendar(first?.calendar);
   const blocks = [];

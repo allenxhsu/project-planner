@@ -230,6 +230,21 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .person-plans { display: flex; gap: 4px; flex-wrap: wrap; }
 .person-plan { --tint: var(--sc-text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.cal-month-title { margin: var(--sc-space-2) 0 6px; font-size: 15px; }
+.cal-month-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; }
+.cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(92px, auto); gap: 1px; background: var(--sc-line); border: 1px solid var(--sc-line); }
+.cal-month-cell { display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--sc-bg-1); overflow: hidden; }
+.cal-month-cell.is-outside { opacity: 0.45; }
+.cal-month-cell.is-off { background: var(--sc-bg-2); }
+.cal-month-cell.is-today { box-shadow: inset 0 0 0 1px var(--sc-app); }
+.cal-month-day { display: flex; align-items: baseline; justify-content: space-between; font-size: 11.5px; }
+.cal-month-item { display: flex; align-items: baseline; gap: 4px; min-width: 0; padding: 1px 4px; border-left: 2px solid var(--sc-line); font-size: 11px; line-height: 1.35; cursor: pointer; overflow: hidden; white-space: nowrap; }
+.cal-month-item.is-meeting { background: none; border-left-color: var(--sc-text-3); color: var(--sc-text-3); font-style: italic; }
+.cal-month-item.is-critical { border-left-color: var(--sc-danger); }
+.cal-month-time { flex: none; opacity: 0.75; font-size: 10px; }
+.cal-month-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cal-month-more { align-self: flex-start; padding: 0 4px; font-size: 10.5px; }
+
 /* ---------- urgency ---------- */
 .sc-pill.urg-now { --tint: var(--sc-danger); font-weight: 700; }
 .sc-pill.urg-high { --tint: var(--sc-warning); }

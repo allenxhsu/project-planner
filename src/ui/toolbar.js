@@ -15,7 +15,7 @@ import { reloadPlans } from './projects.js';
 import { reloadPeople } from './people.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
-import { shiftWeek, showThisWeek, reloadCalendarPlans } from './calendar.js';
+import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
 import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -255,6 +255,7 @@ const MENUS = {
   ],
   View: () => [
     ...Object.entries(VIEWS).map(([id, v]) => ({ label: v.label, checked: store.ui.view === id, run: run(`view.${id}`) })), '-',
+    ...(store.ui.view === 'calendar' ? [{ note: 'Calendar shows' }, ...Object.entries(RANGES).map(([id, r]) => ({ label: `  ${r.label}`, checked: rangeOf() === id, run: () => set({ calendarRange: id }) })), '-'] : []),
     { label: 'Zoom in', key: '⌘+', run: run('view.zoomIn') }, { label: 'Zoom out', key: '⌘−', run: run('view.zoomOut') }, { label: 'Go to today', key: '⌘0', run: run('view.today') }, '-',
     { label: 'Expand all', run: run('view.expandAll') }, { label: 'Collapse all', run: run('view.collapseAll') }, '-',
     { label: 'Details panel', checked: store.ui.rightOpen, run: run('view.inspector') }, { label: 'Checks panel', checked: store.ui.bottomOpen, run: run('view.checks') }, '-',
@@ -336,7 +337,10 @@ export function renderToolbar(root) {
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'calendar') {
-    root.append(b('‹ Week', 'The week before', () => shiftWeek(-1)), b('Today', 'Back to this week', showThisWeek), b('Week ›', 'The week after', () => shiftWeek(1)), sep(),
+    const unit = RANGES[rangeOf()].unit;
+    const Unit = unit[0].toUpperCase() + unit.slice(1);
+    root.append(b(`‹ ${Unit}`, `The ${unit} before`, () => shiftWeek(-1)), b('Today', 'Back to today', showThisWeek), b(`${Unit} ›`, `The ${unit} after`, () => shiftWeek(1)), sep(),
+      ...Object.entries(RANGES).map(([id, r]) => b(r.label, `Show one ${r.unit === 'week' && id === 'work' ? 'working week' : r.unit}`, () => set({ calendarRange: id }), { on: rangeOf() === id })), sep(),
       b('↻ Plans', 'Re-read every plan on the shelf', () => { void reloadCalendarPlans(); }),
       b('+ Task', 'New task below the selection', act.newTaskBelow),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
