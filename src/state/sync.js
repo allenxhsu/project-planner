@@ -13,6 +13,7 @@
 import {
   SyncEngine, HttpTransport, SyncedDocument, LocalStore, IndexedDbStore,
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
+  portalApp, portalSession, portalRemote,
 } from '../../sync-kit/js/index.js';
 import { store, set, loadProject, markSaved, subscribe, revision, tryCommit } from './store.js';
 import { uid } from '../util.js';
@@ -23,6 +24,8 @@ import { parseTime } from '../model/agenda.js';
 import { readProfile } from '../io/profile.js';
 
 export const WORKSPACE = 'project';
+/** This app's id on the Portal, which is the same word. */
+export const APP_ID = 'project';
 const SETTINGS_KEY = 'project-planner:sync';
 const DEVICE_KEY = 'project-planner:deviceId';
 /** How often a configured, enabled sync runs by itself. */
@@ -40,6 +43,13 @@ let commitTimer = null;
 let autosaveTimer = null;
 let unlisten = null;
 let settings = { url: '', token: '', enabled: false };
+/**
+ * Served by the Portal, this is the workspace on the origin the page is
+ * already on — no URL to paste and no token to keep, because the session
+ * cookie is the credential. Null anywhere else, and then the pasted settings
+ * are what sync runs on, exactly as before.
+ */
+let portal = null;
 /** True while a pulled plan is being loaded, so the load is not sent back out. */
 let adopting = false;
 /** The plan the record store currently describes; a different plan starts a new document. */
@@ -61,7 +71,9 @@ export function deviceId() {
 
 export const getSettings = () => ({ ...settings });
 export const syncStatus = () => (engine ? engine.status : lastStatus);
-export const syncConfigured = () => !!(settings.url && settings.enabled);
+export const syncConfigured = () => !!(portal || (settings.url && settings.enabled));
+/** True when the Portal is providing the server, so Settings has nothing to ask for. */
+export const inPortal = () => !!portal;
 
 /**
  * IndexedDB where there is one, `localStorage` where there is not. A plan's
@@ -83,6 +95,12 @@ async function openStore() {
 /** Call once, after the first plan is loaded. */
 export async function initSync() {
   try { settings = { ...settings, ...JSON.parse(read(SETTINGS_KEY, '{}')) }; } catch { /* keep defaults */ }
+  // On the Portal the server is the origin this page came from, and the
+  // signed-in session is the credential. Off it this is null and nothing
+  // changes.
+  if (portalApp() === APP_ID) {
+    try { portal = portalRemote(APP_ID, await portalSession()); } catch { portal = null; }
+  }
   recordStore = await openStore();
   await openDocument();
 
@@ -163,10 +181,12 @@ function rebuild() {
   clearInterval(timer);
   timer = null;
   engine = null;
-  if (!recordStore || !settings.url) { announce(); return; }
-  const transport = new HttpTransport({ baseUrl: settings.url, token: settings.token, label: WORKSPACE });
+  let transport = null;
+  if (portal) transport = new HttpTransport({ baseUrl: portal.baseUrl, label: portal.workspace });
+  else if (settings.url) transport = new HttpTransport({ baseUrl: settings.url, token: settings.token, label: WORKSPACE });
+  if (!recordStore || !transport) { announce(); return; }
   engine = new SyncEngine(recordStore, transport, deviceId());
-  if (settings.enabled) timer = setInterval(() => { void syncNow(); }, INTERVAL_MS);
+  if (syncConfigured()) timer = setInterval(() => { void syncNow(); }, INTERVAL_MS);
   announce();
 }
 
@@ -211,8 +231,9 @@ export function syncAfterSave() { if (syncConfigured()) void syncNow(); }
  * where a plan lives; `Save As…` is for taking a copy away to a file.
  */
 export async function saveToCloud() {
-  if (!settings.url) return { ok: false, reason: 'not-configured' };
-  if (!settings.enabled) { await applySettings({ ...settings, enabled: true }); }
+  // On the Portal there is nothing to configure: the origin is the server.
+  if (!portal && !settings.url) return { ok: false, reason: 'not-configured' };
+  if (!portal && !settings.enabled) { await applySettings({ ...settings, enabled: true }); }
   await commit();
   const result = await syncNow();
   if (!result) return { ok: false, reason: 'failed', error: syncStatus().lastError };

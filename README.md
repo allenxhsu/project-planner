@@ -169,6 +169,17 @@ duration **and its hours**, inherit its people and its calendar settings, and
 run one after another, so the parent keeps the same span and becomes a summary
 of them — which is the WBS: the elapsed span at the top, the hours underneath.
 
+## On the Toolkit Portal
+
+Served at `/project/` on the Portal's origin, the app configures its own sync:
+the server is the origin the page came from, the workspace is the one the
+Portal says this app has, and the signed-in session is the credential. There
+is no URL to paste and no token to keep, and Settings says so rather than
+offering fields that would let you configure your way out of a working setup.
+
+Off the Portal — a local copy, the Mac app — nothing changes: the URL and
+token in Settings are what sync runs on, exactly as before.
+
 ## Workspaces
 
 Work, personal and school are different lives that happen to use the same

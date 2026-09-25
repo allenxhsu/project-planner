@@ -6,7 +6,7 @@
 
 import { el } from '../util.js';
 import { open, foot, button } from './dialog.js';
-import { getSettings, applySettings, syncNow, syncStatus, deviceId, WORKSPACE } from '../state/sync.js';
+import { getSettings, applySettings, syncNow, syncStatus, deviceId, inPortal, WORKSPACE } from '../state/sync.js';
 import { SYNC_EVENTS } from '../../sync-kit/js/events.js';
 import { store } from '../state/store.js';
 
@@ -38,6 +38,22 @@ export function settingsDialog() {
       status.textContent = statusText(syncStatus());
     };
     const done = () => { window.removeEventListener(SYNC_EVENTS.status, onStatus); close(null); };
+
+    // Served by the Portal, there is nothing to fill in: the server is the
+    // origin this page came from and the session is the credential. Showing a
+    // URL and a token there would invite someone to configure their way out of
+    // a working setup.
+    if (inPortal()) {
+      return [
+        el('div', { class: 'sc-section-title', text: 'Sync' }),
+        el('p', { class: 'sc-muted small', text: `This copy is served by the Toolkit at ${location.host}, so it syncs with that server as the account you are signed in as. There is no URL to paste and no token to keep.` }),
+        status,
+        el('div', { class: 'sc-faint field-hint', text: `This device is ${deviceId()} · plan ${store.project.id}` }),
+        foot(
+          button('Sync now', async () => { await syncNow(); status.textContent = statusText(syncStatus()); }),
+          button('Close', done)),
+      ];
+    }
 
     return [
       el('div', { class: 'sc-section-title', text: 'Sync' }),

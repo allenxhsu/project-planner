@@ -17,7 +17,7 @@ import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
-import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
+import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -44,7 +44,11 @@ export async function openSample() { if (await guardDirty()) loadProject(sampleP
  */
 export async function saveProject() {
   const result = await saveToCloud();
-  if (result.ok) { act.hint(`Saved to ${new URL(getSettings().url).host}.`); return; }
+  if (result.ok) {
+    const where = inPortal() ? location.host : (getSettings().url ? new URL(getSettings().url).host : 'the cloud');
+    act.hint(`Saved to ${where}.`);
+    return;
+  }
   if (result.reason === 'failed') { act.hint(`Could not save to the cloud: ${result.error || 'the server did not answer'}.`); return; }
   const set_up = await confirmDialog('No cloud to save to yet',
     'Save keeps this plan on a sync server, so it is on every device you use. Set one up now? (Save As… writes a file to this computer instead.)',
