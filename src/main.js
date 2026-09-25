@@ -20,7 +20,7 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, APP_ID } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 
@@ -147,6 +147,7 @@ initSync()
         try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ }
       }
     }
+    void storeCounts();
     return Promise.all([reloadPlans(), refreshWorkspaceLabel()]);
   })
   .catch((err) => console.error('sync could not start', err));

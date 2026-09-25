@@ -17,7 +17,7 @@ import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
-import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
+import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, persistence, lastCounts, storeCounts, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -518,13 +518,62 @@ export function renderStatus(root) {
   const errs = issues.filter((i) => i.level === 'error').length, warns = issues.filter((i) => i.level === 'warning').length;
   root.append(el('span', { class: errs ? 'warn' : '', text: errs || warns ? `${errs ? `${errs} error${errs > 1 ? 's' : ''}` : ''}${errs && warns ? ', ' : ''}${warns ? `${warns} warning${warns > 1 ? 's' : ''}` : ''}` : 'no issues' }));
   root.append(el('span', { class: ui.dirty ? 'warn' : 'ok', text: ui.dirty ? '● unsaved' : '● saved' }));
-  if (syncConfigured()) {
-    const s = syncStatus();
-    const glyph = s.phase === 'syncing' ? '⟳' : s.phase === 'error' ? '⚠' : '⇅';
-    root.append(el('button', {
-      class: `link status-sync${s.phase === 'error' ? ' warn' : ''}`, text: `${glyph} sync`,
-      title: s.phase === 'error' ? `Last sync failed: ${s.lastError}` : s.lastSyncAt ? `Last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}` : 'Not synced yet',
-      onclick: settingsDialog,
-    }));
-  }
+  root.append(syncChip());
 }
+
+/**
+ * The sync readout: where this copy stands, in one chip.
+ *
+ * Four things decide whether the data is safe, and each was somewhere else or
+ * nowhere: is sync on at all, did the last run work, how many records are here
+ * against how many the server holds, and has the browser agreed to keep the
+ * local copy. A chip that only appeared when sync was configured could never
+ * say the most important thing — that it is not.
+ */
+function syncChip() {
+  const s = syncStatus();
+  const { local, server } = lastCounts();
+  const p = persistence();
+  const where = inPortal() ? location.host : (getSettings().url ? hostOf(getSettings().url) : null);
+
+  if (!syncConfigured()) {
+    return el('button', {
+      class: 'link status-sync warn', text: '○ not syncing',
+      title: [
+        'This copy is on this device only.',
+        local ? `${local} record${local === 1 ? '' : 's'} here, none on a server.` : '',
+        p.state === 'persisted' ? 'The browser has agreed to keep it.' : 'The browser has not agreed to keep it, so it could be cleared.',
+        '',
+        'Click to set up sync.',
+      ].filter(Boolean).join('\n'),
+      onclick: settingsDialog,
+    });
+  }
+
+  const glyph = s.phase === 'syncing' ? '⟳' : s.phase === 'error' ? '⚠' : '⇅';
+  const when = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+  const text = s.phase === 'syncing' ? `${glyph} syncing…`
+    : s.phase === 'error' ? `${glyph} sync failed`
+      : when ? `${glyph} ${when}` : `${glyph} not synced yet`;
+  const agree = server === null ? null : (server === local);
+
+  return el('button', {
+    class: `link status-sync${s.phase === 'error' ? ' warn' : agree === false ? ' pending' : ' ok'}`,
+    text: `${text}${server === null ? '' : `  ${local}/${server}`}`,
+    title: [
+      s.phase === 'error' ? `The last sync failed: ${s.lastError || 'no reason given'}` : null,
+      where ? `Syncing with ${where}${inPortal() ? ' as the account you are signed in as' : ''}.` : null,
+      when ? `Last sync at ${when}.` : 'No sync has finished yet.',
+      server === null ? `${local} record${local === 1 ? '' : 's'} here; the server was not reachable when last asked.`
+        : agree ? `${local} records here and ${server} on the server — the same.`
+          : `${local} here, ${server} on the server. They differ until the next sync finishes.`,
+      p.state === 'persisted' ? 'The browser keeps this copy on the device.'
+        : p.state === 'at-risk' ? 'The browser has not agreed to keep the local copy: install the app to fix that.' : null,
+      '',
+      'Click for sync settings.',
+    ].filter(Boolean).join('\n'),
+    onclick: settingsDialog,
+  });
+}
+
+const hostOf = (url) => { try { return new URL(url).host; } catch { return url; } };

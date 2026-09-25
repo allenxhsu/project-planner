@@ -150,6 +150,10 @@ export async function importStore(text) {
   return { added, replaced, kept };
 }
 
+/** The last counts read, for a readout that renders synchronously. */
+let counts = { local: 0, server: null, at: 0 };
+export const lastCounts = () => ({ ...counts });
+
 /** How many records are here, and how many the server says it holds. */
 export async function storeCounts() {
   const local = recordStore ? (await recordStore.all()).length : 0;
@@ -167,6 +171,8 @@ export async function storeCounts() {
       }
     } catch { server = null; }
   }
+  counts = { local, server, at: Date.now() };
+  announce();
   return { local, server };
 }
 
@@ -368,6 +374,9 @@ export async function syncNow() {
     const result = await engine.sync();
     if (result.applied.length) await adopt(result.applied);
     lastStatus = { ...engine.status };
+    // The readout says how many records are here and how many are there; a
+    // sync is exactly when that can have changed.
+    void storeCounts();
     return result;
   } catch (err) {
     lastStatus = { ...engine.status };

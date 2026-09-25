@@ -189,6 +189,13 @@ Beside that are the two counts that answer "am I safe in both places?": how
 many records are here, and how many the server says it holds, read from
 `/sync/health`.
 
+The status bar's sync chip says where this copy stands in one glance: the time
+of the last sync, the record count here against the count on the server, and a
+colour — green when the two agree, amber while they do not, red when the last
+sync failed. When sync is off it says **not syncing** rather than disappearing,
+because "this copy is on this device only" is the most important thing it can
+tell you. Hovering gives the whole story and clicking opens the settings.
+
 **File ▸ Export everything** writes every record this app holds — plans,
 people, time blocks, workspaces — tombstones included, as one JSON file.
 Tombstones are in it deliberately: a backup without them would resurrect
