@@ -15,7 +15,7 @@ import {
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote,
 } from '../../sync-kit/js/index.js';
-import { store, set, loadProject, markSaved, subscribe, revision, tryCommit } from './store.js';
+import { store, set, loadProject, markSaved, subscribe, revision, tryCommit, setAutosaveSink, readAutosave, clearLocalAutosave, AUTOSAVE_STORAGE_KEY } from './store.js';
 import { uid } from '../util.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
@@ -93,6 +93,157 @@ async function openStore() {
 }
 
 /** Call once, after the first plan is loaded. */
+// ------------------------------------------------------------ whole-store export
+//
+// A copy that can live anywhere without the server: every record this app
+// holds, tombstones included, in one file. Tombstones matter — a backup that
+// dropped them would resurrect everything anyone had deleted the moment it
+// was imported.
+
+export const STORE_EXPORT_FORMAT = 'project-planner.store';
+
+/** Everything in the store, as one object. */
+export async function exportStore() {
+  if (!recordStore) throw new Error('The store is not open yet.');
+  const records = await recordStore.all();
+  return {
+    format: STORE_EXPORT_FORMAT,
+    version: 1,
+    workspace: WORKSPACE,
+    exportedAt: new Date().toISOString(),
+    device: deviceId(),
+    counts: {
+      total: records.length,
+      live: records.filter((r) => !r.deletedAt).length,
+      deleted: records.filter((r) => r.deletedAt).length,
+    },
+    records,
+  };
+}
+
+/**
+ * Merge a file back in, by the rule sync already uses: the newer `updatedAt`
+ * wins, and a tombstone is as good as a record. Importing is never a delete —
+ * what is here and not in the file is left alone.
+ *
+ * @returns {{ added: number, replaced: number, kept: number }}
+ */
+export async function importStore(text) {
+  if (!recordStore) throw new Error('The store is not open yet.');
+  let doc;
+  try { doc = JSON.parse(text); } catch { throw new Error('That file is not JSON.'); }
+  if (!doc || doc.format !== STORE_EXPORT_FORMAT) {
+    throw new Error(`That is not a ${WORKSPACE} store export — it says its format is "${doc?.format ?? 'nothing'}".`);
+  }
+  const incoming = Array.isArray(doc.records) ? doc.records : [];
+  const here = new Map((await recordStore.all()).map((r) => [r.id, r]));
+  const write = [];
+  let added = 0; let replaced = 0; let kept = 0;
+  for (const r of incoming) {
+    if (!r || typeof r.id !== 'string' || !Number.isFinite(+r.updatedAt)) continue;
+    const mine = here.get(r.id);
+    if (!mine) { write.push(r); added++; continue; }
+    if (+r.updatedAt > +mine.updatedAt) { write.push(r); replaced++; } else kept++;
+  }
+  if (write.length) await recordStore.put(write);
+  if (write.length && syncConfigured()) void syncNow();
+  return { added, replaced, kept };
+}
+
+/** How many records are here, and how many the server says it holds. */
+export async function storeCounts() {
+  const local = recordStore ? (await recordStore.all()).length : 0;
+  let server = null;
+  const base = portal ? portal.baseUrl : settings.url;
+  if (base) {
+    try {
+      const res = await fetch(`${String(base).replace(/\/+$/, '')}/sync/health`, {
+        headers: settings.token && !portal ? { Authorization: `Bearer ${settings.token}` } : {},
+        credentials: portal ? 'include' : 'same-origin',
+      });
+      if (res.ok) {
+        const body = await res.json();
+        server = Number.isFinite(+body?.records) ? +body.records : (Number.isFinite(+body?.count) ? +body.count : null);
+      }
+    } catch { server = null; }
+  }
+  return { local, server };
+}
+
+// ------------------------------------------------------- local persistence
+//
+// "It is in the cloud" is not the same as "it is on this machine", and a
+// browser's storage is not something a browser promises to keep: under
+// pressure it evicts whole origins. `navigator.storage.persist()` asks it not
+// to, and a browser that has seen the app installed, or added to a Home
+// Screen, generally agrees.
+//
+// sync-kit has no persistence module yet, so this is the direct call.
+
+const AUTOSAVE_META = 'autosave';
+let persisted = { state: 'unknown', asked: false };
+
+/** What the browser says about keeping this origin's data. */
+export const persistence = () => ({ ...persisted });
+
+/**
+ * Ask to be kept, and remember the answer. Never awaited by anything that
+ * matters: a browser that takes its time, or has no opinion, must not hold up
+ * a plan appearing on screen.
+ */
+export async function requestPersistence() {
+  const api = globalThis.navigator?.storage;
+  if (!api?.persist) { persisted = { state: 'unsupported', asked: true }; announce(); return persisted; }
+  try {
+    const already = api.persisted ? await api.persisted() : false;
+    const granted = already || await api.persist();
+    persisted = { state: granted ? 'persisted' : 'at-risk', asked: true };
+  } catch {
+    persisted = { state: 'unknown', asked: true };
+  }
+  announce();
+  return persisted;
+}
+
+/** How much this origin is using, when the browser will say. */
+export async function storageEstimate() {
+  try { return await globalThis.navigator?.storage?.estimate?.() ?? null; } catch { return null; }
+}
+
+/**
+ * Move the autosave out of localStorage.
+ *
+ * The old key is left where it is until the new copy has been written *and*
+ * read back, because the one thing worse than an autosave in the wrong place
+ * is no autosave at all.
+ */
+async function adoptAutosave() {
+  if (!recordStore?.setMeta) return;
+  setAutosaveSink(async (plan) => {
+    try { await recordStore.setMeta(AUTOSAVE_META, JSON.stringify(plan)); } catch { /* a full disk is not worth a dialog */ }
+  });
+  const old = readAutosave();
+  if (!old) return;
+  const here = await recordStore.meta(AUTOSAVE_META);
+  if (!here) {
+    await recordStore.setMeta(AUTOSAVE_META, JSON.stringify(old));
+    const back = await recordStore.meta(AUTOSAVE_META);
+    if (!back) return;                       // not written: keep the old one
+  }
+  clearLocalAutosave();
+}
+
+/** The autosave, wherever it now lives. */
+export async function readStoredAutosave() {
+  if (recordStore?.meta) {
+    try {
+      const raw = await recordStore.meta(AUTOSAVE_META);
+      if (raw) return JSON.parse(raw);
+    } catch { /* fall through to the old place */ }
+  }
+  return readAutosave();
+}
+
 export async function initSync() {
   try { settings = { ...settings, ...JSON.parse(read(SETTINGS_KEY, '{}')) }; } catch { /* keep defaults */ }
   // On the Portal the server is the origin this page came from, and the
@@ -102,6 +253,9 @@ export async function initSync() {
     try { portal = portalRemote(APP_ID, await portalSession()); } catch { portal = null; }
   }
   recordStore = await openStore();
+  await adoptAutosave();
+  // Asked once a launch, and again whenever sync is switched on.
+  void requestPersistence();
   await openDocument();
 
   // The record store follows the plan: every committed edit, debounced.
@@ -164,6 +318,7 @@ async function commit() {
 
 /** Save new settings and restart. A changed URL clears both cursors: they belong to the old server. */
 export async function applySettings(next) {
+  if (next?.enabled && !settings.enabled) void requestPersistence();
   const urlChanged = (next.url || '').trim() !== settings.url;
   settings = { url: (next.url || '').trim(), token: (next.token || '').trim(), enabled: !!next.enabled };
   write(SETTINGS_KEY, JSON.stringify(settings));

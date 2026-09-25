@@ -17,7 +17,7 @@ import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
-import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
+import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -140,6 +140,46 @@ export async function openFile() {
   input.click();
 }
 
+/**
+ * Every record this app holds, tombstones included, as one file.
+ *
+ * A plan file is one plan. This is the whole shelf — plans, people, time
+ * blocks, workspaces — so a copy can live on a disk, or move to another
+ * browser, without a server in the middle.
+ */
+async function exportEverything() {
+  const doc = await exportStore();
+  downloadText(JSON.stringify(doc, null, 2), `project-planner-${new Date().toISOString().slice(0, 10)}.store.json`, 'application/json');
+  act.hint(`Exported ${doc.counts.total} records (${doc.counts.live} live, ${doc.counts.deleted} deleted).`);
+}
+
+/** Merge one back, by the rule sync already uses: the newer record wins. */
+async function importEverything() {
+  const input = document.getElementById('file-input');
+  const previous = input.accept;
+  input.value = ''; input.accept = '.json,application/json';
+  input.onchange = async () => {
+    input.accept = previous;
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const result = await importStore(await file.text());
+      const { reloadPlans: reload } = await import('./projects.js');
+      await reload();
+      showText('Imported', [
+        `${result.added} record${result.added === 1 ? '' : 's'} added.`,
+        `${result.replaced} replaced by a newer copy.`,
+        `${result.kept} already newer here, so kept.`,
+        '',
+        'Nothing was deleted: what is here and not in the file was left alone.',
+      ].join('\n'));
+    } catch (err) {
+      showText('That file could not be imported', err.message);
+    }
+  };
+  input.click();
+}
+
 const exportXml = () => downloadText(exportMspdi(store.project, store.schedule), `${slugify(store.project.name)}.xml`, 'application/xml');
 const exportCsvFile = () => downloadText(exportCsv(store.project, store.schedule), `${slugify(store.project.name)}-tasks.csv`, 'text/csv');
 const guarded = (fn) => () => Promise.resolve().then(fn).catch((err) => showText('Export failed', err.message));
@@ -192,6 +232,7 @@ const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt
 export const COMMANDS = {
   'file.new': newProject, 'file.open': openFile, 'file.sample': openSample, 'file.save': saveProject, 'file.saveAs': saveProjectAs,
   'file.exportXml': guarded(exportXml), 'file.exportCsv': guarded(exportCsvFile),
+  'file.exportAll': guarded(exportEverything), 'file.importAll': importEverything,
   'file.exportMpx': guarded(() => exportVia('mpx')), 'file.exportXer': guarded(() => exportVia('xer')), 'file.exportPmxml': guarded(() => exportVia('pmxml')), 'file.exportPlanner': guarded(() => exportVia('planner')),
   'edit.undo': undo, 'edit.redo': redo, 'edit.selectAll': act.selectAll, 'edit.delete': () => (['resources', 'usage'].includes(store.ui.view) ? act.deleteResource() : act.deleteSelection()),
   'task.new': act.newTaskBelow, 'task.newAbove': act.newTaskAbove, 'task.milestone': act.newMilestone, 'task.toggleMilestone': act.toggleMilestone,
@@ -235,7 +276,9 @@ const MENUS = {
     { label: 'Export Primavera XER', run: run('file.exportXer') },
     { label: 'Export Primavera PMXML', run: run('file.exportPmxml') },
     { label: 'Export GNOME Planner', run: run('file.exportPlanner') },
-    { label: 'Export task list as CSV', run: run('file.exportCsv') },
+    { label: 'Export task list as CSV', run: run('file.exportCsv') }, '-',
+    { label: 'Export everything (every project, person and setting)…', run: run('file.exportAll') },
+    { label: 'Import everything…', run: run('file.importAll') },
   ],
   Edit: () => [
     { label: `Undo${canUndo() ? ` ${store._undo[store._undo.length - 1].label.toLowerCase()}` : ''}`, key: '⌘Z', disabled: !canUndo(), run: undo },

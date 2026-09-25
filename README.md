@@ -169,6 +169,37 @@ duration **and its hours**, inherit its people and its calendar settings, and
 run one after another, so the parent keeps the same span and becomes a summary
 of them — which is the WBS: the elapsed span at the top, the hours underneath.
 
+## Where the data is
+
+A plan lives in this browser's IndexedDB and, when sync is on, on the server.
+Both halves are the point: the cloud copy is no use on a train, and the local
+copy is no use if the browser throws it away — which browsers do, to origins
+they judge disposable.
+
+So the app asks to be kept, with `navigator.storage.persist()`, on first
+launch and again whenever sync is switched on. It never waits for the answer.
+Sync ▸ On this device reports it:
+
+- **Persisted** — the browser has agreed. The data survives a restart and is
+  not evicted when space runs short.
+- **At risk** — it has not. Install the app from the browser's menu, or on
+  iPhone add it to the Home Screen, and it will be.
+
+Beside that are the two counts that answer "am I safe in both places?": how
+many records are here, and how many the server says it holds, read from
+`/sync/health`.
+
+**File ▸ Export everything** writes every record this app holds — plans,
+people, time blocks, workspaces — tombstones included, as one JSON file.
+Tombstones are in it deliberately: a backup without them would resurrect
+everything anyone had deleted. **File ▸ Import everything** merges one back by
+the rule sync already uses, the newer `updatedAt` winning, and never deletes:
+what is here and not in the file is left alone.
+
+Only settings, the device id, the workspace choice and the theme live in
+localStorage. The autosaved plan used to, and moved to IndexedDB; the old key
+is cleared only after the new copy has been written and read back.
+
 ## On the Toolkit Portal
 
 Served at `/project/` on the Portal's origin, the app configures its own sync:

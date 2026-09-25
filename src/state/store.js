@@ -166,13 +166,32 @@ export function markSaved(fileName) {
 
 // In the macOS app each window is a document and the app saves it; one shared
 // browser autosave would only make windows overwrite each other.
+//
+// The autosave is a whole plan, which is a record's worth of data, and
+// localStorage is neither large nor something a browser promises to keep. It
+// belongs in the same IndexedDB the records live in. The store is opened
+// asynchronously by state/sync.js, so it hands its writer in here once it is
+// up; until then — the first moments of a cold start — localStorage is still
+// written, because an autosave that waits for a database is an autosave that
+// is not there when the tab is closed.
+let autosaveSink = null;
+export function setAutosaveSink(fn) { autosaveSink = fn; }
+
 function autosave() {
   if (hosted) return;
-  try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(store.project)); } catch { /* private mode, quota, or no localStorage */ }
+  const plan = store.project;
+  if (autosaveSink) { void autosaveSink(plan); return; }
+  try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(plan)); } catch { /* private mode, quota, or no localStorage */ }
 }
+
+/** The autosave still in localStorage, from before it moved or before the store opened. */
 export function readAutosave() {
   if (hosted) return null;
   try { return JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch { return null; }
 }
+export function clearLocalAutosave() {
+  try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* nothing to remove */ }
+}
+export const AUTOSAVE_STORAGE_KEY = AUTOSAVE_KEY;
 
 recompute();

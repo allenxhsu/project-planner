@@ -20,7 +20,7 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings, APP_ID } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 
@@ -119,6 +119,9 @@ initHosting();
 window.addEventListener(SYNC_EVENTS.status, () => renderStatus($('statusbar')));
 
 if (!hosted) {
+  // Whatever localStorage still holds gets the first plan on screen without a
+  // wait; the store's own copy, which is the newer one once the move has
+  // happened, replaces it as soon as the database is open.
   const saved = readAutosave();
   if (saved) {
     try { loadProject(parse(JSON.stringify(saved)).project); } catch { loadProject(sampleProject()); }
@@ -134,4 +137,16 @@ function mountPortalBar() {
 }
 mountPortalBar();
 
-initSync().then(() => Promise.all([reloadPlans(), refreshWorkspaceLabel()])).catch((err) => console.error('sync could not start', err));
+initSync()
+  .then(async () => {
+    if (!hosted && !store.ui.dirty && store.project.tasks.length === 0) {
+      // Nothing typed yet: if the store holds a newer autosave than the one
+      // localStorage had, that is the plan to show.
+      const stored = await readStoredAutosave();
+      if (stored && stored.id !== store.project.id) {
+        try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ }
+      }
+    }
+    return Promise.all([reloadPlans(), refreshWorkspaceLabel()]);
+  })
+  .catch((err) => console.error('sync could not start', err));
