@@ -141,6 +141,32 @@ subtasks from its details, the calendar or the Task menu. The parts divide its
 duration, inherit its people and its calendar settings, and run one after
 another, so the parent keeps the same span and becomes a summary of them.
 
+## Connecting Google and Outlook calendars
+
+Real meetings become busy hours the calendar schedules around, so a stand-up
+at 09:15 pushes the morning's work to 09:30 rather than being double-booked.
+
+This reads a calendar's **private iCalendar address**, which both providers
+hand out and neither requires an OAuth app for:
+
+- **Google Calendar** — Settings ▸ *Settings for my calendars* ▸ pick the
+  calendar ▸ *Integrate calendar* ▸ **Secret address in iCal format**.
+- **Outlook** — Settings ▸ Calendar ▸ *Shared calendars* ▸ **Publish a
+  calendar**, choose *Can view all details*, and copy the **ICS** link.
+
+Paste it into Project ▸ *Connected calendars* ▸ Connect a calendar, and say
+whose hours it is. Repeating events are expanded (daily, weekly with named
+days, monthly, yearly, with `INTERVAL`, `COUNT` and `UNTIL`); anything marked
+*free*, and anything cancelled, is ignored.
+
+Two things to know. The page fetches through `serve.sh`, because Google and
+Outlook serve those addresses without CORS headers and no browser can read one
+directly — so **refresh in a browser tab**; the events travel with the plan, so
+the Mac app shows them without fetching anything. And this is read-only: it
+takes your meetings into account, it does not write tasks back into Google or
+Outlook. Writing back, and live two-way sync, need an OAuth client registered
+in your own Google Cloud and Microsoft Entra consoles.
+
 ## Stages, and time actually spent
 
 Two things the schedule does not have, because they are about how a team works

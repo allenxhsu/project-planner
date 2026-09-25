@@ -226,6 +226,11 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cal-col { flex: 1; min-width: 120px; position: relative; border-left: 1px solid var(--sc-line); background: var(--sc-sunken); }
 .cal-col.is-today { background: rgb(var(--sc-accent-rgb) / 0.05); }
 .cal-line { position: absolute; left: 0; right: 0; height: 1px; background: rgb(var(--sc-line-rgb) / 0.55); }
+.cal-meeting { position: absolute; left: 2px; right: 2px; padding: 2px 5px; overflow: hidden; background: repeating-linear-gradient(135deg, rgb(var(--sc-text-rgb) / 0.09) 0 6px, rgb(var(--sc-text-rgb) / 0.04) 6px 12px); border-left: 2px solid var(--sc-text-3); pointer-events: auto; }
+.cal-meeting.is-allday { border-left-color: var(--sc-accent-2); }
+.cal-meeting-name { font-size: 10.5px; color: var(--sc-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-row { grid-template-columns: minmax(0, 1fr) 110px 26px 26px; }
+
 .cal-block { position: absolute; left: 4px; right: 4px; display: grid; gap: 1px; align-content: start; padding: 4px 6px; overflow: hidden; cursor: pointer; background: rgb(var(--sc-accent-rgb) / 0.22); border-left: 3px solid var(--sc-accent); }
 .cal-block:hover { background: rgb(var(--sc-accent-rgb) / 0.34); }
 .cal-block.is-sel { box-shadow: inset 0 0 0 1px var(--sc-accent); }

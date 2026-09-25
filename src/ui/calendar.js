@@ -60,7 +60,7 @@ export function renderCalendar(root) {
   const pane = el('div', { class: 'cal-pane' });
   root.append(pane);
 
-  const { blocks, overflow } = planBlocks(project, schedule);
+  const { blocks, overflow, meetings } = planBlocks(project, schedule);
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getTask(project, project.currentPhaseId) : null;
   if (phaseList.length) {
@@ -92,6 +92,7 @@ export function renderCalendar(root) {
   let from = parseTime(base.from) ?? 540, to = parseTime(base.to) ?? 1020;
   for (const t of shown) { const a = agendaOf(project, t); from = Math.min(from, a.from); to = Math.max(to, a.to); }
   for (const b of blocks) if (columns.includes(b.day)) { from = Math.min(from, b.start); to = Math.max(to, b.end); }
+  for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) { from = Math.min(from, m.start); to = Math.max(to, m.end); }
   const hourFrom = Math.floor(from / 60), hourTo = Math.ceil(to / 60);
   const y = (min) => ((min - hourFrom * 60) / 60) * HOUR_H;
 
@@ -114,6 +115,15 @@ export function renderCalendar(root) {
   for (const d of columns) {
     const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
+    // Meetings from a connected calendar sit behind the work, because that is
+    // what they are: hours already spoken for.
+    for (const m of (meetings || []).filter((x) => x.day === d)) {
+      col.append(el('div', {
+        class: `cal-meeting${m.allDay ? ' is-allday' : ''}`,
+        style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px` },
+        title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}`,
+      }, el('div', { class: 'cal-meeting-name', text: m.title })));
+    }
     for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
       const t = project.tasks.find((x) => x.id === b.taskId);
       const info = schedule.tasks[b.taskId];

@@ -125,6 +125,23 @@ export function parse(text) {
     if (p.timesheets.length !== before) repairs.push(`${before - p.timesheets.length} timesheet line(s) pointing at missing tasks were dropped.`);
   }
 
+  // Connected calendars, and the events last read from them.
+  if (Array.isArray(raw.feeds)) {
+    p.feeds = raw.feeds
+      .filter((f) => f && typeof f === 'object' && typeof f.url === 'string' && /^https?:\/\//i.test(f.url))
+      .map((f) => ({
+        id: typeof f.id === 'string' && f.id ? f.id : `feed_${Math.random().toString(36).slice(2, 10)}`,
+        name: String(f.name || 'My calendar'), url: f.url,
+        provider: ['google', 'outlook', 'ics'].includes(f.provider) ? f.provider : 'ics',
+        resourceId: resIds.has(f.resourceId) ? f.resourceId : null,
+        fetchedAt: Number.isFinite(+f.fetchedAt) ? +f.fetchedAt : null,
+        events: Array.isArray(f.events) ? f.events
+          .filter((e) => e && Number.isFinite(+e.start) && Number.isFinite(+e.end) && +e.end > +e.start)
+          .map((e) => ({ uid: String(e.uid || ''), title: String(e.title || '(no title)'), start: +e.start, end: +e.end, allDay: !!e.allDay }))
+          : [],
+      }));
+  }
+
   // The phase the plan is in, once the tasks it might name are known.
   p.currentPhaseId = typeof raw.currentPhaseId === 'string' && p.tasks.some((t) => t.id === raw.currentPhaseId) ? raw.currentPhaseId : null;
 

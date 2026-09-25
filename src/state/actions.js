@@ -2,12 +2,14 @@
 
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
+import { hosted } from '../host.js';
 import {
   insertTask, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addTimeBlock, setTimeBlockField, removeTimeBlock,
+  addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -187,6 +189,78 @@ export function editResource(id, field, value) {
 }
 export function assignResource(taskId, resourceId, units = 1) { return attempt('Assign', (p) => assign(p, taskId, resourceId, units)); }
 export function unassignResource(taskId, resourceId) { tryCommit('Unassign', (p) => unassign(p, taskId, resourceId)); }
+
+// ---------------------------------------------------------------- calendars
+
+/**
+ * Read a calendar's ICS. The page cannot fetch it directly — Google and
+ * Outlook serve those addresses without CORS headers — so it goes through the
+ * server this page is served from, which is also what lets the Mac app do it.
+ */
+async function fetchIcs(url) {
+  // The Mac app serves the page from its own scheme and has no such endpoint,
+  // so refreshing happens in a browser tab; the events themselves travel with
+  // the plan, which is why the Mac app still shows them.
+  if (hosted) throw new Error('Read this calendar in a browser tab (the Mac app has nothing to fetch it with). The events sync with the plan, so they will appear here.');
+  let res;
+  try { res = await fetch(`/api/ics?url=${encodeURIComponent(url)}`); }
+  catch { throw new Error('The page has to be served by ./serve.sh to read a calendar (a browser cannot fetch one directly).'); }
+  if (!res.ok) {
+    let message = `The calendar could not be read (${res.status}).`;
+    try { const j = await res.json(); message = j.error || message; } catch { /* not JSON */ }
+    throw new Error(message);
+  }
+  return res.text();
+}
+
+/** Ask for an address, and say where each provider keeps theirs. */
+export async function connectCalendarDialog() {
+  const { formDialog } = await import('../ui/dialog.js');
+  const answer = await formDialog('Connect a calendar', [
+    { key: 'provider', label: 'Where it comes from', type: 'select', value: 'google',
+      options: [{ value: 'google', label: 'Google Calendar' }, { value: 'outlook', label: 'Outlook' }, { value: 'ics', label: 'Other (iCalendar)' }] },
+    { key: 'url', label: 'Private iCalendar address', type: 'text', placeholder: 'https://…',
+      hint: 'Google: Settings ▸ Settings for my calendars ▸ Integrate calendar ▸ Secret address in iCal format. Outlook: Settings ▸ Calendar ▸ Shared calendars ▸ Publish a calendar ▸ ICS.' },
+    { key: 'name', label: 'Called', type: 'text', value: 'My calendar' },
+    { key: 'resourceId', label: 'Whose hours these are', type: 'select', value: '',
+      options: [{ value: '', label: 'Me / unassigned' }, ...store.project.resources.map((r) => ({ value: r.id, label: r.name }))] },
+  ], 'Connect');
+  if (!answer) return null;
+  return connectCalendar(answer);
+}
+
+export function connectCalendar({ name, url, provider, resourceId }) {
+  const feed = tryCommit('Connect a calendar', (p) => addFeed(p, { name, url, provider, resourceId }));
+  if (feed) void refreshCalendar(feed.id);
+  return feed;
+}
+
+export async function refreshCalendar(id) {
+  const feed = getFeed(store.project, id);
+  if (!feed) return false;
+  set({ hint: `Reading ${feed.name}…` });
+  try {
+    const text = await fetchIcs(feed.url);
+    const { parseIcs } = await import('../io/ics.js');
+    const { events, name } = parseIcs(text);
+    const kept = tryCommit('Read a calendar', (p) => {
+      const n = setFeedEvents(p, id, events);
+      if (name && getFeed(p, id).name === 'My calendar') setFeedField(p, id, 'name', name);
+      return n;
+    });
+    set({ hint: kept === undefined ? store.ui.hint : `${feed.name}: ${kept} busy event${kept === 1 ? '' : 's'}.` });
+    return kept !== undefined;
+  } catch (err) {
+    set({ hint: err.message });
+    return false;
+  }
+}
+
+export async function refreshAllCalendars() {
+  for (const f of feeds(store.project)) await refreshCalendar(f.id);
+}
+export function editCalendar(id, field, value) { return attempt('Edit calendar', (p) => setFeedField(p, id, field, value)); }
+export function disconnectCalendar(id) { return attempt('Disconnect a calendar', (p) => removeFeed(p, id)); }
 
 // ---------------------------------------------------------------- phases
 

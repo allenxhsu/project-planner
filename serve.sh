@@ -8,11 +8,17 @@
 # which a browser cannot read on its own (tools/mpp2xml.sh does the work):
 #   GET  /api/status                       {"converter": true|false}
 #   POST /api/convert?name=in.mpp&to=xml   body: the file → the converted file
+#   GET  /api/ics?url=https://…            a calendar's ICS, fetched for the page
+#
+# The last one is a proxy, and it has to be: Google and Outlook serve their
+# private ICS addresses without CORS headers, so a browser cannot read one
+# directly however valid the address is. Only https/http URLs are fetched, and
+# nothing is stored.
 PORT="${1:-8125}"
 cd "$(dirname "$0")" || exit 1
 echo "Project Planner → http://localhost:$PORT"
 exec python3 - "$PORT" <<'PY'
-import sys, os, json, subprocess, tempfile, shutil, re
+import sys, os, json, subprocess, tempfile, shutil, re, urllib.request, urllib.error
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -39,9 +45,28 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if urlparse(self.path).path == '/api/status':
+        u = urlparse(self.path)
+        if u.path == '/api/status':
             return self.reply(200, {'converter': bool(converter_ready())})
+        if u.path == '/api/ics':
+            return self.fetch_ics(parse_qs(u.query).get('url', [''])[0])
         return super().do_GET()
+
+    def fetch_ics(self, url):
+        url = (url or '').strip()
+        if url.lower().startswith('webcal://'):
+            url = 'https://' + url[9:]
+        if not re.match(r'^https?://', url):
+            return self.reply(400, {'error': 'A calendar address starts with https://.'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Project Planner', 'Accept': 'text/calendar, text/plain'})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                body = r.read(8 * 1024 * 1024)
+        except urllib.error.HTTPError as e:
+            return self.reply(502, {'error': f'The calendar server answered {e.code}. Check the address is the private one, and still valid.'})
+        except Exception as e:
+            return self.reply(502, {'error': f'The calendar could not be fetched: {e}'})
+        return self.reply(200, body, 'text/calendar; charset=utf-8')
 
     def do_POST(self):
         u = urlparse(self.path)

@@ -47,7 +47,7 @@ export function createProject(name = 'Untitled project', start = null) {
     format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
-    timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null,
+    timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0 },
     tasks: [], resources: [], timesheets: [],
   };
@@ -354,6 +354,54 @@ export function formatAssignments(p, task) {
     if (!r) return null;
     return a.units === 1 ? r.name : `${r.name} [${Math.round(a.units * 100)}%]`;
   }).filter(Boolean).join(', ');
+}
+
+// ---------------------------------------------------------------- calendars
+//
+// A connected calendar: Google's or Outlook's private ICS address. The events
+// are kept with the plan, so they travel with it and every device sees the
+// same busy hours without each one needing the address.
+
+export const PROVIDERS = { google: 'Google Calendar', outlook: 'Outlook', ics: 'Other (iCalendar)' };
+
+export function addFeed(p, { name = 'My calendar', url = '', provider = 'ics', resourceId = null } = {}) {
+  if (!Array.isArray(p.feeds)) p.feeds = [];
+  if (!/^https?:\/\//i.test(String(url).trim()) && !/^webcal:\/\//i.test(String(url).trim())) {
+    throw new Error('A calendar address starts with https:// (Google and Outlook both give you one).');
+  }
+  if (resourceId && !getResource(p, resourceId)) throw new Error('No such resource.');
+  const feed = {
+    id: uid('feed'), name: String(name).trim() || 'My calendar',
+    url: String(url).trim().replace(/^webcal:/i, 'https:'),
+    provider: PROVIDERS[provider] ? provider : 'ics',
+    resourceId: resourceId || null, fetchedAt: null, events: [],
+  };
+  p.feeds.push(feed);
+  return feed;
+}
+
+export const feeds = (p) => (Array.isArray(p.feeds) ? p.feeds : []);
+export const getFeed = (p, id) => feeds(p).find((f) => f.id === id) || null;
+export function removeFeed(p, id) { p.feeds = feeds(p).filter((f) => f.id !== id); }
+export function setFeedField(p, id, field, value) {
+  const f = getFeed(p, id);
+  if (!f) throw new Error('No such calendar.');
+  if (field === 'name') f.name = String(value).trim() || f.name;
+  else if (field === 'resourceId') { if (value && !getResource(p, value)) throw new Error('No such resource.'); f.resourceId = value || null; }
+  else if (field === 'url') { if (!/^https?:\/\//i.test(String(value).trim())) throw new Error('A calendar address starts with https://.'); f.url = String(value).trim(); f.events = []; f.fetchedAt = null; }
+  else throw new Error(`“${field}” is not part of a calendar.`);
+}
+
+/** Put freshly read events on a feed. Only the busy ones are worth keeping. */
+export function setFeedEvents(p, id, events, at = Date.now()) {
+  const f = getFeed(p, id);
+  if (!f) throw new Error('No such calendar.');
+  f.events = (events || []).filter((e) => e.busy !== false).map((e) => ({
+    uid: String(e.uid || ''), title: String(e.title || '(no title)'),
+    start: +e.start, end: +e.end, allDay: !!e.allDay,
+  })).filter((e) => Number.isFinite(e.start) && Number.isFinite(e.end) && e.end > e.start);
+  f.fetchedAt = at;
+  return f.events.length;
 }
 
 // ---------------------------------------------------------------- phases

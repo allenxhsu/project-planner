@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -106,10 +106,33 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
   const overflow = [];
   /** laneKey → day → [{start, end}] */
   const booked = new Map();
+
+  /**
+   * A connected calendar's meetings are booked before any task is placed, so
+   * work goes around them. A feed that names a resource books that person's
+   * hours; one that names nobody books the unassigned lane.
+   */
+  const meetings = [];
+  for (const feed of feeds(project)) {
+    const lane = feed.resourceId || '__unassigned';
+    for (const e of feed.events || []) {
+      const startDay = Math.floor(e.start / 86400000 - new Date(e.start).getTimezoneOffset() / 1440);
+      const d = new Date(e.start);
+      const day = toDay(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      const startMin = e.allDay ? 0 : d.getHours() * 60 + d.getMinutes();
+      const length = Math.max(15, Math.round((e.end - e.start) / 60000));
+      const endMin = e.allDay ? 24 * 60 : Math.min(24 * 60, startMin + length);
+      meetings.push({ lane, day, start: startMin, end: endMin, title: e.title, allDay: !!e.allDay });
+      void startDay;
+    }
+  }
   const bookedOn = (lane, day) => {
     if (!booked.has(lane)) booked.set(lane, new Map());
     const days = booked.get(lane);
-    if (!days.has(day)) days.set(day, []);
+    if (!days.has(day)) {
+      // Seed the day with whatever the connected calendars already hold.
+      days.set(day, meetings.filter((m) => m.lane === lane && m.day === day).map((m) => ({ start: m.start, end: m.end })));
+    }
     return days.get(day);
   };
 
@@ -160,7 +183,8 @@ export function planBlocks(project, schedule, { horizonDays = 180 } = {}) {
   }
 
   blocks.sort((x, y) => x.day - y.day || x.start - y.start);
-  return { blocks, byTask, overflow };
+  meetings.sort((x, y) => x.day - y.day || x.start - y.start);
+  return { blocks, byTask, overflow, meetings };
 }
 
 /** The blocks that fall in one week, keyed by day number. */

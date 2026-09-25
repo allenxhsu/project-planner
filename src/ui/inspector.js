@@ -6,7 +6,7 @@ import * as act from '../state/actions.js';
 import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
-import { timeBlocks, phases } from '../model/model.js';
+import { timeBlocks, phases, feeds, PROVIDERS } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -232,6 +232,22 @@ function renderProject(root) {
         (v) => act.setCurrentPhase(v)),
       'only this phase’s tasks are put on the calendar'));
   }
+
+  // ---- connected calendars: real meetings, so work goes around them
+  root.append(el('div', { class: 'sc-section-title', text: 'Connected calendars' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'Google and Outlook each hand out a private iCalendar address for a calendar. Paste one here and its meetings become busy hours the calendar schedules around.' }));
+  const list = el('div', { class: 'link-list' });
+  for (const f of feeds(project)) {
+    list.append(el('div', { class: 'tb-card sc-card' },
+      el('div', { class: 'tb-row feed-row' },
+        text(f.name, (v) => act.editCalendar(f.id, 'name', v)),
+        select(f.resourceId || '', [{ value: '', label: 'Me / unassigned' }, ...project.resources.map((r) => ({ value: r.id, label: r.name }))], (v) => act.editCalendar(f.id, 'resourceId', v)),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↻', title: 'Read it again', onclick: () => act.refreshCalendar(f.id) }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Disconnect', onclick: () => act.disconnectCalendar(f.id) })),
+      el('div', { class: 'sc-faint small', text: `${PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
+  }
+  list.append(el('button', { class: 'sc-button sc-button--sm', text: '+ Connect a calendar…', onclick: () => act.connectCalendarDialog() }));
+  root.append(list);
 
   // ---- time blocks: the hours of the week that are for a kind of work
   root.append(el('div', { class: 'sc-section-title', text: 'Time blocks' }));
