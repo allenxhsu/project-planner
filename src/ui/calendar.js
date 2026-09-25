@@ -402,6 +402,27 @@ export function renderCalendar(root) {
   }
   pane.append(body);
 
+  // Why the afternoon is empty. A calendar that only shows what it placed
+  // leaves you guessing whether the rest of the day is free, capped, or
+  // waiting on something — so it says which.
+  const onScreen = new Set(columns);
+  const placed = blocks.filter((b) => onScreen.has(b.day));
+  const placedHours = Math.round(placed.reduce((n, b) => n + b.minutes, 0) / 6) / 10;
+  const later = blocks.filter((b) => !onScreen.has(b.day));
+  const laterTasks = new Set(later.map((b) => b.taskId)).size;
+  const notReleased = entries.reduce((n, e) => n + e.project.tasks.filter((t, i) =>
+    !isSummary(e.project, i) && !agendaOf(e.project, t).show && (e.schedule.tasks[t.id]?.percent ?? 0) < 100
+    && !e.schedule.tasks[t.id]?.milestone).length, 0);
+  const capHours = { ...DEFAULT_AGENDA, ...(project.agenda || {}) }.dailyCap;
+  const room = Math.max(0, capHours * columns.length - placedHours);
+  if (placedHours || laterTasks || notReleased) {
+    pane.append(el('p', { class: 'sc-faint small cal-note' },
+      `${placedHours}h placed${columns.length > 1 ? ` across ${columns.length} days` : ''}. `,
+      room > 0 ? `Room for ${Math.round(room * 10) / 10}h more at ${capHours}h a day. ` : `That is the ${capHours}h a day this plan allows. `,
+      laterTasks ? `${laterTasks} ${laterTasks === 1 ? 'task is' : 'tasks are'} on the calendar but not scheduled to start until later. ` : '',
+      notReleased ? `${notReleased} unfinished ${notReleased === 1 ? 'task is' : 'tasks are'} not on the calendar yet.` : ''));
+  }
+
   if (overflow.length) {
     const hours = Math.round(overflow.reduce((s, o) => s + o.minutes, 0) / 6) / 10;
     pane.append(el('div', { class: 'sc-alert sc-alert--warning cal-overflow' },

@@ -239,6 +239,22 @@ recolours the others. A project can name its own hue in Project information,
 and a legend above the grid says which colour is which; clicking a project
 there opens it.
 
+### Why a day is not full
+
+Under the grid, the calendar says what it placed and why there is not more:
+how many hours went on, how much room is left at the plan's daily limit, how
+many released tasks are not due to start until later, and how many unfinished
+tasks are not on the calendar at all. An empty afternoon is then a fact with a
+reason rather than a thing to wonder about.
+
+Three things keep work off an afternoon. A task is not on the calendar until
+it asks to be. A task is never placed before the day its plan schedules it to
+start. And a task belongs to a time block, so one in **Deep focus,
+08:00–10:00** can only ever land in those two hours, however free the rest of
+the day looks. Time blocks are edited in Project information, reachable from
+**Time blocks…** on the calendar toolbar and from **Edit time blocks…** beside
+a task's own time block.
+
 ### Why a week is not full
 
 Duration is how long a task is open. Work is how much of that time goes into

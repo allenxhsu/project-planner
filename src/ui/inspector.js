@@ -83,6 +83,12 @@ function renderTask(root) {
         field('Block size', select(String(a.blockHours), BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.editTask(id, 'blockHours', v)),
           `${Math.ceil((hoursLeft(project, s, t) || 0) / a.blockHours)} block(s) to place`),
         el('span')));
+      cal.append(el('button', {
+        class: 'sc-button sc-button--ghost sc-button--sm tb-edit-link',
+        text: 'Edit time blocks…',
+        title: 'The hours each kind of work is allowed, in Project information',
+        onclick: () => { set({ rightTab: 'project' }); requestAnimationFrame(() => document.querySelector('.tb-card')?.scrollIntoView({ block: 'center' })); },
+      }));
       cal.append(field('Time block',
         select(t.calendar?.timeBlockId || '', [{ value: '', label: `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}` },
           ...timeBlocks(project).map((b) => ({ value: b.id, label: `${b.name} · ${b.from}–${b.to}` }))],

@@ -345,7 +345,11 @@ export function renderToolbar(root) {
       b('↻ Plans', 'Re-read every plan on the shelf', () => { void reloadCalendarPlans(); }),
       b('+ Task', 'New task below the selection', act.newTaskBelow),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
-      b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar));
+      b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar),
+      b('Time blocks…', 'The hours each kind of work is allowed', () => {
+        set({ rightOpen: true, rightTab: 'project' });
+        requestAnimationFrame(() => document.querySelector('.tb-card')?.scrollIntoView({ block: 'center' }));
+      }));
   } else if (ui.view === 'priority') {
     root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),

@@ -230,6 +230,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .person-plans { display: flex; gap: 4px; flex-wrap: wrap; }
 .person-plan { --tint: var(--sc-text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.tb-edit-link { align-self: flex-start; margin: 2px 0 -2px; }
 .colour-row { display: flex; flex-wrap: wrap; gap: 4px; }
 .colour-chip { width: 20px; height: 20px; padding: 0; border: 1px solid var(--sc-line); background: none; cursor: pointer; }
 .colour-chip.is-auto { width: auto; padding: 0 6px; font: inherit; font-size: 10.5px; color: var(--sc-text-2); }
