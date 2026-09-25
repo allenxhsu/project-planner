@@ -11,7 +11,7 @@ import { showMenu } from './dialog.js';
 
 export const COLUMN_DEFS = {
   id: { label: '#', width: 40, align: 'right', readonly: true },
-  ind: { label: '', width: 34, readonly: true },
+  ind: { label: '', width: 44, readonly: true },
   wbs: { label: 'WBS', width: 60, readonly: true },
   name: { label: 'Task Name', width: 250, edit: 'text' },
   duration: { label: 'Duration', width: 78, edit: 'text', align: 'right' },
@@ -49,6 +49,8 @@ function indicators(task, info) {
   if (task.constraint?.type !== 'ASAP') marks.push(el('span', { class: 'ind ind-pin', text: '⚑', title: `${CONSTRAINTS[task.constraint.type].label} ${formatDate(task.constraint.date)}` }));
   if (task.deadline) marks.push(el('span', { class: `ind ${info.deadlineMissed ? 'ind-error' : 'ind-deadline'}`, text: '▽', title: `Deadline ${formatDate(task.deadline)}` }));
   if (task.notes) marks.push(el('span', { class: 'ind ind-note', text: '≡', title: task.notes }));
+  // Acted on at pointerdown, and kept from the row: a click would land on the row re-rendered by the selection.
+  if (task.bom) marks.push(el('span', { class: 'ind ind-bom', text: '▦', title: `BOM: ${task.bom.name}\nClick to open it in BOM Manager`, onpointerdown: (e) => { e.stopPropagation(); act.openBom(task.id); } }));
   return el('span', { class: 'ind-wrap' }, ...marks);
 }
 
@@ -115,7 +117,9 @@ export function gridHandlers(columnKeys = columnsForView(store.ui.view)) {
       if (!store.ui.selection.includes(id)) act.selectTask(id);
       const t = act.activeTask();
       showMenu(e.clientX, e.clientY, [
-        { label: 'Task information…', key: '⌘I', run: () => set({ rightOpen: true, rightTab: 'task' }) }, '-',
+        { label: 'Task information…', key: '⌘I', run: () => set({ rightOpen: true, rightTab: 'task' }) },
+        t?.bom ? { label: `Open BOM — ${t.bom.name}`, run: () => act.openBom(id) } : { label: 'Link to BOM Manager…', run: () => act.linkBom(id) },
+        ...(t?.bom ? [{ label: 'Unlink BOM', run: () => act.unlinkBom(id) }] : []), '-',
         { label: 'Insert task below', key: 'Ins', run: act.newTaskBelow }, { label: 'Insert task above', run: act.newTaskAbove }, { label: 'Insert milestone', run: act.newMilestone }, '-',
         { label: 'Indent', key: '⌥⇧→', run: act.indentSelection }, { label: 'Outdent', key: '⌥⇧←', run: act.outdentSelection },
         { label: 'Move up', key: '⌥⇧↑', run: () => act.moveSelection(-1) }, { label: 'Move down', key: '⌥⇧↓', run: () => act.moveSelection(1) }, '-',

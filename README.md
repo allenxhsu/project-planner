@@ -416,6 +416,22 @@ takes your meetings into account, it does not write tasks back into Google or
 Outlook. Writing back, and live two-way sync, need an OAuth client registered
 in your own Google Cloud and Microsoft Entra consoles.
 
+## A task's bill of materials
+
+A task whose work is a bill of materials — "Material", "Std Material" — links
+to the [BOM Manager](../bom-manager) project that holds it: right-click the
+task, *Link to BOM Manager…*, and name the project (the plan's name is
+offered). BOM Manager opens on that project, making it if no project has the
+name, and remembers this plan and task. The task carries ▦ in the indicator
+column from then on; clicking it, or *Open BOM* in its menu or the task
+details, opens the project again. From BOM Manager, *Open in Project Planner*
+comes back: this app opens at `?plan=<id>&task=<id>`, takes the plan off the
+shelf and selects the task.
+
+The link is `task.bom = { name }` in `*.project.json`, so it syncs with the
+plan; Microsoft Project XML has nowhere to put it and leaves it out. On the
+Portal the other app is a path on the same origin; locally it is port 8126.
+
 ## Stages, and time actually spent
 
 Two things the schedule does not have, because they are about how a team works

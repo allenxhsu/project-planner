@@ -20,7 +20,9 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, APP_ID } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, openPlan, APP_ID } from './state/sync.js';
+import { getTask } from './model/model.js';
+import { takeLinkParams } from './links.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 
@@ -137,6 +139,17 @@ function mountPortalBar() {
 }
 mountPortalBar();
 
+// A link from another app — BOM Manager's "Open in Project Planner" — names a
+// plan and a task: `?plan=…&task=…`. Open that plan from the shelf and select the task.
+async function followLink() {
+  if (hosted) return;
+  const q = takeLinkParams(['plan', 'task']);
+  if (!q.plan) return;
+  if (q.plan !== store.project.id && !(await openPlan(q.plan))) return;
+  if (q.task && getTask(store.project, q.task)) { act.selectTask(q.task); set({ view: 'gantt', rightOpen: true, rightTab: 'task' }); }
+  else set({ view: 'gantt' });
+}
+
 initSync()
   .then(async () => {
     if (!hosted && !store.ui.dirty && store.project.tasks.length === 0) {
@@ -147,6 +160,7 @@ initSync()
         try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ }
       }
     }
+    await followLink();
     void storeCounts();
     return Promise.all([reloadPlans(), refreshWorkspaceLabel()]);
   })

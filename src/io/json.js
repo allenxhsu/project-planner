@@ -121,6 +121,7 @@ export function parse(text) {
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
       assignments: Array.isArray(t.assignments) ? t.assignments.filter((a) => a && resIds.has(a.resourceId)).map((a) => ({ resourceId: a.resourceId, units: Number.isFinite(+a.units) ? +a.units : 1 })) : [],
+      bom: t.bom && typeof t.bom === 'object' && String(t.bom.name ?? '').trim() ? { name: String(t.bom.name).trim() } : null,
     });
     if (task.constraint.type !== 'ASAP' && !task.constraint.date && CONSTRAINTS[task.constraint.type].dated) task.constraint = { type: 'ASAP', date: null };
     if (task.milestone) task.duration = 0;

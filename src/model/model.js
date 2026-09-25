@@ -96,6 +96,9 @@ export function newTask(props = {}) {
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
     calendar: { show: false, timeBlockIds: [] },
+    // The BOM Manager project this task's bill-of-materials work lives in, by
+    // name: { name }. BOM Manager finds it again by this plan's and task's ids.
+    bom: null,
     ...props,
   };
 }
@@ -810,6 +813,7 @@ export function setTaskField(p, id, field, value) {
     case 'predecessors': t.predecessors = parsePredecessors(p, value, id); break;
     case 'resources': t.assignments = parseAssignments(p, value); break;
     case 'notes': t.notes = String(value ?? ''); break;
+    case 'bom': t.bom = value && String(value.name ?? '').trim() ? { name: String(value.name).trim() } : null; break;
     case 'deadline': if (value && !isoValid(value)) throw new Error('A deadline is a date (YYYY-MM-DD).'); t.deadline = value || null; break;
     case 'constraintType': {
       if (!CONSTRAINTS[value]) throw new Error('Unknown constraint.');

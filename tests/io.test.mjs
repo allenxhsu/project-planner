@@ -91,3 +91,23 @@ test('a project with no colour of its own does not come back red', async () => {
   p.colour = 400;                     // and a hue is read round the circle
   assert.equal(parse(serialize(p)).project.colour, 40);
 });
+
+test('a task keeps its BOM Manager link through a round trip, and the setter tidies it', async () => {
+  const { createProject, newTask, setTaskField } = await import('../src/model/model.js');
+  const { serialize, parse } = await import('../src/io/json.js');
+  const p = createProject('Zipline workstation');
+  p.tasks.push(newTask({ id: 't_mat', name: 'Material' }), newTask({ id: 't_build', name: 'Build' }));
+  setTaskField(p, 't_mat', 'bom', { name: '  Zipline SO 287137 WO 423177 ' });
+  const back = parse(serialize(p)).project;
+  assert.deepEqual(back.tasks.find((t) => t.id === 't_mat').bom, { name: 'Zipline SO 287137 WO 423177' });
+  assert.equal(back.tasks.find((t) => t.id === 't_build').bom, null);
+  setTaskField(p, 't_mat', 'bom', { name: '' });
+  assert.equal(p.tasks[0].bom, null, 'an empty name unlinks');
+  // A plan written before the link existed reads as unlinked, and junk is not a link.
+  const raw = JSON.parse(serialize(p));
+  delete raw.tasks[0].bom;
+  raw.tasks[1].bom = 'nope';
+  const read = parse(JSON.stringify(raw)).project;
+  assert.equal(read.tasks[0].bom, null);
+  assert.equal(read.tasks[1].bom, null);
+});
