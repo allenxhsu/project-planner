@@ -81,6 +81,7 @@ the duration.
 | Resource Sheet | people and things: type, max units, rate, group; work and cost roll-ups |
 | Resource Usage | hours per resource per week, with each assignment beneath; over-allocated weeks highlighted |
 | Network Diagram | one box per task in dependency order, critical path in red |
+| People | everyone in the shared directory: hours, tasks and plans across the whole shelf, the rate that every plan uses, and the profile summary from Profiler |
 | Projects | every plan on the shelf as a card: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
 | Calendar | the week, with each task's hours laid into blocks. A task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
@@ -171,6 +172,41 @@ row, and a name typed into a task's Resource Names joins the directory too.
 The plan still carries each person's name, rate and type, so a
 `*.project.json` opened on its own is still a whole plan. A resource with no
 directory entry — everything written before this — is identified by name.
+
+### The People screen
+
+The **People** view is where that directory is kept. One card per person, with
+what they are carrying across every plan on the shelf: hours, tasks, the plans
+they are on, and what those hours cost. Editing someone there is the point of
+it — the change goes into the directory *and* into every plan that points at
+them, so a rate is set once rather than in four places.
+
+A plan written before the directory existed names its people and links to
+nobody. Those are matched by name so the screen still reads as one person, and
+a banner offers to link them for real, which is the one-off that makes editing
+reach them. Only an exact name match is linked; a near miss would merge two
+different people. Someone who is in a plan but not the directory is shown
+separately, marked *Not shared*, with an action to add them.
+
+### Profiles come from Profiler
+
+Who someone *is* belongs to [Profiler](../Profiler), the suite's stakeholder
+profiling app, not here. A person in the directory can carry the **summary** of
+a profile Profiler exported: the headline of each instrument (`INTJ`,
+`High D / High C`), its confidence and its caveats, with `Profiler ↗` to open
+the app itself.
+
+The link is Profiler's own export file, read through the contract it documents
+as stable — `format`, `formatVersion`, `subject`, and per instrument `id`,
+`headline`, `codes`, `confidence`, `caveats`. Its `detail` blob is documented
+as unstable and is ignored, and the raw item responses are never copied: a plan
+is not the place to keep someone's answers. Profiler's `subject.team` and
+`subject.role` come across, because otherwise they would be typed twice.
+
+Nothing is read out of Profiler's storage and nothing is written back to it.
+On the Portal origin, where every app is served from one place, `Profiler ↗`
+goes to `/profiler/`; elsewhere it falls back to the `profiler://` scheme the
+Mac app registers.
 
 ## Connecting Google and Outlook calendars
 
@@ -279,7 +315,7 @@ src/main.js         wiring and keyboard shortcuts
 src/model/          calendar, plan model and outline, scheduler (CPM), checks, sample
 src/state/          store with undo/redo; editing commands
 src/ui/             grid, task grid, Gantt, network, resources, inspector, checks, header/menus, dialogs
-src/io/             .project.json, Microsoft Project XML, CSV, SVG/PNG/PDF
+src/io/             .project.json, Microsoft Project XML, CSV, SVG/PNG/PDF, Profiler profiles
 src/state/sync.js   sync: settings, the engine, and what arrives from elsewhere
 src/host.js         bridge to the macOS shell (a vendored copy of ../shell-kit/js/host.js)
 tests/              node --test

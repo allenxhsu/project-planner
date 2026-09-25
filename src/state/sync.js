@@ -14,11 +14,12 @@ import {
   SyncEngine, HttpTransport, SyncedDocument, LocalStore, IndexedDbStore,
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
 } from '../../sync-kit/js/index.js';
-import { store, set, loadProject, markSaved, subscribe, revision } from './store.js';
+import { store, set, loadProject, markSaved, subscribe, revision, tryCommit } from './store.js';
 import { uid } from '../util.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
+import { readProfile } from '../io/profile.js';
 
 export const WORKSPACE = 'project';
 const SETTINGS_KEY = 'project-planner:sync';
@@ -298,6 +299,187 @@ export async function rememberPerson({ name, initials = '', type = 'work', rate 
   await recordStore.put([record]);
   if (syncConfigured()) void syncNow();
   return record;
+}
+
+/**
+ * Change a person once, everywhere.
+ *
+ * The directory is the record of who someone is, but each plan carries its own
+ * copy of the name and the rate so a `.project.json` still opens on its own.
+ * Centralised means those copies are not separate truths: an edit here is
+ * written through to every plan on the shelf that uses them, and to the open
+ * plan in memory.
+ */
+export async function updatePerson(id, patch) {
+  if (!recordStore) return null;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== PERSON_TYPE) return null;
+  const next = {
+    ...record,
+    ...('name' in patch ? { name: String(patch.name).trim() || record.name } : {}),
+    ...('initials' in patch ? { initials: String(patch.initials).trim().toUpperCase().slice(0, 4) } : {}),
+    ...('resourceType' in patch ? { resourceType: patch.resourceType } : {}),
+    ...('rate' in patch ? { rate: Number(patch.rate) || 0 } : {}),
+    ...('group' in patch ? { group: String(patch.group).trim() } : {}),
+    ...('team' in patch ? { team: String(patch.team).trim() } : {}),
+    ...('role' in patch ? { role: String(patch.role).trim() } : {}),
+    ...('email' in patch ? { email: String(patch.email).trim() } : {}),
+    ...('profile' in patch ? { profile: patch.profile } : {}),
+    updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId(),
+  };
+  await recordStore.put([next]);
+  await writeThrough(next);
+  if (syncConfigured()) void syncNow();
+  return next;
+}
+
+/** Push a person's details into every plan that uses them. */
+async function writeThrough(person) {
+  const fields = (r) => ({ ...r, name: person.name, initials: person.initials || r.initials, type: person.resourceType || r.type, rate: person.rate ?? r.rate, group: person.group ?? r.group });
+
+  // The open plan, through the store, so the screen follows at once.
+  if (store.project.resources.some((r) => r.personId === person.id)) {
+    tryCommit('Update a person', (p) => {
+      p.resources = p.resources.map((r) => (r.personId === person.id ? fields(r) : r));
+    });
+  }
+
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    if (!project.resources.some((r) => r.personId === person.id)) continue;
+    project.resources = project.resources.map((r) => (r.personId === person.id ? fields(r) : r));
+    const at = Math.max(Date.now(), record.updatedAt + 1);
+    await recordStore.put([{ ...record, body: serialize(project), updatedAt: at, origin: deviceId() }]);
+  }
+}
+
+/**
+ * Attach a Profiler profile to someone in the directory.
+ *
+ * Profiler owns stakeholder profiles; this keeps the summary so the People
+ * screen can show who someone is next to what they are carrying. `team` and
+ * `role` come across too, because Profiler's subject has them and a planner
+ * would otherwise type them twice.
+ */
+export async function attachProfile(id, text) {
+  const profile = readProfile(text);
+  const patch = { profile };
+  if (profile.team) patch.team = profile.team;
+  if (profile.role) patch.role = profile.role;
+  return updatePerson(id, patch);
+}
+
+/** Forget the attached profile. Profiler still has it; this stops showing it. */
+export const detachProfile = (id) => updatePerson(id, { profile: null });
+
+/**
+ * Everyone in the directory, with what they are carrying across every plan:
+ * which plans, how many tasks, how many hours.
+ */
+export async function peopleWithLoad() {
+  const people = await listPeople();
+  const byPerson = new Map(people.map((p) => [p.id, { person: p, plans: [], tasks: 0, hours: 0, cost: 0 }]));
+  const loose = new Map();
+  const seen = [];
+
+  // A plan written before the directory existed carries a name and no link. The
+  // same spelling is the same person, or the screen would show Uma Chen twice
+  // and promise her hours twice.
+  const byName = new Map(people.map((p) => [String(p.name).trim().toLowerCase(), p]));
+
+  const count = (project, schedule, planName) => {
+    for (const r of project.resources) {
+      const matched = r.personId ? byPerson.get(r.personId) : byPerson.get(byName.get(String(r.name).trim().toLowerCase())?.id);
+      const entry = matched;
+      const bucket = entry || loose.get(`who:${r.name.toLowerCase()}`) || { person: { id: null, name: r.name, initials: r.initials, resourceType: r.type, rate: r.rate, group: r.group }, plans: [], tasks: 0, hours: 0, cost: 0 };
+      if (!entry) loose.set(`who:${r.name.toLowerCase()}`, bucket);
+      let tasks = 0, hours = 0;
+      for (const t of project.tasks) {
+        const info = schedule.tasks[t.id];
+        if (!info || info.summary) continue;
+        const share = info.workShares?.get(r.id);
+        if (share === undefined) continue;
+        tasks++;
+        hours += share;
+      }
+      if (!tasks && !project.tasks.some((t) => t.assignments.some((a) => a.resourceId === r.id))) {
+        if (!bucket.plans.includes(planName)) bucket.plans.push(planName);
+        continue;
+      }
+      bucket.tasks += tasks;
+      bucket.hours += hours;
+      bucket.cost += hours * (r.rate || 0);
+      if (!bucket.plans.includes(planName)) bucket.plans.push(planName);
+    }
+  };
+
+  count(store.project, store.schedule, store.project.name);
+  seen.push(store.project.id);
+  for (const record of await planRecords()) {
+    if (seen.includes(record.id)) continue;
+    try {
+      const project = parse(record.body).project;
+      count(project, computeSchedule(project), project.name || record.name);
+    } catch { /* a plan that cannot be read adds nothing */ }
+  }
+  return [...byPerson.values(), ...loose.values()].sort((a, b) => String(a.person.name).localeCompare(String(b.person.name)));
+}
+
+/**
+ * Point every plan's resources at the directory, by name.
+ *
+ * Plans made before a person was in the directory name them and nothing more.
+ * This is the one-off that turns those names into links, so an edit in one
+ * place reaches them. Only an exact name match is linked — a near miss is a
+ * judgement call, and guessing would merge two different people.
+ *
+ * @returns {{ linked: number, plans: number }}
+ */
+export async function linkPlansToDirectory() {
+  if (!recordStore) return { linked: 0, plans: 0 };
+  const byName = new Map((await listPeople()).map((p) => [String(p.name).trim().toLowerCase(), p]));
+  const match = (r) => (r.personId ? null : byName.get(String(r.name).trim().toLowerCase()) || null);
+  let linked = 0;
+  let plans = 0;
+
+  const open = store.project.resources.filter((r) => match(r));
+  if (open.length) {
+    plans++;
+    linked += open.length;
+    tryCommit('Link people to the directory', (p) => {
+      p.resources = p.resources.map((r) => { const who = match(r); return who ? { ...r, personId: who.id } : r; });
+    });
+  }
+
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    const hits = project.resources.filter((r) => match(r));
+    if (!hits.length) continue;
+    project.resources = project.resources.map((r) => { const who = match(r); return who ? { ...r, personId: who.id } : r; });
+    const at = Math.max(Date.now(), record.updatedAt + 1);
+    await recordStore.put([{ ...record, body: serialize(project), updatedAt: at, origin: deviceId() }]);
+    plans++;
+    linked += hits.length;
+  }
+  if (linked && syncConfigured()) void syncNow();
+  return { linked, plans };
+}
+
+/** How many plan resources name someone in the directory without pointing at them. */
+export async function unlinkedCount() {
+  if (!recordStore) return 0;
+  const byName = new Map((await listPeople()).map((p) => [String(p.name).trim().toLowerCase(), p]));
+  const count = (project) => project.resources.filter((r) => !r.personId && byName.has(String(r.name).trim().toLowerCase())).length;
+  let n = count(store.project);
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id) continue;
+    try { n += count(parse(record.body).project); } catch { /* unreadable */ }
+  }
+  return n;
 }
 
 /** Take someone out of the directory. Plans that already use them are untouched. */

@@ -206,6 +206,27 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .plan-new:hover { color: var(--sc-accent); }
 .plan-new-mark { font-size: 24px; line-height: 1; }
 
+/* ---------- people (the shared directory) ---------- */
+.people-head { display: flex; align-items: flex-start; gap: var(--sc-space-3); flex-wrap: wrap; }
+.people-head-text { display: grid; gap: 4px; flex: 1; min-width: 240px; }
+.people-head-actions { display: flex; gap: 6px; flex: none; }
+.people-link { display: flex; align-items: center; gap: var(--sc-space-3); padding: 10px var(--sc-space-3); margin-bottom: var(--sc-space-3); font-size: 12px; color: var(--sc-text-2); }
+.person-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sc-space-3); }
+.person-card { display: grid; gap: 8px; align-content: start; padding: var(--sc-space-3); cursor: pointer; text-align: left; }
+.person-card:hover { border-color: var(--sc-accent); }
+.person-card.is-loose { border-style: dashed; }
+.person-head { display: flex; align-items: center; gap: 10px; }
+.person-mark { display: grid; place-content: center; width: 30px; height: 30px; flex: none; font-size: 11.5px; font-weight: 700; color: var(--sc-app); box-shadow: inset 0 0 0 1px var(--sc-line); }
+.person-who { flex: 1; min-width: 0; }
+.person-name { margin: 0; font: 600 14px var(--sc-font-display); letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.person-profile { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+.person-profile.is-empty { color: var(--sc-text-3); }
+.person-code { cursor: help; }
+.person-load { display: flex; align-items: baseline; gap: 10px; font-size: 11.5px; }
+.person-load .sc-mono:first-child { font-size: 13px; color: var(--sc-text-1); }
+.person-plans { display: flex; gap: 4px; flex-wrap: wrap; }
+.person-plan { --tint: var(--sc-text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------- urgency ---------- */
 .sc-pill.urg-now { --tint: var(--sc-danger); font-weight: 700; }
 .sc-pill.urg-high { --tint: var(--sc-warning); }

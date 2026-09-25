@@ -17,6 +17,7 @@ const AUTOSAVE_KEY = 'project-planner:autosave';
 // the tab strip once there are seven of them.
 export const VIEWS = {
   projects: { label: 'Projects', short: 'Projects', glyph: '▢' },
+  people: { label: 'People', short: 'People', glyph: '☺' },
   gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },
   kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
   alltasks: { label: 'All Tasks', short: 'All Tasks', glyph: '≣' },

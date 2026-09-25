@@ -12,6 +12,7 @@ import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
 import { showMenu, confirmDialog, showText } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
+import { reloadPeople } from './people.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans } from './calendar.js';
@@ -178,7 +179,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -199,7 +200,7 @@ export const COMMANDS = {
   'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },
   'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
-  'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
+  'view.people': goView('people'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
@@ -240,6 +241,7 @@ const MENUS = {
     { label: 'Break into subtasks…', run: run('task.breakUp') },
   ],
   Resource: () => [
+    { label: 'People (shared by every plan)…', run: run('view.people') }, '-',
     { label: 'Resource information…', run: run('resource.info') }, '-',
     { label: 'New resource', run: run('resource.new') }, { label: 'Delete resource', danger: true, run: run('resource.delete') },
   ],
@@ -315,6 +317,7 @@ export function renderToolbar(root) {
   const taskView = ['gantt', 'sheet'].includes(ui.view);
   const resView = ['resources', 'usage'].includes(ui.view);
   const planView = ui.view === 'projects';
+  const peopleView = ui.view === 'people';
   const b = (text, title, run, { on = false, disabled = false, primary = false } = {}) => el('button', { class: `sc-button sc-button--sm${primary ? ' sc-button--primary' : ''}${on ? ' is-on' : ''}`, text, title, disabled, onclick: run });
   const sep = () => el('span', { class: 'tb-sep' });
   const sel = ui.selection.length;
@@ -350,7 +353,11 @@ export function renderToolbar(root) {
       b('⛓ Link', 'Link the selected tasks in order (⌘L)', act.linkSelection, { disabled: sel < 2 }), b('Unlink', 'Remove links from the selected tasks (⇧⌘L)', act.unlinkSelection, { disabled: !sel }), sep(),
       b('✓ 100%', 'Mark the active task complete', COMMANDS['task.complete'], { disabled: !sel }));
   } else if (resView) {
-    root.append(b('+ Resource', 'New resource', act.newResource, { primary: true }), b('Delete', 'Delete the selected resource', () => act.deleteResource(), { disabled: !ui.resourceId }));
+    root.append(b('+ Resource', 'New resource', act.newResource, { primary: true }), b('Delete', 'Delete the selected resource', () => act.deleteResource(), { disabled: !ui.resourceId }), sep(),
+      b('People…', 'Everyone, shared by every plan', COMMANDS['view.people']));
+  } else if (peopleView) {
+    root.append(b('↻ Refresh', 'Sync, then re-read the directory and every plan', () => { void reloadPlans({ pull: true }).then(() => reloadPeople()); }),
+      b('Resource Sheet', 'Who is on the open plan', COMMANDS['view.resources']));
   }
   root.append(el('span', { class: 'sc-spacer' }));
   if (ui.view === 'gantt') {
