@@ -35,6 +35,10 @@ BIN_DIR="$(swift build --package-path "$PKG" -c "$CONFIG" --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/web"
+# Spotlight indexes anything that looks like an app, so a build here would show
+# up beside the installed one in Launchpad and in search — two Project Planners,
+# one of them a build artifact. This file tells Spotlight to skip the folder.
+touch "$OUT/.metadata_never_index"
 cp "$BIN_DIR/ProjectPlanner" "$APP/Contents/MacOS/Project Planner"
 
 # The Dock icon: the PJ badge the app wears in its own header. Rendered from
