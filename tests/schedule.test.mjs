@@ -396,3 +396,179 @@ test('stages and timesheets survive the file, and a damaged one is repaired', as
   assert.equal(out.project.timesheets.length, 1, 'a line pointing at no task is dropped');
   assert.ok(out.repairs.length >= 2);
 });
+
+// ---------------------------------------------------------------------------
+// The agenda: turning "18 hours, Tuesday to Friday" into blocks on a calendar.
+// ---------------------------------------------------------------------------
+
+test('a task asking for the calendar is laid into blocks of the size it asks for', async () => {
+  const { planBlocks, agendaOf, parseTime, formatTime, hoursLeft } = await import('../src/model/agenda.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  const a = task(p, 'Design', 2);           // 2 days × 8h = 16 hours of work
+  assign(p, a.id, r.id, 1);
+  setTaskField(p, a.id, 'calendarShow', true);
+  setTaskField(p, a.id, 'blockHours', 2);
+  setTaskField(p, a.id, 'calendarFrom', '09:00');
+  setTaskField(p, a.id, 'calendarTo', '17:00');
+
+  const s = computeSchedule(p);
+  assert.equal(hoursLeft(p, s.tasks[a.id]), 16);
+  const { blocks, overflow } = planBlocks(p, s);
+  assert.equal(blocks.length, 8, '16 hours in two-hour blocks');
+  assert.deepEqual(overflow, []);
+  assert.equal(new Set(blocks.map((b) => b.day)).size, 2, 'eight hours a day fills two days');
+  assert.equal(formatTime(blocks[0].start), '09:00');
+  assert.equal(formatTime(blocks[0].end), '11:00');
+  assert.equal(formatTime(blocks[3].end), '17:00', 'the window is respected');
+  assert.equal(blocks[0].dateIso, MON);
+
+  // Logged hours come off what still needs a block.
+  const { addTimesheet } = await import('../src/model/model.js');
+  addTimesheet(p, { taskId: a.id, resourceId: r.id, date: MON, hours: 8 });
+  assert.equal(planBlocks(p, computeSchedule(p)).blocks.length, 4, 'half the work is done, half the blocks remain');
+});
+
+test('two tasks for one person never overlap, and a different person is free at the same hour', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan();
+  const ann = addResource(p, { name: 'Ann' }), bob = addResource(p, { name: 'Bob' });
+  const one = task(p, 'One', 1), two = task(p, 'Two', 1), three = task(p, 'Three', 1);
+  assign(p, one.id, ann.id, 1); assign(p, two.id, ann.id, 1); assign(p, three.id, bob.id, 1);
+  for (const t of [one, two, three]) { setTaskField(p, t.id, 'calendarShow', true); setTaskField(p, t.id, 'blockHours', 4); }
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  const annBlocks = blocks.filter((b) => b.lane === ann.id).sort((x, y) => x.day - y.day || x.start - y.start);
+  for (let i = 1; i < annBlocks.length; i++) {
+    const prev = annBlocks[i - 1], now = annBlocks[i];
+    assert.ok(now.day > prev.day || now.start >= prev.end, 'one person cannot be in two places');
+  }
+  const bobFirst = blocks.find((b) => b.lane === bob.id);
+  const annFirst = annBlocks[0];
+  assert.equal(bobFirst.day, annFirst.day);
+  assert.equal(bobFirst.start, annFirst.start, 'two people can work the same hour');
+  // Ann has 16 hours in an 8-hour window, so her work runs into the next day.
+  assert.equal(new Set(annBlocks.map((b) => b.day)).size, 2);
+});
+
+test('a block that cannot fit the window is reported rather than hidden', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan();
+  const a = task(p, 'Workshop', 1);
+  setTaskField(p, a.id, 'calendarShow', true);
+  setTaskField(p, a.id, 'blockHours', 4);
+  setTaskField(p, a.id, 'calendarFrom', '09:00');
+  setTaskField(p, a.id, 'calendarTo', '11:00');     // two hours a day, four-hour blocks
+  const { blocks, overflow } = planBlocks(p, computeSchedule(p));
+  assert.equal(blocks.length, 0);
+  assert.equal(overflow.length, 1);
+  assert.equal(overflow[0].reason, 'window-too-short');
+  assert.throws(() => setTaskField(p, a.id, 'calendarTo', '08:00'), /end after it starts/);
+  assert.throws(() => setTaskField(p, a.id, 'blockHours', 3), /one of 0.5, 1, 1.5, 2, 4/);
+});
+
+test('breaking a task up makes it a summary of its parts', async () => {
+  const { breakIntoSubtasks, isSummary } = await import('../src/model/model.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  const a = task(p, 'Design the layout', 6);
+  assign(p, a.id, r.id, 1);
+  setTaskField(p, a.id, 'calendarShow', true);
+  const parts = breakIntoSubtasks(p, a.id, 3, ['Grid', 'Type', 'Colour']);
+  assert.equal(parts.length, 3);
+  assert.deepEqual(p.tasks.map((t) => t.name), ['Design the layout', 'Grid', 'Type', 'Colour']);
+  assert.deepEqual(p.tasks.map((t) => t.level), [1, 2, 2, 2]);
+  assert.ok(isSummary(p, 0));
+  assert.deepEqual(parts.map((t) => t.duration), [2, 2, 2]);
+  assert.equal(parts[0].assignments.length, 1, 'the parts are the same work, so the same person');
+  assert.equal(parts[0].calendar.show, true);
+  const s = computeSchedule(p);
+  assert.equal(s.tasks[a.id].duration, 6, 'the summary still spans the same six days');
+  assert.throws(() => breakIntoSubtasks(p, a.id, 2), /already has subtasks/);
+});
+
+test('the priority list puts what is late and unblocked first', async () => {
+  const { priorities } = await import('../src/model/agenda.js');
+  const p = plan();
+  const early = task(p, 'Late thing', 2);
+  const blocked = task(p, 'Blocked thing', 2);
+  const later = task(p, 'Later thing', 2);
+  link(p, early.id, blocked.id);
+  p.statusDate = '2026-10-05';                  // a fortnight after everything started
+  later.constraint = { type: 'SNET', date: '2026-11-02' };
+  const s = computeSchedule(p);
+  const list = priorities(p, s, { now: toDay('2026-10-05') });
+
+  assert.equal(list[0].taskId, early.id, 'the overdue, unblocked task is first');
+  assert.ok(list[0].reasons.some((r) => /should have finished/.test(r)));
+  const blockedRow = list.find((r) => r.taskId === blocked.id);
+  assert.ok(blockedRow.blocked);
+  assert.ok(blockedRow.reasons.some((r) => /waiting on 1 task/.test(r)));
+  assert.ok(blockedRow.score < list[0].score, 'work that cannot be started ranks below work that can');
+  assert.ok(list.every((r) => r.info.percent < 100), 'finished work is not on the list');
+});
+
+test('a named time block decides which hours and which days a task may use', async () => {
+  const { planBlocks, agendaOf, formatTime } = await import('../src/model/agenda.js');
+  const { addTimeBlock, setTimeBlockField, removeTimeBlock, timeBlocks } = await import('../src/model/model.js');
+  const p = plan();                                   // starts Monday 21 Sep 2026
+  p.calendar.workDays = [0, 1, 2, 3, 4, 5, 6];        // the plan itself works every day
+  const study = addTimeBlock(p, { name: 'Study', from: '06:00', to: '08:00', days: [0, 1, 2, 3, 4, 5, 6] });
+  const focus = addTimeBlock(p, { name: 'Deep focus', from: '08:00', to: '10:00', days: [1, 2, 3, 4, 5] });
+
+  const reading = task(p, 'Reading', 3);   // 24 hours, at two a morning: twelve mornings
+  setTaskField(p, reading.id, 'calendarShow', true);
+  setTaskField(p, reading.id, 'blockHours', 2);
+  setTaskField(p, reading.id, 'timeBlock', study.id);
+
+  const a = agendaOf(p, reading);
+  assert.equal(formatTime(a.from), '06:00');
+  assert.equal(formatTime(a.to), '08:00');
+  assert.deepEqual(a.days, [0, 1, 2, 3, 4, 5, 6]);
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  assert.equal(blocks.length, 12, 'twenty-four hours of work at two hours a morning');
+  assert.ok(blocks.every((b) => formatTime(b.start) === '06:00'), 'every block starts when the study block does');
+  assert.ok(blocks.some((b) => [0, 6].includes(((b.day + 4) % 7 + 7) % 7)), 'a block covering every day uses the weekend');
+
+  // A weekday-only block never lands on a Saturday or a Sunday.
+  setTaskField(p, reading.id, 'timeBlock', focus.id);
+  const weekdayOnly = planBlocks(p, computeSchedule(p)).blocks;
+  assert.ok(weekdayOnly.length > 0);
+  assert.ok(weekdayOnly.every((b) => ![0, 6].includes(((b.day + 4) % 7 + 7) % 7)), 'weekdays only');
+  assert.ok(weekdayOnly.every((b) => formatTime(b.start) === '08:00'));
+
+  assert.throws(() => setTimeBlockField(p, study.id, 'to', '05:00'), /end after it starts/);
+  assert.throws(() => setTimeBlockField(p, study.id, 'days', []), /at least one day/);
+  // Deleting a block sends its tasks back to the plan's default hours.
+  removeTimeBlock(p, focus.id);
+  assert.equal(reading.calendar.timeBlockId, null);
+  assert.ok(!timeBlocks(p).some((b) => b.id === focus.id));
+});
+
+test('only the phase the plan is in reaches the calendar', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const { phases, phaseOf, inCurrentPhase } = await import('../src/model/model.js');
+  const p = plan();
+  const design = task(p, 'Design', 0);
+  const wire = task(p, 'Wireframes', 2, 2);
+  const build = task(p, 'Build', 0);
+  const cms = task(p, 'CMS integration', 2, 2);
+  for (const t of [wire, cms]) setTaskField(p, t.id, 'calendarShow', true);
+
+  assert.deepEqual(phases(p).map((x) => x.name), ['Design', 'Build']);
+  assert.equal(phaseOf(p, wire.id), design.id);
+  assert.equal(planBlocks(p, computeSchedule(p)).blocks.length > 0, true);
+  const everything = new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId));
+  assert.deepEqual([...everything].sort(), [wire.id, cms.id].sort(), 'with no phase set, everything is released');
+
+  p.currentPhaseId = design.id;
+  assert.ok(inCurrentPhase(p, wire.id));
+  assert.ok(!inCurrentPhase(p, cms.id));
+  const onlyDesign = new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId));
+  assert.deepEqual([...onlyDesign], [wire.id], 'build work stays off the calendar while the plan is in design');
+
+  // A phase that was deleted must not empty the calendar.
+  p.currentPhaseId = 'gone';
+  assert.equal(new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId)).size, 2);
+});

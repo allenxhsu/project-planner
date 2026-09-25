@@ -7,6 +7,7 @@
 
 import { uid } from '../util.js';
 import { DEFAULT_CALENDAR, parseDuration, isoValid, toDay, fromDay, makeCalendar } from './calendar.js';
+import { BLOCK_CHOICES, parseTime } from './agenda.js';
 
 export const FORMAT = 'project-planner';
 export const VERSION = 1;
@@ -45,7 +46,10 @@ export function createProject(name = 'Untitled project', start = null) {
     id: uid('plan'),
     format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
-    stages: DEFAULT_STAGES.map((st) => ({ ...st })), tasks: [], resources: [], timesheets: [],
+    stages: DEFAULT_STAGES.map((st) => ({ ...st })),
+    timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null,
+    agenda: { blockHours: 1, timeBlockId: 'tb_work' },
+    tasks: [], resources: [], timesheets: [],
   };
 }
 
@@ -53,7 +57,11 @@ export function newTask(props = {}) {
   return {
     id: uid('t'), name: 'New task', level: 1, duration: 1, milestone: false, predecessors: [],
     constraint: { type: 'ASAP', date: null }, deadline: null, percent: 0, notes: '', assignments: [], fixedCost: 0,
-    stageId: null, ...props,
+    stageId: null,
+    // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
+    // the plan's own defaults, so most tasks carry nothing but `show`.
+    calendar: { show: false, timeBlockId: null },
+    ...props,
   };
 }
 export function newResource(props = {}) {
@@ -348,6 +356,121 @@ export function formatAssignments(p, task) {
   }).filter(Boolean).join(', ');
 }
 
+// ---------------------------------------------------------------- phases
+//
+// A phase is a top-level summary task — Discovery, Design, Build, Launch. When
+// a plan says which phase it is in, the calendar releases only that phase's
+// work: there is no point putting build tasks in next week's mornings while
+// the design is still being argued about.
+
+/** The top-level summary a task belongs to, or null for a task at the top. */
+export function phaseOf(p, taskId) {
+  const i = taskIndex(p, taskId);
+  if (i < 0) return null;
+  const top = [...ancestors(p, i)].pop();
+  return top === undefined ? null : p.tasks[top].id;
+}
+
+/** Every top-level summary, in order: the phases a plan can be in. */
+export function phases(p) {
+  return p.tasks.filter((t, i) => t.level === 1 && isSummary(p, i)).map((t) => ({ id: t.id, name: t.name }));
+}
+
+/** Whether this task's phase is the one being worked on. No phase set: everything. */
+export function inCurrentPhase(p, taskId) {
+  if (!p.currentPhaseId) return true;
+  if (!getTask(p, p.currentPhaseId)) return true;
+  return phaseOf(p, taskId) === p.currentPhaseId;
+}
+
+// ---------------------------------------------------------------- time blocks
+//
+// The hours of the week that are for a kind of work: "Study, 06:00–08:00,
+// every day"; "Work, 08:00–17:00, weekdays"; "Deep focus, 08:00–10:00,
+// weekdays". A task says which block it belongs to and the calendar releases
+// it into those hours by itself, rather than asking for a time per task.
+
+export const DEFAULT_TIME_BLOCKS = [
+  { id: 'tb_work', name: 'Work', from: '08:00', to: '17:00', days: [1, 2, 3, 4, 5] },
+  { id: 'tb_focus', name: 'Deep focus', from: '08:00', to: '10:00', days: [1, 2, 3, 4, 5] },
+];
+export const timeBlocks = (p) => (Array.isArray(p.timeBlocks) && p.timeBlocks.length ? p.timeBlocks : DEFAULT_TIME_BLOCKS);
+export const getTimeBlock = (p, id) => timeBlocks(p).find((b) => b.id === id) || null;
+
+export function addTimeBlock(p, props = {}) {
+  if (!Array.isArray(p.timeBlocks) || !p.timeBlocks.length) p.timeBlocks = DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] }));
+  const block = { id: uid('tb'), name: 'New block', from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], ...props };
+  validateBlock(block);
+  p.timeBlocks.push(block);
+  return block;
+}
+
+function validateBlock(b) {
+  if (parseTime(b.from) === null || parseTime(b.to) === null) throw new Error('A time of day looks like 09:00.');
+  if (parseTime(b.to) <= parseTime(b.from)) throw new Error('A time block has to end after it starts.');
+  if (!Array.isArray(b.days) || !b.days.length) throw new Error('A time block needs at least one day.');
+}
+
+export function setTimeBlockField(p, id, field, value) {
+  const b = getTimeBlock(p, id);
+  if (!b) throw new Error('No such time block.');
+  const next = { ...b };
+  if (field === 'name') next.name = String(value).trim() || b.name;
+  else if (field === 'from' || field === 'to') next[field] = String(value).trim();
+  else if (field === 'days') next.days = [...new Set((value || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
+  else throw new Error(`“${field}” is not part of a time block.`);
+  validateBlock(next);
+  Object.assign(b, next);
+}
+
+/** Remove a block; tasks in it fall back to the plan's default block. */
+export function removeTimeBlock(p, id) {
+  const list = timeBlocks(p);
+  if (list.length <= 1) throw new Error('There has to be one time block left.');
+  p.timeBlocks = list.filter((b) => b.id !== id);
+  for (const t of p.tasks) if (t.calendar?.timeBlockId === id) t.calendar = { ...t.calendar, timeBlockId: null };
+  if (p.agenda?.timeBlockId === id) p.agenda = { ...p.agenda, timeBlockId: p.timeBlocks[0].id };
+}
+
+/**
+ * Cut a task into subtasks — the way a week of "design the layout" is really
+ * several days of different work.
+ *
+ * The task becomes a summary (its own duration then comes from its children,
+ * as every summary's does) and the parts divide its duration between them.
+ * Resources and the calendar settings come along, because the parts are the
+ * same work; links stay on the parent, because that is where they belong.
+ *
+ * The parts run one after another by default. Left unlinked they would all
+ * start on the same morning, which would say the same person does three things
+ * at once and would shrink the task to a third of its length — `chain: false`
+ * is there for the case where they really are parallel.
+ */
+export function breakIntoSubtasks(p, taskId, parts, names = [], { chain = true } = {}) {
+  const i = taskIndex(p, taskId);
+  if (i < 0) throw new Error('No such task.');
+  if (isSummary(p, i)) throw new Error('That task already has subtasks.');
+  const n = Math.max(2, Math.min(24, Math.floor(parts) || 2));
+  const parent = p.tasks[i];
+  const each = Math.max(0.25, Math.round((parent.duration / n) * 100) / 100);
+  const made = [];
+  for (let k = 0; k < n; k++) {
+    made.push(newTask({
+      name: (names[k] || '').trim() || `${parent.name} ${k + 1}`,
+      level: parent.level + 1, duration: each,
+      assignments: parent.assignments.map((a) => ({ ...a })),
+      calendar: { ...parent.calendar },
+      stageId: parent.stageId,
+    }));
+  }
+  p.tasks.splice(i + 1, 0, ...made);
+  if (chain) for (let k = 1; k < made.length; k++) made[k].predecessors = [{ id: made[k - 1].id, type: 'FS', lag: 0 }];
+  // The parent keeps its links and its deadline; the rest is now its children's.
+  parent.percent = 0;
+  parent.milestone = false;
+  return made;
+}
+
 // ---------------------------------------------------------------- timesheets
 //
 // Work is what the plan *expects* a task to take; a timesheet line is what
@@ -516,6 +639,25 @@ export function setTaskField(p, id, field, value) {
     }
     case 'constraintDate': if (value && !isoValid(value)) throw new Error('A constraint date is a date (YYYY-MM-DD).'); t.constraint.date = value || null; if (!value) t.constraint.type = 'ASAP'; break;
     case 'fixedCost': { const n = parseFloat(String(value).replace(/[^0-9.-]/g, '')); if (Number.isNaN(n)) throw new Error('Fixed cost is a number.'); t.fixedCost = n; break; }
+    case 'calendarShow': t.calendar = { ...t.calendar, show: !!value }; break;
+    case 'blockHours': {
+      const n = parseFloat(value);
+      if (!BLOCK_CHOICES.includes(n)) throw new Error(`A block is one of ${BLOCK_CHOICES.join(', ')} hours.`);
+      t.calendar = { ...t.calendar, blockHours: n };
+      break;
+    }
+    case 'timeBlock': {
+      if (value && !getTimeBlock(p, value)) throw new Error('No such time block.');
+      t.calendar = { ...t.calendar, timeBlockId: value || null };
+      break;
+    }
+    case 'calendarFrom': case 'calendarTo': {
+      if (value && parseTime(value) === null) throw new Error('A time of day looks like 09:00.');
+      t.calendar = { ...t.calendar, [field === 'calendarFrom' ? 'from' : 'to']: value || null };
+      const a = { from: parseTime(t.calendar.from), to: parseTime(t.calendar.to) };
+      if (a.from !== null && a.to !== null && a.to <= a.from) throw new Error('The day has to end after it starts.');
+      break;
+    }
     default: throw new Error(`“${field}” cannot be edited here.`);
   }
 }

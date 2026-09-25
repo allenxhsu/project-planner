@@ -14,6 +14,7 @@ import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
+import { shiftWeek, showThisWeek } from './calendar.js';
 import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -193,6 +194,10 @@ export const COMMANDS = {
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
   'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ rightOpen: true, rightTab: 'resource' }),
   'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'),
+  'view.calendar': goView('calendar'), 'view.priority': goView('priority'),
+  'view.weekBack': () => shiftWeek(-1), 'view.weekOn': () => shiftWeek(1), 'view.thisWeek': showThisWeek,
+  'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },
+  'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
   'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
@@ -230,7 +235,9 @@ const MENUS = {
     { label: 'Indent', key: '⌥⇧→', run: run('task.indent') }, { label: 'Outdent', key: '⌥⇧←', run: run('task.outdent') },
     { label: 'Move up', key: '⌥⇧↑', run: run('task.up') }, { label: 'Move down', key: '⌥⇧↓', run: run('task.down') }, '-',
     { label: 'Link selected tasks', key: '⌘L', run: run('task.link') }, { label: 'Unlink selected tasks', key: '⇧⌘L', run: run('task.unlink') }, '-',
-    { label: 'Toggle milestone', run: run('task.toggleMilestone') }, { label: 'Mark 100% complete', run: run('task.complete') },
+    { label: 'Toggle milestone', run: run('task.toggleMilestone') }, { label: 'Mark 100% complete', run: run('task.complete') }, '-',
+    { label: 'Show in calendar', run: run('task.calendar') },
+    { label: 'Break into subtasks…', run: run('task.breakUp') },
   ],
   Resource: () => [
     { label: 'Resource information…', run: run('resource.info') }, '-',
@@ -316,6 +323,15 @@ export function renderToolbar(root) {
       b('+ Project', 'Start a new plan', () => { COMMANDS['file.new'](); }, { primary: true }),
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
+  } else if (ui.view === 'calendar') {
+    root.append(b('‹ Week', 'The week before', () => shiftWeek(-1)), b('Today', 'Back to this week', showThisWeek), b('Week ›', 'The week after', () => shiftWeek(1)), sep(),
+      b('+ Task', 'New task below the selection', act.newTaskBelow),
+      b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
+      b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar));
+  } else if (ui.view === 'priority') {
+    root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
+      b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
+      b('✓ 100%', 'Mark the active task complete', COMMANDS['task.complete'], { disabled: !sel }));
   } else if (ui.view === 'alltasks') {
     root.append(b('↻ Refresh', 'Sync, then re-read every plan', () => { void reloadPlans({ pull: true }).then(() => reloadAllTasks()); }),
       b('Sync…', 'Where plans are kept online', settingsDialog));

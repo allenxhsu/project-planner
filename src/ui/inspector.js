@@ -5,10 +5,16 @@ import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
+import { BLOCK_CHOICES, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
+import { timeBlocks, phases } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
 const readout = (rows) => el('div', { class: 'readout sc-mono' }, ...rows.map(([k, v]) => el('div', { class: 'readout-row' }, el('span', { class: 'sc-muted', text: k }), el('span', { text: v }))));
+const dayNames = (days) => (!days || days.length === 7 ? 'every day'
+  : days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d)) ? 'weekdays'
+  : days.map((d) => WEEKDAY_NAMES[d].slice(0, 3)).join(' '));
+
 const stopKeys = (input) => { input.addEventListener('keydown', (e) => e.stopPropagation()); return input; };
 const text = (value, onchange, attrs = {}) => stopKeys(el('input', { class: 'sc-input', type: 'text', value, spellcheck: false, onchange: (e) => onchange(e.target.value), ...attrs }));
 const date = (value, onchange) => stopKeys(el('input', { class: 'sc-input', type: 'date', value: value || '', onchange: (e) => onchange(e.target.value) }));
@@ -57,6 +63,29 @@ function renderTask(root) {
   form.append(el('div', { class: 'two' }, field('Deadline', date(t.deadline, setF('deadline'))), field('Fixed cost', text(String(t.fixedCost || 0), setF('fixedCost')))));
   form.append(field('Notes', stopKeys(el('textarea', { class: 'sc-textarea', rows: 3, value: t.notes, onchange: (e) => act.editTask(id, 'notes', e.target.value) }))));
   root.append(form);
+
+  // ---- calendar: whether this task gets hours in the week, and which
+  if (!s.summary && !s.milestone) {
+    const a = agendaOf(project, t);
+    root.append(el('div', { class: 'sc-section-title', text: 'Calendar' }));
+    const cal = el('div', { class: 'insp-form' });
+    cal.append(el('label', { class: 'row check-row' },
+      el('input', { class: 'sc-check', type: 'checkbox', checked: a.show, onchange: (e) => act.editTask(id, 'calendarShow', e.target.checked) }),
+      el('span', { text: 'Show in calendar' })));
+    if (a.show) {
+      cal.append(el('div', { class: 'two' },
+        field('Block size', select(String(a.blockHours), BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.editTask(id, 'blockHours', v)),
+          `${Math.ceil((hoursLeft(project, s) || 0) / a.blockHours)} block(s) to place`),
+        el('span')));
+      cal.append(field('Time block',
+        select(t.calendar?.timeBlockId || '', [{ value: '', label: `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}` },
+          ...timeBlocks(project).map((b) => ({ value: b.id, label: `${b.name} · ${b.from}–${b.to}` }))],
+          (v) => act.setTaskTimeBlock(id, v)),
+        a.timeBlock ? `${formatTime(a.from)}–${formatTime(a.to)} on ${dayNames(a.days)}` : 'the hours this task may use'));
+      cal.append(el('button', { class: 'sc-button sc-button--sm', text: 'Break into subtasks…', onclick: () => act.breakUpDialog(id) }));
+    }
+    root.append(cal);
+  }
 
   root.append(el('div', { class: 'sc-section-title', text: 'Schedule' }));
   root.append(readout([
@@ -177,6 +206,13 @@ function renderProject(root) {
     el('input', { class: 'sc-check', type: 'checkbox', checked: project.calendar.workDays.includes(d), onchange: (e) => { const wd = new Set(project.calendar.workDays); if (e.target.checked) wd.add(d); else wd.delete(d); if (!wd.size) { act.hint('At least one working day is needed.'); e.target.checked = true; return; } act.setCalendar({ workDays: [...wd].sort() }); } }),
     el('span', { text: WEEKDAY_NAMES[d].slice(0, 3) }))));
   form.append(field('Working days', days));
+  form.append(el('div', { class: 'two' },
+    field('Default block size', select(String((project.agenda || {}).blockHours || 1),
+      BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.setAgenda({ blockHours: +v })),
+      'what a task uses unless it says otherwise'),
+    field('Default time block', select((project.agenda || {}).timeBlockId || '',
+      timeBlocks(project).map((b) => ({ value: b.id, label: b.name })), (v) => act.setAgenda({ timeBlockId: v })),
+      'the hours a task uses unless it says otherwise')));
   form.append(field('Holidays', stopKeys(el('textarea', { class: 'sc-textarea sc-mono', rows: 4, value: project.calendar.holidays.join('\n'), onchange: (e) => {
     const list = e.target.value.split(/[\n,;\s]+/).map((x) => x.trim()).filter(Boolean);
     const bad = list.filter((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x));
@@ -184,6 +220,38 @@ function renderProject(root) {
     act.setCalendar({ holidays: [...new Set(list)].sort() });
   } })), 'one date per line, YYYY-MM-DD'));
   root.append(form);
+  // ---- the phase the plan is in, which is what the calendar releases
+  const phaseList = phases(project);
+  if (phaseList.length) {
+    root.append(el('div', { class: 'sc-section-title', text: 'Phase' }));
+    root.append(field('Working on',
+      select(project.currentPhaseId || '', [{ value: '', label: 'Every phase' }, ...phaseList.map((ph) => ({ value: ph.id, label: ph.name }))],
+        (v) => act.setCurrentPhase(v)),
+      'only this phase’s tasks are put on the calendar'));
+  }
+
+  // ---- time blocks: the hours of the week that are for a kind of work
+  root.append(el('div', { class: 'sc-section-title', text: 'Time blocks' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'The hours a kind of work is allowed. A task belongs to one, and the calendar releases it into those hours by itself.' }));
+  const blocks = el('div', { class: 'link-list' });
+  for (const b of timeBlocks(project)) {
+    const days = el('div', { class: 'workdays tb-days' }, ...[1, 2, 3, 4, 5, 6, 0].map((d) => el('label', { class: 'row check-row', title: WEEKDAY_NAMES[d] },
+      el('input', { class: 'sc-check', type: 'checkbox', checked: b.days.includes(d), onchange: (e) => {
+        const next = e.target.checked ? [...b.days, d] : b.days.filter((x) => x !== d);
+        if (!act.editTimeBlock(b.id, 'days', next)) e.target.checked = !e.target.checked;
+      } }),
+      el('span', { text: WEEKDAY_NAMES[d][0] }))));
+    blocks.append(el('div', { class: 'tb-card sc-card' },
+      el('div', { class: 'tb-row' },
+        text(b.name, (v) => act.editTimeBlock(b.id, 'name', v)),
+        text(b.from, (v) => act.editTimeBlock(b.id, 'from', v), { class: 'sc-input lag', title: 'Starts' }),
+        text(b.to, (v) => act.editTimeBlock(b.id, 'to', v), { class: 'sc-input lag', title: 'Ends' }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this block', onclick: () => act.deleteTimeBlock(b.id) })),
+      days));
+  }
+  blocks.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New time block', onclick: () => act.newTimeBlock({ name: 'New block' }) }));
+  root.append(blocks);
+
   root.append(el('div', { class: 'sc-section-title', text: 'Statistics' }));
   root.append(readout([
     ['Start', formatDate(schedule.startIso)], ['Finish', formatDate(schedule.finishIso)], ['Duration', `${schedule.duration} d`],

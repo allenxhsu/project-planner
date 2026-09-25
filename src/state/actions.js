@@ -1,11 +1,13 @@
 // Editing commands over the store: what menus, keys, toolbar and grid all call.
 
 import { store, set, commit, tryCommit, emit } from './store.js';
+import * as agendaModule from '../model/agenda.js';
 import {
   insertTask, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
-  addTimesheet, removeTimesheet, setTimesheetField,
+  addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
+  addTimeBlock, setTimeBlockField, removeTimeBlock,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -186,6 +188,50 @@ export function editResource(id, field, value) {
 export function assignResource(taskId, resourceId, units = 1) { return attempt('Assign', (p) => assign(p, taskId, resourceId, units)); }
 export function unassignResource(taskId, resourceId) { tryCommit('Unassign', (p) => unassign(p, taskId, resourceId)); }
 
+// ---------------------------------------------------------------- phases
+
+/** Say which phase the plan is in; '' means every phase at once. */
+export function setCurrentPhase(id) {
+  return attempt('Current phase', (p) => { p.currentPhaseId = id || null; });
+}
+
+// ---------------------------------------------------------------- time blocks
+
+export function newTimeBlock(props) { return commit('New time block', (p) => addTimeBlock(p, props)); }
+export function editTimeBlock(id, field, value) { return attempt('Edit time block', (p) => setTimeBlockField(p, id, field, value)); }
+export function deleteTimeBlock(id) { return attempt('Delete time block', (p) => removeTimeBlock(p, id)); }
+export function setTaskTimeBlock(taskId, blockId) { return editTask(taskId, 'timeBlock', blockId); }
+
+// ---------------------------------------------------------------- calendar
+
+/** Put every unfinished leaf task on the calendar, for a plan starting out. */
+export function showAllInCalendar() {
+  return attempt('Show in calendar', (p) => {
+    p.tasks.forEach((t, i) => {
+      if (isSummaryAt(p, i) || t.milestone || (t.percent ?? 0) === 100) return;
+      t.calendar = { ...t.calendar, show: true };
+    });
+  });
+}
+
+/** Cut a task into parts. Asks how many, then names them after it. */
+export async function breakUpDialog(taskId) {
+  const t = getTask(store.project, taskId);
+  if (!t) return;
+  const { formDialog, showText } = await import('../ui/dialog.js');
+  const answer = await formDialog('Break into subtasks', [
+    { key: 'parts', label: 'How many parts', type: 'text', value: '3', hint: `“${t.name}” is ${t.duration} days; the parts divide that between them and run one after another.` },
+    { key: 'names', label: 'Names (one per line, optional)', type: 'textarea', rows: 4, value: '' },
+  ], 'Break up');
+  if (!answer) return;
+  const parts = parseInt(answer.parts, 10);
+  if (!Number.isFinite(parts) || parts < 2) { hint('Two parts or more.'); return; }
+  const names = String(answer.names || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  const made = tryCommit('Break into subtasks', (p) => breakIntoSubtasks(p, taskId, parts, names));
+  if (made) { set({ selection: [made[0].id] }); revealTask(made[0].id); }
+  else showText('That task could not be broken up', store.ui.hint || 'Unknown reason.');
+}
+
 // ---------------------------------------------------------------- timesheets
 
 export function logTime({ taskId, resourceId, date, hours, note }) {
@@ -213,6 +259,15 @@ export function setProjectInfo(patch) {
     if (patch.currency !== undefined) p.currency = patch.currency || '$';
   });
 }
+export function setAgenda(patch) {
+  return attempt('Working hours', (p) => {
+    const next = { blockHours: 1, ...(p.agenda || {}), ...patch };
+    const { BLOCK_CHOICES } = agendaModule;
+    if (!BLOCK_CHOICES.includes(+next.blockHours)) throw new Error(`A block is one of ${BLOCK_CHOICES.join(', ')} hours.`);
+    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null };
+  });
+}
+
 export function setCalendar(cal) {
   tryCommit('Working time', (p) => { p.calendar = { ...p.calendar, ...cal }; });
 }

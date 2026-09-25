@@ -2,6 +2,7 @@
 
 import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
+import { BLOCK_CHOICES, parseTime } from '../model/agenda.js';
 
 export const FILE_EXT = '.project.json';
 
@@ -41,6 +42,32 @@ export function parse(text) {
   }
   const stageIds = new Set(p.stages.map((st) => st.id));
 
+  // Named time blocks: the hours of the week that are for a kind of work.
+  if (Array.isArray(raw.timeBlocks) && raw.timeBlocks.length) {
+    const seen = new Set();
+    const list = raw.timeBlocks
+      .filter((b) => b && typeof b === 'object' && typeof b.id === 'string' && b.id && !seen.has(b.id) && seen.add(b.id))
+      .map((b) => ({
+        id: b.id, name: String(b.name || 'Block'),
+        from: parseTime(b.from) !== null ? b.from : '09:00',
+        to: parseTime(b.to) !== null ? b.to : '17:00',
+        days: Array.isArray(b.days) ? [...new Set(b.days.map(Number).filter((d) => d >= 0 && d <= 6))].sort() : [1, 2, 3, 4, 5],
+      }))
+      .filter((b) => b.days.length && parseTime(b.to) > parseTime(b.from));
+    if (list.length) p.timeBlocks = list;
+    else repairs.push('The time blocks could not be read; the defaults are used.');
+  }
+  const blockIds = new Set(p.timeBlocks.map((b) => b.id));
+
+  // The plan's calendar defaults, which every task inherits.
+  if (raw.agenda && typeof raw.agenda === 'object') {
+    const a = raw.agenda;
+    p.agenda = {
+      blockHours: BLOCK_CHOICES.includes(+a.blockHours) ? +a.blockHours : 1,
+      timeBlockId: blockIds.has(a.timeBlockId) ? a.timeBlockId : p.timeBlocks[0].id,
+    };
+  }
+
   const resIds = new Set();
   for (const r of Array.isArray(raw.resources) ? raw.resources : []) {
     if (!r || typeof r !== 'object') continue;
@@ -61,6 +88,13 @@ export function parse(text) {
       percent: Math.max(0, Math.min(100, Math.round(+t.percent) || 0)), notes: String(t.notes || ''), fixedCost: Number(t.fixedCost) || 0,
       deadline: isoValid(t.deadline) ? t.deadline : null,
       stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,
+      calendar: t.calendar && typeof t.calendar === 'object'
+        ? { show: !!t.calendar.show,
+            timeBlockId: blockIds.has(t.calendar.timeBlockId) ? t.calendar.timeBlockId : null,
+            ...(BLOCK_CHOICES.includes(+t.calendar.blockHours) ? { blockHours: +t.calendar.blockHours } : {}),
+            ...(parseTime(t.calendar.from) !== null ? { from: t.calendar.from } : {}),
+            ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}) }
+        : { show: false, timeBlockId: null },
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
       assignments: Array.isArray(t.assignments) ? t.assignments.filter((a) => a && resIds.has(a.resourceId)).map((a) => ({ resourceId: a.resourceId, units: Number.isFinite(+a.units) ? +a.units : 1 })) : [],
@@ -89,6 +123,9 @@ export function parse(text) {
       }));
     if (p.timesheets.length !== before) repairs.push(`${before - p.timesheets.length} timesheet line(s) pointing at missing tasks were dropped.`);
   }
+
+  // The phase the plan is in, once the tasks it might name are known.
+  p.currentPhaseId = typeof raw.currentPhaseId === 'string' && p.tasks.some((t) => t.id === raw.currentPhaseId) ? raw.currentPhaseId : null;
 
   repairs.push(...normalizeLevels(p));
   return { project: p, repairs };

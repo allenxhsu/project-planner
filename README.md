@@ -73,6 +73,8 @@ the duration.
 | Network Diagram | one box per task in dependency order, critical path in red |
 | Projects | every plan on the shelf as a card: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
+| Calendar | the week, with each task's hours laid into blocks. A task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
+| Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
 | All Tasks | every task in every plan, filtered by late / unfinished / critical / unassigned, searchable, and a row opens the plan it belongs to |
 
 The details panel on the right edits the selected task (including its
@@ -104,6 +106,37 @@ deadlines, over-allocation, tasks with no predecessor or resource, late tasks
   drawing without a browser: `node tools/gantt-svg.mjs plan.project.json > gantt.svg`
   (`--sample`, `--zoom day|week|month`). [doc/sample-gantt.svg](doc/sample-gantt.svg)
   is the sample plan rendered that way.
+
+## The calendar
+
+The schedule says a task runs Tuesday to Friday and takes 18 hours. The
+calendar says *when*: which hours, on which days.
+
+- **A task opts in.** `Show in calendar` on the task's details. A plan holds
+  plenty of work nobody schedules hour by hour.
+- **Block size** is one of half an hour, one, one and a half, two or four. The
+  task's remaining hours — what the plan expects, less what was logged — are
+  cut into that many blocks.
+- **Time blocks** are the named hours of the week a kind of work is allowed:
+  *Study, 06:00–08:00, every day*; *Work, 08:00–17:00, weekdays*; *Deep focus,
+  08:00–10:00, weekdays*. A task belongs to one and is released into those
+  hours by itself. Blocks live on the plan, under Project ▸ Time blocks.
+- **Phases gate the release.** A plan can say which phase it is in — a
+  top-level summary such as Design — and then only that phase's tasks reach
+  the calendar. There is no point putting build work in next week's mornings
+  while the design is still being argued about.
+- **Nobody is double-booked.** Two tasks for one person never overlap; two
+  people working the same hour sit side by side.
+- **A week that does not hold the work says so**, rather than hiding the
+  overflow.
+
+Nothing here is stored. Blocks are computed from the plan, as the schedule is,
+so logging four hours or moving a task re-lays the week by itself.
+
+**Breaking work up.** A multi-day task — "design the layout" — can be cut into
+subtasks from its details, the calendar or the Task menu. The parts divide its
+duration, inherit its people and its calendar settings, and run one after
+another, so the parent keeps the same span and becomes a summary of them.
 
 ## Stages, and time actually spent
 
