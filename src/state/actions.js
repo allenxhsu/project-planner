@@ -163,7 +163,16 @@ export function editTask(id, field, value) {
     const info = store.schedule.tasks[id];
     return attempt(label, (p) => setFinish(p, id, info.startIso, value));
   }
-  return attempt(label, (p) => setTaskField(p, id, field, value));
+  const ok = attempt(label, (p) => setTaskField(p, id, field, value));
+  // Typing "Ana, Ben" into Resource Names invents resources; each one that is
+  // new to the shelf joins the directory, so the next plan can pick them.
+  if (ok && field === 'resources') void linkNewResources();
+  return ok;
+}
+
+/** Any resource here that is not yet a person in the directory becomes one. */
+async function linkNewResources() {
+  for (const r of [...store.project.resources]) if (!r.personId) await rememberResource(r.id);
 }
 export function setPercent(id, percent) { return editTask(id, 'percent', percent); }
 /** Drag a bar: pin the task to a new start with a Start No Earlier Than constraint. */
@@ -174,10 +183,49 @@ export function setDuration(id, days) { return editTask(id, 'duration', days); }
 
 // ---------------------------------------------------------------- resources
 
-export function newResource() {
+/**
+ * Add someone to this plan. People already known to the shelf are offered
+ * first, because a person is not a per-project thing: bringing Uma into a
+ * second plan should be picking her, not typing her in again.
+ */
+export async function newResource() {
+  const { listPeople, rememberPerson } = await import('./sync.js');
+  const known = (await listPeople()).filter((person) => !store.project.resources.some((r) => r.personId === person.id));
+  if (known.length) {
+    const { formDialog } = await import('../ui/dialog.js');
+    const answer = await formDialog('Add someone', [
+      { key: 'who', label: 'Who', type: 'select', value: known[0].id,
+        options: [...known.map((p) => ({ value: p.id, label: `${p.name}${p.group ? ` · ${p.group}` : ''}` })), { value: '__new', label: '＋ Someone new…' }] },
+      { key: 'name', label: 'Their name (for someone new)', type: 'text', value: '' },
+    ], 'Add');
+    if (!answer) return null;
+    if (answer.who !== '__new') {
+      const person = known.find((p) => p.id === answer.who);
+      const r = commit('Add someone', (p) => addResource(p, {
+        personId: person.id, name: person.name, initials: person.initials || '',
+        type: person.resourceType || 'work', rate: person.rate || 0, group: person.group || '',
+      }));
+      set({ resourceId: r.id });
+      return r;
+    }
+    const name = String(answer.name || '').trim() || 'New resource';
+    const person = await rememberPerson({ name });
+    const r = commit('Add someone', (p) => addResource(p, { personId: person?.id || null, name }));
+    set({ resourceId: r.id, editing: { kind: 'resource', id: r.id, col: 'name' } });
+    return r;
+  }
   const r = commit('New resource', (p) => addResource(p, {}));
   set({ resourceId: r.id, editing: { kind: 'resource', id: r.id, col: 'name' } });
   return r;
+}
+
+/** Keep the directory in step when a resource is named or re-rated here. */
+export async function rememberResource(id) {
+  const r = store.project.resources.find((x) => x.id === id);
+  if (!r || r.personId) return;
+  const { rememberPerson } = await import('./sync.js');
+  const person = await rememberPerson({ name: r.name, initials: r.initials, type: r.type, rate: r.rate, group: r.group });
+  if (person) tryCommit('Link to the directory', (p) => setResourceField(p, id, 'personId', person.id));
 }
 export function deleteResource(id = store.ui.resourceId) {
   if (!id) { hint('Select a resource first.'); return; }
@@ -185,7 +233,11 @@ export function deleteResource(id = store.ui.resourceId) {
   set({ resourceId: null });
 }
 export function editResource(id, field, value) {
-  return attempt('Edit resource', (p) => setResourceField(p, id, field, value));
+  const ok = attempt('Edit resource', (p) => setResourceField(p, id, field, value));
+  // A resource that has just been given a real name becomes a person the other
+  // plans can pick, rather than one more copy of the same human being.
+  if (ok && field === 'name') void rememberResource(id);
+  return ok;
 }
 export function assignResource(taskId, resourceId, units = 1) { return attempt('Assign', (p) => assign(p, taskId, resourceId, units)); }
 export function unassignResource(taskId, resourceId) { tryCommit('Unassign', (p) => unassign(p, taskId, resourceId)); }

@@ -8,7 +8,7 @@
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { planBlocksAcross, agendaOf, formatClock, parseTime, personKey, DEFAULT_AGENDA } from '../model/agenda.js';
+import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAULT_AGENDA } from '../model/agenda.js';
 import { planRecords } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
@@ -132,7 +132,7 @@ export function renderCalendar(root) {
   const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others)];
   const all = planBlocksAcross(entries);
   // Whose week this is, by name — the same person is a different id in each plan.
-  const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKey(r.name), r.name]))).entries()]
+  const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
   const who = ui.calendarWho && everyone.some(([k]) => k === ui.calendarWho) ? ui.calendarWho : '';
   const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : all.blocks;

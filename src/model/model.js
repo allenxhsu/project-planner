@@ -69,7 +69,11 @@ export function newTask(props = {}) {
   };
 }
 export function newResource(props = {}) {
-  return { id: uid('r'), name: 'New resource', initials: '', type: 'work', maxUnits: 1, rate: 0, group: '', ...props };
+  // `personId` is who this is across the whole shelf. A plan still carries the
+  // name and the rate, so a `.project.json` on its own is still a whole plan —
+  // but two plans with the same person now agree on one id rather than only on
+  // a spelling.
+  return { id: uid('r'), personId: null, name: 'New resource', initials: '', type: 'work', maxUnits: 1, rate: 0, group: '', ...props };
 }
 
 // ---------------------------------------------------------------- outline
@@ -318,11 +322,17 @@ export function formatPredecessors(p, task) {
 // ---------------------------------------------------------------- resources
 
 export function addResource(p, props = {}) {
+  // The same person is never added twice to one plan.
+  const already = props.personId ? p.resources.find((r) => r.personId === props.personId) : null;
+  if (already) return already;
   const r = newResource(props);
   if (!r.initials) r.initials = r.name.split(/\s+/).map((w) => w[0] || '').join('').toUpperCase().slice(0, 3);
   p.resources.push(r);
   return r;
 }
+
+/** Who this resource is, across plans: the shared person, or failing that the name. */
+export const identityOf = (r) => (r?.personId ? `person:${r.personId}` : `who:${String(r?.name || '').trim().toLowerCase()}`);
 export function removeResource(p, id) {
   p.resources = p.resources.filter((r) => r.id !== id);
   for (const t of p.tasks) t.assignments = t.assignments.filter((a) => a.resourceId !== id);
@@ -747,6 +757,7 @@ export function setResourceField(p, id, field, value) {
     case 'maxUnits': { const n = parseFloat(String(value).replace('%', '')); if (Number.isNaN(n) || n < 0) throw new Error('Max units is a percentage.'); r.maxUnits = n > 5 ? n / 100 : n; break; }
     case 'rate': { const n = parseFloat(String(value).replace(/[^0-9.-]/g, '')); if (Number.isNaN(n)) throw new Error('A rate is a number.'); r.rate = n; break; }
     case 'group': r.group = String(value).trim(); break;
+    case 'personId': r.personId = value || null; break;
     default: throw new Error(`“${field}” cannot be edited here.`);
   }
 }

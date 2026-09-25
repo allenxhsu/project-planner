@@ -73,7 +73,8 @@ export function parse(text) {
   for (const r of Array.isArray(raw.resources) ? raw.resources : []) {
     if (!r || typeof r !== 'object') continue;
     const res = newResource({
-      id: String(r.id || ''), name: String(r.name || 'Unnamed'), initials: String(r.initials || ''), type: RESOURCE_TYPES[r.type] ? r.type : 'work',
+      id: String(r.id || ''), personId: typeof r.personId === 'string' && r.personId ? r.personId : null,
+      name: String(r.name || 'Unnamed'), initials: String(r.initials || ''), type: RESOURCE_TYPES[r.type] ? r.type : 'work',
       maxUnits: Number.isFinite(+r.maxUnits) ? +r.maxUnits : 1, rate: Number.isFinite(+r.rate) ? +r.rate : 0, group: String(r.group || ''),
     });
     if (!res.id || resIds.has(res.id)) { res.id = newResource().id; repairs.push(`Resource “${res.name}” had no unique id; one was given.`); }

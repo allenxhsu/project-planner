@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, inCurrentPhase, feeds, getResource, identityOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -94,11 +94,13 @@ const lanesOf = (task) => {
  * bookings that never meet.
  */
 export const personKey = (name) => `who:${String(name || '').trim().toLowerCase()}`;
+/** A plan's resource, as the person it stands for: the shared id, or the name. */
+export const personKeyOf = (resource) => identityOf(resource);
 const peopleOf = (project, task) => {
   const keys = task.assignments
     .map((a) => getResource(project, a.resourceId))
     .filter(Boolean)
-    .map((r) => personKey(r.name));
+    .map(personKeyOf);
   return keys.length ? [...new Set(keys)] : ['__unassigned'];
 };
 
@@ -159,7 +161,7 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
   const seenMeetings = new Set();
   for (const { project } of entries) for (const feed of feeds(project)) {
     const owner = feed.resourceId ? getResource(project, feed.resourceId) : null;
-    const lane = owner ? personKey(owner.name) : '__unassigned';
+    const lane = owner ? personKeyOf(owner) : '__unassigned';
     for (const e of feed.events || []) {
       const startDay = Math.floor(e.start / 86400000 - new Date(e.start).getTimezoneOffset() / 1440);
       const d = new Date(e.start);

@@ -263,6 +263,53 @@ function load(remote) {
   }
 }
 
+// ---------------------------------------------------------------- people
+//
+// One directory of people for every plan. A resource inside a plan still
+// carries its own name and rate — a `.project.json` has to stand on its own —
+// but it points at a person here, so the same Uma Chen in three plans is one
+// person whose hours cannot be promised twice.
+//
+// People are records like plans are, in the same workspace, so the directory
+// travels between devices with everything else.
+
+const PERSON_TYPE = 'person';
+
+export async function listPeople() {
+  if (!recordStore) return [];
+  const all = await recordStore.all();
+  return all
+    .filter((r) => r && r.type === PERSON_TYPE && !r.deletedAt && r.name)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/** Put someone in the directory, or find them if they are already in it. */
+export async function rememberPerson({ name, initials = '', type = 'work', rate = 0, group = '' }) {
+  if (!recordStore) return null;
+  const clean = String(name || '').trim();
+  if (!clean) return null;
+  const known = (await listPeople()).find((p) => String(p.name).trim().toLowerCase() === clean.toLowerCase());
+  if (known) return known;
+  const record = {
+    id: `person_${globalThis.crypto?.randomUUID?.().slice(0, 12) || Math.random().toString(36).slice(2, 14)}`,
+    type: PERSON_TYPE, name: clean, initials, resourceType: type, rate: Number(rate) || 0, group,
+    updatedAt: Date.now(), deletedAt: null, origin: deviceId(),
+  };
+  await recordStore.put([record]);
+  if (syncConfigured()) void syncNow();
+  return record;
+}
+
+/** Take someone out of the directory. Plans that already use them are untouched. */
+export async function forgetPerson(id) {
+  if (!recordStore) return;
+  const record = await recordStore.get(id);
+  if (!record) return;
+  const at = Math.max(Date.now(), record.updatedAt + 1);
+  await recordStore.put([{ ...record, deletedAt: at, updatedAt: at, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+}
+
 // ---------------------------------------------------------------- the shelf
 //
 // Every plan this device has opened is a record, and a sync brings back every

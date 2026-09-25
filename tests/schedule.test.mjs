@@ -747,3 +747,44 @@ test('one calendar covers every plan, and a person is the same person in each', 
   assert.ok(hers.some((x) => x.planId === b.p.id && (x.day > together.day || x.start >= together.end)),
     'and the second is placed after it, not on top of it');
 });
+
+test('a person is shared between plans, not copied into each', async () => {
+  const { identityOf, addResource } = await import('../src/model/model.js');
+  const { personKeyOf, planBlocksAcross } = await import('../src/model/agenda.js');
+
+  // The same human being, added to two plans from one directory entry.
+  const person = { id: 'person_abc', name: 'Uma Chen' };
+  const build = (name) => {
+    const p = plan();
+    p.name = name;
+    const r = addResource(p, { personId: person.id, name: person.name, initials: 'UX' });
+    const t = task(p, `${name} work`, 1);
+    assign(p, t.id, r.id, 1);
+    setTaskField(p, t.id, 'calendarShow', true);
+    setTaskField(p, t.id, 'blockHours', 4);
+    return { p, r, t };
+  };
+  const a = build('Alpha'), b = build('Beta');
+  assert.notEqual(a.r.id, b.r.id, 'each plan still has its own row');
+  assert.equal(identityOf(a.r), identityOf(b.r), 'but they are one person');
+  assert.equal(identityOf(a.r), 'person:person_abc');
+  assert.equal(personKeyOf(a.r), personKeyOf(b.r));
+
+  // Which is what stops two plans booking her at once.
+  const entries = [{ project: a.p, schedule: computeSchedule(a.p) }, { project: b.p, schedule: computeSchedule(b.p) }];
+  const blocks = planBlocksAcross(entries).blocks.sort((x, y) => x.day - y.day || x.start - y.start);
+  for (let i = 1; i < blocks.length; i++) {
+    const prev = blocks[i - 1], now = blocks[i];
+    assert.ok(now.day > prev.day || now.start >= prev.end, 'one person, one set of hours');
+  }
+
+  // Someone with no directory entry still has an identity: their name.
+  const c = plan();
+  const loose = addResource(c, { name: 'Uma Chen' });
+  assert.equal(identityOf(loose), 'who:uma chen');
+
+  // And the same person is never added to one plan twice.
+  const again = addResource(a.p, { personId: person.id, name: 'Uma Chen' });
+  assert.equal(again.id, a.r.id);
+  assert.equal(a.p.resources.length, 1);
+});

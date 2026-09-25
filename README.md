@@ -140,7 +140,8 @@ calendar says *when*: which hours, on which days.
   Each block carries the person's initials in their own colour and the plan it
   came from; clicking one from another plan opens it there. **Calendar for**
   narrows to one person, and a second menu to the open project alone. People
-  are matched across plans by name, since each plan has its own resource list.
+  are matched across plans by the shared directory (below), falling back to
+  their name.
 - **Nobody is double-booked.** A task books the hours of *everyone* on it, so
   two tasks that share a person never overlap; two people working the same hour
   sit side by side.
@@ -155,6 +156,18 @@ subtasks from its details, the calendar or the Task menu. The parts divide its
 duration **and its hours**, inherit its people and its calendar settings, and
 run one after another, so the parent keeps the same span and becomes a summary
 of them — which is the WBS: the elapsed span at the top, the hours underneath.
+
+## People
+
+A person is not a per-project thing. The shelf keeps a **directory of people**
+alongside the plans, and a plan's resource points at an entry in it, so the
+same Uma Chen in three projects is one person whose hours cannot be promised
+twice. Adding someone offers the people already known before it offers a blank
+row, and a name typed into a task's Resource Names joins the directory too.
+
+The plan still carries each person's name, rate and type, so a
+`*.project.json` opened on its own is still a whole plan. A resource with no
+directory entry — everything written before this — is identified by name.
 
 ## Connecting Google and Outlook calendars
 
