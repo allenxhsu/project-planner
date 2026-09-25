@@ -77,3 +77,17 @@ test('work in hand is neither a template nor an archive', async () => {
   assert.equal(isCurrentWork(template), false);
   assert.equal(isCurrentWork(archived), false);
 });
+
+test('a project with no colour of its own does not come back red', async () => {
+  const { createProject } = await import('../src/model/model.js');
+  const { serialize, parse } = await import('../src/io/json.js');
+  const p = createProject('No colour');
+  assert.equal(p.colour, null);
+  // `+null` is 0 and 0 is a perfectly good hue, so this is the trap.
+  assert.equal(parse(serialize(p)).project.colour, null);
+
+  p.colour = 0;                       // red, chosen on purpose, is kept
+  assert.equal(parse(serialize(p)).project.colour, 0);
+  p.colour = 400;                     // and a hue is read round the circle
+  assert.equal(parse(serialize(p)).project.colour, 40);
+});

@@ -6,6 +6,7 @@ import * as act from '../state/actions.js';
 import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf } from '../model/model.js';
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
+import { hueColour } from './calendar.js';
 import { timeBlocks, phases, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
@@ -228,6 +229,21 @@ function renderProject(root) {
   form.append(field('When a task does not say its hours', select(String((project.agenda || {}).assumedLoad ?? DEFAULT_AGENDA.assumedLoad),
     LOAD_CHOICES.map((n) => ({ value: String(n), label: n === 100 ? 'All of its duration — full time' : `${n}% of its duration` })), (v) => act.setAgenda({ assumedLoad: +v })),
     'a five-day task is rarely five days of doing it; state a task’s work to override this'));
+  // The colour this project wears on a shared calendar.
+  const swatches = el('div', { class: 'colour-row' });
+  const own = project.colour !== null && project.colour !== undefined && Number.isFinite(+project.colour) ? Math.round(+project.colour) : null;
+  swatches.append(el('button', {
+    class: `colour-chip is-auto${own === null ? ' is-on' : ''}`, title: 'Let the calendar choose, spaced away from the other projects',
+    text: 'Auto', onclick: () => act.setProjectInfo({ colour: null }),
+  }));
+  for (let h = 0; h < 360; h += 30) {
+    swatches.append(el('button', {
+      class: `colour-chip${own === h ? ' is-on' : ''}`, title: `Hue ${h}`,
+      style: { background: hueColour(h).fill, borderColor: hueColour(h).line },
+      onclick: () => act.setProjectInfo({ colour: h }),
+    }));
+  }
+  form.append(field('Calendar colour', swatches, 'what this project is drawn in when the calendar colours by project'));
   form.append(field('Holidays', stopKeys(el('textarea', { class: 'sc-textarea sc-mono', rows: 4, value: project.calendar.holidays.join('\n'), onchange: (e) => {
     const list = e.target.value.split(/[\n,;\s]+/).map((x) => x.trim()).filter(Boolean);
     const bad = list.filter((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x));

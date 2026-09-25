@@ -65,6 +65,9 @@ export function createProject(name = 'Untitled project', start = null) {
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
+    // The hue this project is drawn in on a shared calendar. Null means the
+    // calendar picks one, spaced away from the projects beside it.
+    colour: null,
     // A template is a pattern to copy, not work in anyone's week.
     template: false,
     // Archived: finished or shelved. Kept in full, but out of the way of

@@ -383,6 +383,7 @@ export function setProjectInfo(patch) {
     if (patch.start !== undefined) p.start = patch.start;
     if (patch.statusDate !== undefined) p.statusDate = patch.statusDate || null;
     if (patch.currency !== undefined) p.currency = patch.currency || '$';
+    if (patch.colour !== undefined) p.colour = patch.colour === null ? null : ((Math.round(+patch.colour) % 360) + 360) % 360;
   });
 }
 export function setAgenda(patch) {

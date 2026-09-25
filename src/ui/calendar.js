@@ -125,12 +125,36 @@ export const colourModeFor = (blocks) => {
   return people.size > 1 ? 'person' : 'plan';
 };
 
+/** The shades a hue is drawn in: the edge, the body, and a heavier wash. */
+export const hueColour = (h) => ({ hue: h, line: `hsl(${h} 72% 62%)`, fill: `hsl(${h} 58% 34% / 0.62)`, wash: `hsl(${h} 58% 34% / 0.8)` });
+
 /** A stable colour per person, so a week of several people reads at a glance. */
 export function personColour(name) {
   const key = String(name || '');
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
-  return { hue: h, line: `hsl(${h} 70% 62%)`, fill: `hsl(${h} 60% 30% / 0.45)`, wash: `hsl(${h} 60% 30% / 0.65)` };
+  return hueColour(h);
+}
+
+/**
+ * A colour per project, far enough from its neighbours to tell apart.
+ *
+ * Hashing a name is stable but lands two projects on nearly the same hue as
+ * often as not. Walking the hue circle by the golden angle instead puts every
+ * project a long way from the ones before it, and because the step depends
+ * only on a plan's position in a fixed order, adding a project does not
+ * recolour the others. A plan that names its own colour keeps it.
+ */
+const GOLDEN_ANGLE = 137.508;
+export function planPalette(entries) {
+  const order = [...entries].sort((a, b) => String(a.project.id).localeCompare(String(b.project.id)));
+  const out = new Map();
+  order.forEach(({ project }, i) => {
+    const stated = project.colour !== null && project.colour !== undefined && Number.isFinite(+project.colour);
+    const own = stated ? ((Math.round(+project.colour) % 360) + 360) % 360 : null;
+    out.set(project.id, hueColour(own ?? Math.round((i * GOLDEN_ANGLE) % 360)));
+  });
+  return out;
 }
 
 /** Who is on a block, as names and initials. */
@@ -184,6 +208,7 @@ function sideBySide(dayBlocks) {
 async function openOther(planId, taskId) {
   const { openPlan } = await import('../state/sync.js');
   if (!(await openPlan(planId))) return;
+  if (!taskId) return;
   act.revealTask(taskId);
   act.selectTask(taskId);
   set({ rightOpen: true, rightTab: 'task' });
@@ -213,6 +238,7 @@ export function renderCalendar(root) {
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who) : all.meetings;
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
+  const palette = planPalette(entries);
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getTask(project, project.currentPhaseId) : null;
   const planCount = entries.length;
@@ -234,6 +260,23 @@ export function renderCalendar(root) {
       ? `One person’s week, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.`
       : `Everyone’s hours, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.` }));
   pane.append(bar);
+
+  // What the colours stand for. Without this a colour is decoration; with it,
+  // a glance at the week says which project is eating it.
+  if (colourMode === 'plan' && planCount > 1) {
+    const used = new Set(blocks.map((b) => b.planId));
+    const legend = el('div', { class: 'cal-legend' });
+    for (const e of entries) {
+      if (!used.has(e.project.id)) continue;
+      const colour = palette.get(e.project.id);
+      legend.append(el('span', { class: 'cal-legend-item', title: e.project.id === project.id ? 'The open project' : 'Click to open this project' ,
+        onclick: () => { if (e.project.id !== project.id) void openOther(e.project.id, null); } },
+        el('span', { class: 'cal-legend-dot', style: { background: colour.fill, borderColor: colour.line } }),
+        el('span', { text: e.project.name })));
+    }
+    if (legend.children.length) pane.append(legend);
+  }
+
   if (phaseList.length) {
     pane.append(el('div', { class: 'cal-phase' },
       el('span', { class: 'sc-label', text: 'Releasing' }),
@@ -253,7 +296,7 @@ export function renderCalendar(root) {
 
   const range = rangeOf();
   const screen = daysOnScreen(project);
-  if (range === 'month') { renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount }); return; }
+  if (range === 'month') { renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount, colourMode, palette }); return; }
   const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
@@ -299,7 +342,9 @@ export function renderCalendar(root) {
       const info = entry.schedule.tasks[b.taskId];
       if (!t || !info) continue;
       const person = whoOf(entries, b);
-      const colour = personColour(colourMode === 'plan' ? b.planName || b.planId : person.names[0] || 'unassigned');
+      const colour = colourMode === 'plan'
+        ? (palette.get(b.planId) || personColour(b.planName))
+        : personColour(person.names[0] || 'unassigned');
       const foreign = b.planId !== project.id;
       const height = Math.max(16, y(b.end) - y(b.start) - 2);
       // Half an hour is about twenty pixels: too short to stack a time, a name
@@ -376,7 +421,7 @@ export function renderCalendar(root) {
  * one. A cell says the hours it holds, lists its blocks in order, and clicking
  * one goes to that day.
  */
-function renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount }) {
+function renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount, colourMode, palette }) {
   const { ui } = store;
   const todayDay = toDay(today());
   const monthOf = (d) => fromDay(d).slice(0, 7);
@@ -425,7 +470,9 @@ function renderMonth(pane, { entries, blocks, meetings, screen, project, who, pl
       const t = entry?.project.tasks.find((x) => x.id === b.taskId);
       if (!t) continue;
       const person = whoOf(entries, b);
-      const colour = personColour(person.names[0] || 'unassigned');
+      const colour = colourMode === 'plan'
+        ? (palette.get(b.planId) || personColour(b.planName))
+        : personColour(person.names[0] || 'unassigned');
       const foreign = b.planId !== project.id;
       cell.append(el('div', {
         class: `cal-month-item${b.critical ? ' is-critical' : ''}`,

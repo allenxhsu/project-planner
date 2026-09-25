@@ -59,6 +59,10 @@ export function parse(text) {
   }
   const blockIds = new Set(p.timeBlocks.map((b) => b.id));
 
+  // `+null` is 0 and 0 is a finite hue, so a plan with no colour of its own
+  // would read as red. It has to be asked whether there is a value at all.
+  p.colour = raw.colour === null || raw.colour === undefined || !Number.isFinite(+raw.colour)
+    ? null : ((Math.round(+raw.colour) % 360) + 360) % 360;
   p.template = raw.template === true;
   p.archived = raw.archived === true;
   p.archivedAt = typeof raw.archivedAt === 'string' ? raw.archivedAt : null;

@@ -233,6 +233,12 @@ question when the calendar is one person's and the projects are many — and one
 person's calendar coloured by person is one colour, which says nothing.
 Automatic picks whichever the week actually is.
 
+Each project's colour is spaced a long way from the ones beside it — the hue
+circle walked by the golden angle, in a fixed order, so adding a project never
+recolours the others. A project can name its own hue in Project information,
+and a legend above the grid says which colour is which; clicking a project
+there opens it.
+
 ### Why a week is not full
 
 Duration is how long a task is open. Work is how much of that time goes into
