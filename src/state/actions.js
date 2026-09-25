@@ -3,6 +3,7 @@
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
+import { openApp } from '../links.js';
 import {
   insertTask, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
@@ -389,6 +390,32 @@ export function showAllInCalendar() {
     });
   });
 }
+
+// ---------------------------------------------------------------- BOM Manager
+
+/**
+ * Link a task to the BOM Manager project its bill of materials lives in, then
+ * open it there. BOM Manager uses the project of that name, or makes it, and
+ * remembers this plan and task so the link works from either end.
+ */
+export async function linkBom(id) {
+  const t = getTask(store.project, id);
+  if (!t) return;
+  const { promptText } = await import('../ui/dialog.js');
+  const name = await promptText('Link to BOM Manager', 'The BOM Manager project for this task’s bill of materials. A project of this name is used if there is one; otherwise it is made.', t.bom?.name || store.project.name);
+  if (name == null || !name.trim()) return;
+  if (!attempt('Link to BOM Manager', (p) => setTaskField(p, id, 'bom', { name }))) return;
+  openBom(id);
+}
+
+/** Open the task's BOM Manager project, in its own tab. */
+export function openBom(id) {
+  const t = getTask(store.project, id);
+  if (!t?.bom) return;
+  openApp('bom', { plan: store.project.id, planName: store.project.name, task: t.id, taskName: t.name, name: t.bom.name });
+}
+
+export function unlinkBom(id) { attempt('Unlink BOM', (p) => setTaskField(p, id, 'bom', null)); }
 
 /** Cut a task into parts. Asks how many, then names them after it. */
 export async function breakUpDialog(taskId) {

@@ -80,6 +80,19 @@ function renderTask(root) {
   form.append(field('Notes', stopKeys(el('textarea', { class: 'sc-textarea', rows: 3, value: t.notes, onchange: (e) => act.editTask(id, 'notes', e.target.value) }))));
   root.append(form);
 
+  // ---- BOM: the BOM Manager project this task's bill of materials lives in
+  root.append(el('div', { class: 'sc-section-title', text: 'BOM' }));
+  const bom = el('div', { class: 'insp-form' });
+  if (t.bom) {
+    bom.append(el('div', { class: 'bom-link' },
+      el('span', { class: 'ind-bom', text: '▦' }), el('span', { class: 'bom-name', text: t.bom.name }),
+      el('button', { class: 'sc-button sc-button--sm', text: 'Open in BOM Manager', onclick: () => act.openBom(id) }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Unlink', onclick: () => act.unlinkBom(id) })));
+  } else {
+    bom.append(el('button', { class: 'sc-button sc-button--sm', text: 'Link to BOM Manager…', title: 'Open (or make) the BOM Manager project for this task’s bill of materials', onclick: () => act.linkBom(id) }));
+  }
+  root.append(bom);
+
   // ---- calendar: whether this task gets hours in the week, and which
   if (!s.summary && !s.milestone) {
     const a = agendaOf(project, t);

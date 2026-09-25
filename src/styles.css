@@ -85,6 +85,9 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .ind-pin { color: var(--sc-accent-2); }
 .ind-deadline { color: var(--sc-success); }
 .ind-note { color: var(--sc-text-3); }
+.ind-bom { color: var(--sc-accent); cursor: pointer; }
+.bom-link { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bom-link .bom-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* usage table */
 .usage th.week { min-width: 58px; font-family: var(--sc-font-mono); text-transform: none; letter-spacing: 0; }
