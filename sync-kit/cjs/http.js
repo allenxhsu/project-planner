@@ -1,7 +1,23 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HttpTransport = void 0;
+exports.HttpTransport = exports.SyncUnauthorized = void 0;
 const protocol_js_1 = require("./protocol.js");
+/**
+ * A refusal that means "your credential, not your request".
+ *
+ * Distinguished from every other failure because it is the only one a person
+ * can act on: a 500 is ours, a timeout is the network, and a 401 is a sign-in
+ * that has run out. `code` is what the UI switches on, so it does not have to
+ * match on a message that was never meant to be parsed.
+ */
+class SyncUnauthorized extends Error {
+    code = 'unauthorized';
+    constructor(route) {
+        super(`sync ${route} was refused: not signed in`);
+        this.name = 'SyncUnauthorized';
+    }
+}
+exports.SyncUnauthorized = SyncUnauthorized;
 /**
  * A name for a workspace URL that a person would recognise.
  *
@@ -48,6 +64,14 @@ class HttpTransport {
             credentials: 'same-origin',
             signal: AbortSignal.timeout(20_000),
         });
+        if (res.status === 401 || res.status === 403) {
+            // 403 as well as 401: a cookie-authenticated write refused as cross-site
+            // is the same story from the person's point of view — this browser is
+            // not going to be able to sync until something about its credential
+            // changes — and telling them apart helps nobody holding a phone.
+            this.opts.onUnauthorized?.();
+            throw new SyncUnauthorized(route);
+        }
         if (!res.ok) {
             throw new Error(`sync ${route} failed: ${res.status} ${res.statusText}`);
         }

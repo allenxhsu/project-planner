@@ -16,10 +16,15 @@
  *   status = {
  *     phase: 'idle' | 'syncing' | 'error',
  *     lastSyncAt?: string | number | Date | null,   when the last sync finished
- *     lastError?: string | null,                    shown while phase is 'error'
+ *     lastError?: string | { code, message } | null, shown while phase is 'error'
  *     pulled?: number, pushed?: number,             record counts of the last run
  *     label?: string,                               which workspace or server, if it matters
  *   }
+ *
+ * Two error cases read differently inside the Portal: when lastError's code is
+ * 'unauthorized' the readout offers a Sign in link (to /?next=<current path>)
+ * instead of the error text, and while navigator.onLine is false it says
+ * Offline instead of reporting the error at all.
  *
  * The latest status wins whichever way it arrives, and an element added after
  * the last event starts from that event, so late-mounted readouts are right.
@@ -67,6 +72,26 @@ function toDate(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** lastError as { code, message }, whether it arrived as a string or an object. */
+function errorInfo(lastError) {
+  if (!lastError) return null;
+  if (typeof lastError === 'object') {
+    return { code: lastError.code ? String(lastError.code) : '', message: lastError.message ? String(lastError.message) : '' };
+  }
+  const text = String(lastError);
+  return { code: text, message: text };
+}
+
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+
+/** The phase to show: an error while offline reads as 'offline'. */
+const shownPhase = (s) => (s.phase === 'error' && isOffline() ? 'offline' : s.phase);
+
+/** The Portal's sign-in URL that returns to the current page afterwards. */
+export function signInUrl(loc = window.location) {
+  return `/?next=${encodeURIComponent(loc.pathname + loc.search + loc.hash)}`;
+}
+
 /** "just now", "4 min ago", "3 h ago", "yesterday", "5 days ago", "12 Sep". */
 export function relativeTime(date, now = new Date()) {
   const s = Math.round((now - date) / 1000);
@@ -83,6 +108,7 @@ export function relativeTime(date, now = new Date()) {
 
 function phaseWord(phase, synced) {
   if (phase === 'syncing') return 'Syncing';
+  if (phase === 'offline') return 'Offline';
   if (phase === 'error') return 'Sync failed';
   return synced ? 'Synced' : 'Not synced';
 }
@@ -103,6 +129,7 @@ export class ScSyncStatus extends HTMLElement {
     this._onClick = (e) => {
       if (e.target.closest('[data-sync-now]')) window.dispatchEvent(new CustomEvent(SYNC_NOW_EVENT));
     };
+    this._onConnectivity = () => this.render();
   }
 
   /** The status object being shown; null when nothing has arrived yet. */
@@ -120,6 +147,8 @@ export class ScSyncStatus extends HTMLElement {
     if (!this.hasAttribute('role')) this.setAttribute('role', 'status');
     if (!this._own && lastStatus) this._status = lastStatus;
     window.addEventListener(STATUS_EVENT, this._onStatus);
+    window.addEventListener('online', this._onConnectivity);
+    window.addEventListener('offline', this._onConnectivity);
     this.addEventListener('click', this._onClick);
     // Keeps "4 min ago" honest without any event arriving.
     this._timer = setInterval(() => this.renderDetail(), 30_000);
@@ -128,6 +157,8 @@ export class ScSyncStatus extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener(STATUS_EVENT, this._onStatus);
+    window.removeEventListener('online', this._onConnectivity);
+    window.removeEventListener('offline', this._onConnectivity);
     this.removeEventListener('click', this._onClick);
     clearInterval(this._timer);
   }
@@ -139,14 +170,15 @@ export class ScSyncStatus extends HTMLElement {
   render() {
     const s = this._status || { phase: 'idle' };
     const synced = Boolean(toDate(s.lastSyncAt));
-    this.dataset.phase = s.phase;
+    const phase = shownPhase(s);
+    this.dataset.phase = phase;
     this.toggleAttribute('data-synced', synced);
     const button = this.hasAttribute('no-button')
       ? ''
       : `<button type="button" class="sc-button sc-button--ghost sc-button--sm" data-sync-now ${s.phase === 'syncing' ? 'disabled' : ''}>Sync now</button>`;
     this.innerHTML = `
       <span class="sc-sync-dot" aria-hidden="true"></span>
-      <span class="sc-sync-phase">${phaseWord(s.phase, synced)}</span>
+      <span class="sc-sync-phase">${phaseWord(phase, synced)}</span>
       <span class="sc-sync-detail"></span>
       ${button}`;
     this.renderDetail();
@@ -158,17 +190,27 @@ export class ScSyncStatus extends HTMLElement {
     if (!detail) return;
     const s = this._status || { phase: 'idle' };
     const last = toDate(s.lastSyncAt);
+    const phase = shownPhase(s);
+    const err = phase === 'error' ? errorInfo(s.lastError) : null;
+    const unauthorized = Boolean(err && err.code === 'unauthorized');
+    // Text and nodes, joined by " · ".
     const parts = [];
-    if (s.phase === 'error') parts.push(s.lastError || 'error');
-    else if (s.phase === 'syncing') parts.push('in progress');
+    if (unauthorized) {
+      const a = document.createElement('a');
+      a.className = 'sc-sync-action';
+      a.href = signInUrl();
+      a.textContent = 'Sign in';
+      parts.push(a);
+    } else if (phase === 'error') parts.push((err && (err.message || err.code)) || 'error');
+    else if (phase === 'syncing') parts.push('in progress');
     else if (last) parts.push(relativeTime(last));
-    if (s.phase !== 'error' && (s.pulled || s.pushed)) parts.push(`↓${s.pulled ?? 0} ↑${s.pushed ?? 0}`);
+    if (phase !== 'error' && phase !== 'offline' && (s.pulled || s.pushed)) parts.push(`↓${s.pulled ?? 0} ↑${s.pushed ?? 0}`);
     if (s.label) parts.push(String(s.label));
-    detail.textContent = parts.join(' · ');
+    detail.replaceChildren(...parts.flatMap((p, i) => (i ? [' · ', p] : [p])));
     this.title = [
-      phaseWord(s.phase, Boolean(last)),
+      unauthorized ? 'Sign in required' : phaseWord(phase, Boolean(last)),
       last ? `Last sync ${last.toLocaleString()}` : '',
-      s.phase === 'error' && s.lastError ? String(s.lastError) : '',
+      phase === 'error' && !unauthorized && err ? err.message || err.code : '',
       s.label ? `Workspace: ${s.label}` : '',
     ]
       .filter(Boolean)

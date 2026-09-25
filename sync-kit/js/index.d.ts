@@ -1,7 +1,9 @@
 export { SyncEngine, SYNC_CURSOR_KEYS } from './engine.js';
 export type { SyncResult, SyncStatus, SyncPhase } from './engine.js';
-export { HttpTransport } from './http.js';
+export { HttpTransport, SyncUnauthorized } from './http.js';
 export type { HttpTransportOptions } from './http.js';
+export { portalApp, portalSession, portalRemote, portalSignInPath } from './portal.js';
+export type { PortalSession, PortalApp, PortalRemote, PortalSessionOptions } from './portal.js';
 export { SYNC_ROUTES } from './protocol.js';
 export type { Transport, PullRequest, PullResponse, PushRequest, PushResponse } from './protocol.js';
 export { mergeRecord } from './store.js';

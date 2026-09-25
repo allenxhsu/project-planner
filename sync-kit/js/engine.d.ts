@@ -16,6 +16,12 @@ export interface SyncStatus {
     phase: SyncPhase;
     lastSyncAt: number | null;
     lastError: string | null;
+    /**
+     * What kind of failure, when it is one worth acting on. `unauthorized` is
+     * the only one so far, and it is here so a UI can offer Sign in rather than
+     * matching on the text of a message.
+     */
+    lastErrorCode?: 'unauthorized' | null;
     pulled: number;
     pushed: number;
     /** Which remote this is the status of. ui-kit shows it when an app has two. */

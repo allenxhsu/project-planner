@@ -23,6 +23,7 @@
   --sc-chamfer-sm: 6px;
   --sc-bracket: 12px;
   --sc-line: 1px;
+  --sc-portal-bar: 36px;
   --sc-dur-fast: 120ms;
   --sc-dur-base: 200ms;
   --sc-ease: cubic-bezier(0.2, 0.7, 0.2, 1);

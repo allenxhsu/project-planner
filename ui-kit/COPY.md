@@ -6,7 +6,7 @@ and a refresh replaces them wholesale.
 
 - Package: ui-kit 0.2.0
 - Source commit: dcd095d + uncommitted changes
-- Copied: 2026-09-24T02:31:55.507Z
+- Copied: 2026-09-25T01:20:04.253Z
 - Contents: css/ adapters/ fonts/ js/ tokens/ swift/
 
 From `Project/` (the folder that holds this copy):

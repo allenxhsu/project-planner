@@ -7,6 +7,29 @@ export interface HttpTransportOptions {
     token?: string;
     /** What to call this remote in the UI. Defaults to the workspace, or the host. */
     label?: string;
+    /**
+     * Called when the server refuses the credential — a 401, and only a 401.
+     *
+     * The Portal is why this exists. A session cookie expires, or is revoked
+     * while a tab is open, and every sync from then on fails with a message
+     * about a status code that means nothing to the person reading it. The app
+     * that owns the UI is the only thing that knows what to do about it — offer
+     * Sign in, go back to the Portal, say something useful — so the transport
+     * reports it and stays out of the decision.
+     */
+    onUnauthorized?: () => void;
+}
+/**
+ * A refusal that means "your credential, not your request".
+ *
+ * Distinguished from every other failure because it is the only one a person
+ * can act on: a 500 is ours, a timeout is the network, and a 401 is a sign-in
+ * that has run out. `code` is what the UI switches on, so it does not have to
+ * match on a message that was never meant to be parsed.
+ */
+export declare class SyncUnauthorized extends Error {
+    readonly code = "unauthorized";
+    constructor(route: string);
 }
 /**
  * HTTP transport.

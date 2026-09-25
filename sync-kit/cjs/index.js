@@ -1,11 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
+exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
 var engine_js_1 = require("./engine.js");
 Object.defineProperty(exports, "SyncEngine", { enumerable: true, get: function () { return engine_js_1.SyncEngine; } });
 Object.defineProperty(exports, "SYNC_CURSOR_KEYS", { enumerable: true, get: function () { return engine_js_1.SYNC_CURSOR_KEYS; } });
 var http_js_1 = require("./http.js");
 Object.defineProperty(exports, "HttpTransport", { enumerable: true, get: function () { return http_js_1.HttpTransport; } });
+Object.defineProperty(exports, "SyncUnauthorized", { enumerable: true, get: function () { return http_js_1.SyncUnauthorized; } });
+var portal_js_1 = require("./portal.js");
+Object.defineProperty(exports, "portalApp", { enumerable: true, get: function () { return portal_js_1.portalApp; } });
+Object.defineProperty(exports, "portalSession", { enumerable: true, get: function () { return portal_js_1.portalSession; } });
+Object.defineProperty(exports, "portalRemote", { enumerable: true, get: function () { return portal_js_1.portalRemote; } });
+Object.defineProperty(exports, "portalSignInPath", { enumerable: true, get: function () { return portal_js_1.portalSignInPath; } });
 var protocol_js_1 = require("./protocol.js");
 Object.defineProperty(exports, "SYNC_ROUTES", { enumerable: true, get: function () { return protocol_js_1.SYNC_ROUTES; } });
 var store_js_1 = require("./store.js");

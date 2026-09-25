@@ -166,6 +166,18 @@ export async function syncNow() {
   }
 }
 
+/**
+ * Settings handed over by the shell, because this Mac is paired with the
+ * toolkit Portal. They are the same two values the dialog holds, so they are
+ * applied the same way — including the cursor reset when the server changes.
+ * Signed out (two empty strings) switches sync off rather than syncing nowhere.
+ */
+export async function adoptRemoteSettings({ url, token }) {
+  const next = { url: (url || '').trim(), token: (token || '').trim() };
+  if (next.url === settings.url && next.token === settings.token) return;
+  await applySettings({ ...next, enabled: !!next.url });
+}
+
 /** Sync because the plan was just written to a file, if that is switched on. */
 export function syncAfterSave() { if (syncConfigured()) void syncNow(); }
 

@@ -86,7 +86,8 @@ export class SyncEngine {
             return { pulled: applied.length, pushed, applied };
         }
         catch (err) {
-            this.publish({ phase: 'error', lastError: err.message });
+            const code = err.code === 'unauthorized' ? 'unauthorized' : null;
+            this.publish({ phase: 'error', lastError: err.message, lastErrorCode: code });
             throw err;
         }
         finally {

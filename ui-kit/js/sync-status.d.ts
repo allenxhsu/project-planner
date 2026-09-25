@@ -5,8 +5,12 @@ export interface SyncStatus {
   phase: SyncPhase;
   /** When the last sync finished; ISO string, epoch ms or Date. */
   lastSyncAt?: string | number | Date | null;
-  /** Shown while phase is 'error'. */
-  lastError?: string | null;
+  /**
+   * Shown while phase is 'error'. A code of 'unauthorized' turns the readout
+   * into a Sign in link; while navigator.onLine is false the readout says
+   * Offline instead of reporting the error.
+   */
+  lastError?: string | { code?: string; message?: string } | null;
   /** Record counts of the last run. */
   pulled?: number;
   pushed?: number;
@@ -21,6 +25,9 @@ export class ScSyncStatus extends HTMLElement {
 
 /** "just now", "4 min ago", "3 h ago", "yesterday", "5 days ago", "12 Sep". */
 export function relativeTime(date: Date, now?: Date): string;
+
+/** /?next=<current path>: the Portal's sign-in URL that returns here afterwards. */
+export function signInUrl(location?: Location): string;
 
 declare global {
   interface HTMLElementTagNameMap {

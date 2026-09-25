@@ -114,6 +114,31 @@ public enum SCAppColor {
     public static let habit = Color(red: 0.922, green: 0.478, blue: 0.627)
 }
 
+/// Each app as tokens.json lists it. The Launcher and any native app switcher read names,
+/// marks and colours from here rather than keeping copies.
+public struct SCAppInfo: Identifiable {
+    public let id: String
+    public let name: String
+    public let mark: String
+    public let color: Color
+}
+
+public enum SCApps {
+    public static let all: [SCAppInfo] = [
+        SCAppInfo(id: "heptabase", name: "Heptabase", mark: "HB", color: SCAppColor.heptabase),
+        SCAppInfo(id: "idef0", name: "IDEF0 Modeler", mark: "A0", color: SCAppColor.idef0),
+        SCAppInfo(id: "pyramid", name: "Pyramid Principle", mark: "PY", color: SCAppColor.pyramid),
+        SCAppInfo(id: "metropolis", name: "Metropolis", mark: "MP", color: SCAppColor.metropolis),
+        SCAppInfo(id: "sysml", name: "SysML Modeler", mark: "SY", color: SCAppColor.sysml),
+        SCAppInfo(id: "project", name: "Project Planner", mark: "PP", color: SCAppColor.project),
+        SCAppInfo(id: "profiler", name: "Profiler", mark: "PR", color: SCAppColor.profiler),
+        SCAppInfo(id: "hypermail", name: "Hypermail", mark: "HM", color: SCAppColor.hypermail),
+        SCAppInfo(id: "bom", name: "BOM Manager", mark: "BM", color: SCAppColor.bom),
+        SCAppInfo(id: "habit", name: "Habit", mark: "HA", color: SCAppColor.habit),
+    ]
+    public static func app(_ id: String) -> SCAppInfo? { all.first { $0.id == id } }
+}
+
 /// Font helpers. Bundle the TTF/OTF files of these families in the app target
 /// (Google Fonts, OFL); the woff2 files in fonts/ are for the web only.
 public enum SCFont {

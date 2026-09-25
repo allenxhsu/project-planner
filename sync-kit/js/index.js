@@ -1,5 +1,6 @@
 export { SyncEngine, SYNC_CURSOR_KEYS } from './engine.js';
-export { HttpTransport } from './http.js';
+export { HttpTransport, SyncUnauthorized } from './http.js';
+export { portalApp, portalSession, portalRemote, portalSignInPath } from './portal.js';
 export { SYNC_ROUTES } from './protocol.js';
 export { mergeRecord } from './store.js';
 export { SYNC_EVENTS, publishStatus, requestSync, onSyncNow } from './events.js';

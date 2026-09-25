@@ -28,6 +28,8 @@ export interface SyncStatusDetail {
     phase: SyncPhase;
     lastSyncAt?: string | number | Date | null;
     lastError?: string | null;
+    /** `unauthorized` when the remote refused the credential; see `SyncStatus`. */
+    lastErrorCode?: 'unauthorized' | null;
     /** The last run's, not a running total. */
     pulled?: number;
     pushed?: number;

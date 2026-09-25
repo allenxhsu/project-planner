@@ -17,7 +17,7 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 
 const $ = (id) => document.getElementById(id);
@@ -93,6 +93,10 @@ function initHosting() {
     load: (text, name) => loadText(text, name),
     command: (id) => { COMMANDS[id]?.(); },
     saved: (name) => { markSaved(name); syncAfterSave(); },
+    // The Mac app can pair with the toolkit Portal and keep the device token in
+    // the Keychain; when it does, it hands the page the same two values the Sync
+    // dialog holds. Two empty strings mean signed out, which is clearing them.
+    remote: ({ url, token }) => { void adoptRemoteSettings({ url, token }); },
   });
   if (!hosted) return;
   let lastRev = -1, lastDirty = null;
