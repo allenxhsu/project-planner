@@ -9,14 +9,14 @@ import { serialize, parse, FILE_EXT } from '../io/json.js';
 import { exportMspdi, importMspdi } from '../io/mspdi.js';
 import { exportCsv, importCsv } from '../io/csv.js';
 import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
-import { showMenu, confirmDialog, showText } from './dialog.js';
+import { showMenu, confirmDialog, showText, promptText } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { reloadPeople } from './people.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
-import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings } from '../state/sync.js';
+import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -281,13 +281,62 @@ export function initHeader(root) {
   })));
   const find = el('input', { class: 'sc-input find', placeholder: 'Find task', id: 'find', oninput: (e) => findResults(e.target), onkeydown: (e) => { if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); } e.stopPropagation(); } });
   root.append(
-    el('span', { class: 'sc-brand-mark', text: 'PJ' }), el('h1', { class: 'sc-header-title', text: 'Project Planner' }), menubar, el('span', { class: 'sc-spacer' }),
+    el('span', { class: 'sc-brand-mark', text: 'PJ' }), el('h1', { class: 'sc-header-title', text: 'Project Planner' }),
+    el('button', { class: 'sc-button sc-button--ghost sc-button--sm workspace-pick', id: 'workspace-pick', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); void workspaceMenu(r.left, r.bottom + 4); } }, 'All workspaces'),
+    menubar, el('span', { class: 'sc-spacer' }),
     el('span', { class: 'sc-mono sc-muted', id: 'file-name' }),
     el('span', { class: 'sc-resource', title: 'Tasks' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-tasks' })),
     el('span', { class: 'sc-resource sc-resource--alt', title: 'Resources' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-resources' })),
     el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-undo', title: 'Undo', text: '↶', onclick: undo }),
     el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-redo', title: 'Redo', text: '↷', onclick: redo }),
     find);
+}
+
+/**
+ * Which workspace is in front, and the making of new ones.
+ *
+ * Work, personal and school are different lives sharing one tool. Switching
+ * here changes what every screen counts: the projects on the shelf, the tasks
+ * in All Tasks, the hours on the calendar and what each person is carrying.
+ */
+export async function workspaceMenu(x, y) {
+  const spaces = await listWorkspaces();
+  const active = activeWorkspace();
+  const { reloadPlans: reload } = await import('./projects.js');
+  const refresh = async () => {
+    const { reloadCalendarPlans: rc } = await import('./calendar.js');
+    const { reloadAllTasks: ra } = await import('./alltasks.js');
+    const { reloadPeople: rp } = await import('./people.js');
+    await Promise.all([reload(), rc(), ra(), rp()]);
+  };
+  const items = [
+    { note: 'Workspace' },
+    { label: 'All workspaces', checked: !active, run: async () => { setActiveWorkspace(''); await refresh(); } },
+    ...spaces.map((w) => ({ label: w.name, checked: active === w.id, run: async () => { setActiveWorkspace(w.id); await refresh(); } })),
+    '-',
+    { label: 'New workspace…', run: async () => {
+      const name = await promptText('New workspace', 'Work, personal, school — whatever the projects in it have in common.', '');
+      if (!name?.trim()) return;
+      const made = await createWorkspace(name.trim());
+      if (made) { setActiveWorkspace(made.id); await refresh(); }
+    } },
+  ];
+  if (active) {
+    const here = spaces.find((w) => w.id === active);
+    items.push(
+      { label: `Rename “${here?.name || 'this workspace'}”…`, run: async () => {
+        const name = await promptText('Rename this workspace', 'What should it be called?', here?.name || '');
+        if (name?.trim()) { await renameWorkspace(active, name.trim()); await refresh(); }
+      } },
+      { label: `Delete “${here?.name || 'this workspace'}”`, danger: true, run: async () => {
+        const yes = await confirmDialog('Delete this workspace?', 'The projects in it are kept. They become unfiled and show up wherever you are.');
+        if (!yes) return;
+        await deleteWorkspace(active);
+        await refresh();
+      } },
+    );
+  }
+  showMenu(x, y, items);
 }
 
 function findResults(input) {
@@ -302,8 +351,23 @@ function findResults(input) {
   input.focus();
 }
 
+let workspaceLabel = 'All workspaces';
+/** Keep the header's workspace button in step with the records. */
+export async function refreshWorkspaceLabel() {
+  const active = activeWorkspace();
+  if (!active) { workspaceLabel = 'All workspaces'; }
+  else {
+    const here = (await listWorkspaces()).find((w) => w.id === active);
+    workspaceLabel = here ? here.name : 'All workspaces';
+  }
+  const btn = document.getElementById('workspace-pick');
+  if (btn) btn.textContent = workspaceLabel;
+}
+
 export function renderHeader() {
   const { project, ui } = store;
+  const btn = document.getElementById('workspace-pick');
+  if (btn) btn.textContent = workspaceLabel;
   document.getElementById('file-name').textContent = `${ui.fileName || `${slugify(project.name)}${FILE_EXT}`}${ui.dirty ? ' •' : ''}`;
   document.getElementById('count-tasks').textContent = project.tasks.length;
   document.getElementById('count-resources').textContent = project.resources.length;

@@ -161,6 +161,28 @@ duration **and its hours**, inherit its people and its calendar settings, and
 run one after another, so the parent keeps the same span and becomes a summary
 of them — which is the WBS: the elapsed span at the top, the hours underneath.
 
+## Workspaces
+
+Work, personal and school are different lives that happen to use the same
+tool. Keeping them apart is not a filing preference: a Saturday on a course
+should not read as capacity for a customer's job, and a customer's deadline
+has no business in a personal week.
+
+A plan belongs to a **workspace**, chosen from the button beside the app's
+name. Switching changes what every screen counts — the projects on the shelf,
+the rows in All Tasks, the hours on the calendar, and what each person is
+carrying. **All workspaces** shows everything at once, and a card then says
+which workspace it is filed under.
+
+A plan started while a workspace is in front belongs to it. Any plan can be
+moved from its card's menu. A plan filed under nothing is unfiled and shows up
+wherever you are, which is what a plan made before workspaces existed is.
+Deleting a workspace keeps its plans and unfiles them.
+
+Workspaces are records like plans and people, so they travel between devices.
+Which one is in front is each device's own business and does not sync: the Mac
+can be on Work while the browser is on School.
+
 ## People
 
 A person is not a per-project thing. The shelf keeps a **directory of people**

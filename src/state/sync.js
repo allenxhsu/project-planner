@@ -275,6 +275,90 @@ function load(remote) {
 // travels between devices with everything else.
 
 const PERSON_TYPE = 'person';
+const WORKSPACE_TYPE = 'workspace';
+
+// ------------------------------------------------------------- workspaces
+//
+// Work, personal and school are different lives that happen to use the same
+// tool. Keeping them apart is not a filing preference: a Saturday spent on a
+// course should not read as capacity for a customer's job, and a customer's
+// deadline has no business in a personal week. So a plan belongs to a
+// workspace, and the Projects screen, All Tasks, the calendar and what a
+// person is carrying all follow whichever one is in front.
+//
+// A workspace is a record like a plan or a person, so it travels with them.
+// Which one is open is this device's own business, and stays in localStorage.
+
+const WORKSPACE_KEY = 'project-planner:workspace';
+/** The workspace on screen. '' is all of them at once. */
+export const activeWorkspace = () => read(WORKSPACE_KEY, '');
+export function setActiveWorkspace(id) {
+  write(WORKSPACE_KEY, id || '');
+  set({});
+}
+
+export async function listWorkspaces() {
+  if (!recordStore) return [];
+  const all = await recordStore.all();
+  return all
+    .filter((r) => r && r.type === WORKSPACE_TYPE && !r.deletedAt && r.name)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+export async function createWorkspace(name) {
+  if (!recordStore) return null;
+  const clean = String(name || '').trim();
+  if (!clean) return null;
+  const known = (await listWorkspaces()).find((w) => String(w.name).trim().toLowerCase() === clean.toLowerCase());
+  if (known) return known;
+  const record = {
+    id: `ws_${globalThis.crypto?.randomUUID?.().slice(0, 12) || Math.random().toString(36).slice(2, 14)}`,
+    type: WORKSPACE_TYPE, name: clean, updatedAt: Date.now(), deletedAt: null, origin: deviceId(),
+  };
+  await recordStore.put([record]);
+  if (syncConfigured()) void syncNow();
+  return record;
+}
+
+export async function renameWorkspace(id, name) {
+  if (!recordStore) return false;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== WORKSPACE_TYPE) return false;
+  const clean = String(name || '').trim();
+  if (!clean) return false;
+  await recordStore.put([{ ...record, name: clean, updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return true;
+}
+
+/** Remove a workspace. Its plans are kept and become unfiled, never deleted. */
+export async function deleteWorkspace(id) {
+  if (!recordStore) return false;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== WORKSPACE_TYPE) return false;
+  for (const plan of await planRecords()) {
+    let project;
+    try { project = parse(plan.body).project; } catch { continue; }
+    if (project.workspaceId !== id) continue;
+    await setPlanWorkspace(plan.id, null);
+  }
+  await recordStore.put([{ ...record, deletedAt: Date.now(), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  if (activeWorkspace() === id) setActiveWorkspace('');
+  if (syncConfigured()) void syncNow();
+  return true;
+}
+
+/** File a plan under a workspace, or take it out of one with null. */
+export const setPlanWorkspace = (id, workspaceId) =>
+  patchPlan(id, (project) => { project.workspaceId = workspaceId || null; }, 'Move to a workspace');
+
+/** Whether a plan belongs in the workspace on screen. '' shows everything. */
+export function inActiveWorkspace(project) {
+  const active = activeWorkspace();
+  if (!active) return true;
+  return (project?.workspaceId || null) === active;
+}
+
 
 export async function listPeople() {
   if (!recordStore) return [];
@@ -513,6 +597,7 @@ export function planSummary(record) {
     startIso: schedule?.startIso || project.start, finishIso: schedule?.finishIso || null,
     percent: schedule?.percent ?? 0, critical: schedule?.criticalCount ?? 0,
     template: project.template === true,
+    workspaceId: project.workspaceId || null,
     archived: project.archived === true,
     archivedAt: project.archivedAt || null,
     onCalendar: project.tasks.filter((t) => t.calendar?.show).length,
@@ -614,7 +699,7 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
  * Neither is anyone's current work, so neither belongs on the calendar, in All
  * Tasks, or in what a person is carrying. Both are kept in full.
  */
-export const isCurrentWork = (project) => !project?.template && !project?.archived;
+export const isCurrentWork = (project) => !project?.template && !project?.archived && inActiveWorkspace(project);
 
 /**
  * Archive a plan, or bring it back.

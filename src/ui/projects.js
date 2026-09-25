@@ -9,7 +9,7 @@ import { el, clear, formatMoney } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
-import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, syncConfigured, syncStatus } from '../state/sync.js';
+import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 
@@ -21,11 +21,15 @@ let loaded = false;
 let showArchive = false;
 
 /** Re-read the shelf and redraw. `pull` also asks the server first. */
+/** The workspaces a plan can be filed under, read alongside the shelf. */
+let spaces = [];
+
 export async function reloadPlans({ pull = false } = {}) {
   loading = true;
   set({});
   try {
     plans = pull ? await refreshPlans() : await listPlans();
+    spaces = await listWorkspaces();
   } catch {
     plans = [];
   }
@@ -60,6 +64,12 @@ function card(p) {
         if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }
       } },
       '-',
+      ...(spaces.length ? [
+        { note: 'Workspace' },
+        { label: 'Unfiled', checked: !p.workspaceId, run: async () => { await setPlanWorkspace(p.id, null); void reloadPlans(); } },
+        ...spaces.map((w) => ({ label: w.name, checked: p.workspaceId === w.id, run: async () => { await setPlanWorkspace(p.id, w.id); void reloadPlans(); } })),
+        '-',
+      ] : []),
       { label: p.archived ? 'Bring back from the archive' : 'Archive', 
         run: async () => { await setPlanArchived(p.id, !p.archived); void reloadPlans(); } },
       { label: p.template ? 'Not a template — put it back on the calendar' : 'Mark as a template', 
@@ -92,6 +102,7 @@ function card(p) {
       el('span', { class: 'sc-pill', text: `${p.percent || 0}%` }),
       p.template ? el('span', { class: 'sc-pill', title: 'A pattern to copy — its tasks stay off the calendar', text: 'Template' }) : null,
       p.archived ? el('span', { class: 'sc-pill', title: p.archivedAt ? `Archived ${formatDate(p.archivedAt, 'long')}` : 'Archived', text: 'Archived' }) : null,
+      !activeWorkspace() && p.workspaceId ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-text-3)' }, title: 'The workspace this project is filed under', text: spaces.find((w) => w.id === p.workspaceId)?.name || 'Filed' }) : null,
       isOpen ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-app)' }, text: 'Open' }) : null));
 }
 
@@ -101,16 +112,25 @@ export function renderProjects(root) {
   const pane = el('div', { class: 'projects-pane' });
   root.append(pane);
 
+  // A workspace is what is in front: work, personal, school. An unfiled plan
+  // belongs to none of them and so shows up wherever you are.
+  const active = activeWorkspace();
+  const here = plans.filter((p) => !active || (p.workspaceId || null) === active || !p.workspaceId);
+
   pane.append(el('div', { class: 'projects-head' },
     el('div', { class: 'sc-display', text: 'Projects' }),
-    el('span', { class: 'sc-muted small', text: syncConfigured() ? 'Every plan on this device and on every device you sync with.' : 'Every plan on this device. Turn on Sync… to keep a copy online and see plans from your other devices.' })));
+    el('span', { class: 'sc-muted small', text: active
+      ? `The projects in this workspace, and any that are not filed under one. ${spaces.find((w) => w.id === active)?.name || ''}`.trim()
+      : (syncConfigured() ? 'Every plan on this device and on every device you sync with.' : 'Every plan on this device. Turn on Sync… to keep a copy online and see plans from your other devices.') })));
 
-  const live = plans.filter((p) => !p.archived);
-  const archived = plans.filter((p) => p.archived);
+  const live = here.filter((p) => !p.archived);
+  const archived = here.filter((p) => p.archived);
 
   const grid = el('div', { class: 'plan-grid' });
   grid.append(el('button', {
-    class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(createProject()); set({ view: 'gantt' }); void reloadPlans(); },
+    class: 'plan-card plan-new sc-card sc-brackets',
+    // A plan started while a workspace is in front belongs to that workspace.
+    onclick: () => { const p = createProject(); p.workspaceId = activeWorkspace() || null; loadProject(p); set({ view: 'gantt' }); void reloadPlans(); },
   }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'New project' })));
   if (!live.length && !loading) {
     grid.append(el('button', { class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(sampleProject()); set({ view: 'gantt' }); void reloadPlans(); } },

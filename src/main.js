@@ -18,7 +18,7 @@ import { renderCalendar, shiftWeek, showThisWeek } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
 import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
-import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
+import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
 import { initSync, syncAfterSave, adoptRemoteSettings } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
@@ -125,4 +125,4 @@ if (!hosted) {
 } else render();
 
 // After the first plan is on screen: the record store, the engine and the timer.
-initSync().then(() => reloadPlans()).catch((err) => console.error('sync could not start', err));
+initSync().then(() => Promise.all([reloadPlans(), refreshWorkspaceLabel()])).catch((err) => console.error('sync could not start', err));
