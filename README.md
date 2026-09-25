@@ -130,12 +130,20 @@ calendar says *when*: which hours, on which days.
   cut into that many blocks.
 - **Time blocks** are the named hours of the week a kind of work is allowed:
   *Study, 06:00–08:00, every day*; *Work, 08:00–17:00, weekdays*; *Deep focus,
-  08:00–10:00, weekdays*. A task belongs to one and is released into those
-  hours by itself. Blocks live on the plan, under Project ▸ Time blocks.
-- **Phases gate the release.** A plan can say which phase it is in — a
-  top-level summary such as Design — and then only that phase's tasks reach
-  the calendar. There is no point putting build work in next week's mornings
-  while the design is still being argued about.
+  08:00–10:00, weekdays*. A task may belong to several and is released into
+  whichever has room first. Blocks are shared by every project.
+- **Phases gate the release.** Phases are named by hand in Project ▸ Phases —
+  design, build, launch — and a task or a heading is put in one, everything
+  under a heading inheriting it. The plan then says which phase it is in, and
+  only that phase's tasks reach the calendar. There is no point putting build
+  work in next week's mornings while the design is still being argued about. A
+  task in no phase is released whatever the plan is working on, because saying
+  nothing cannot mean "not yet".
+
+  Phases used to be read off the outline: every top-level summary was one. That
+  offered "Kick-off meeting with the customer" and "Trade study of rotary" as
+  phases of a project, which they are not. An outline is how work is grouped; a
+  phase is where the project has got to.
 - **A gap, if you want one.** Project ▸ details sets the breathing room after
   every block — none, 5, 10, 15 or 30 minutes — so the day is not back to back.
   It costs a block a day and the work moves on rather than vanishing.

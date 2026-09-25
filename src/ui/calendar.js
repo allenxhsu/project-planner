@@ -13,7 +13,7 @@ import { planRecords, isCurrentWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
-import { isSummary, phases, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
+import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu } from './dialog.js';
 
 /**
@@ -240,7 +240,7 @@ export function renderCalendar(root) {
   const colourMode = colourModeFor(blocks);
   const palette = planPalette(entries);
   const phaseList = phases(project);
-  const current = project.currentPhaseId ? getTask(project, project.currentPhaseId) : null;
+  const current = project.currentPhaseId ? getPhase(project, project.currentPhaseId) : null;
   const planCount = entries.length;
   const bar = el('div', { class: 'cal-phase' },
     el('span', { class: 'sc-label', text: 'Calendar for' }),

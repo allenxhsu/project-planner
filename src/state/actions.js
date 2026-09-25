@@ -9,6 +9,7 @@ import {
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
+  addPhase, setPhaseField, removePhase, movePhase, getPhase,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -324,6 +325,20 @@ export function setCurrentPhase(id) {
 
 // Time blocks are hours in a week, not properties of a project, so these go to
 // the shared set and are written back into every plan (state/sync.js).
+export function newPhase(name) { return commit('New phase', (p) => addPhase(p, name ? { name } : {})); }
+export function editPhase(id, name) { return attempt('Rename the phase', (p) => setPhaseField(p, id, 'name', name)); }
+export function deletePhase(id) { return attempt('Delete the phase', (p) => removePhase(p, id)); }
+export function movePhaseBy(id, dir) { return attempt('Reorder the phases', (p) => { if (!movePhase(p, id, dir)) throw new Error('It is already at the end.'); }); }
+/** Put a task in a phase. Everything under it inherits, unless it says otherwise. */
+export function setTaskPhase(taskId, phaseId) {
+  return attempt('Phase', (p) => {
+    const t = getTask(p, taskId);
+    if (!t) throw new Error('No such task.');
+    if (phaseId && !getPhase(p, phaseId)) throw new Error('No such phase.');
+    t.phaseId = phaseId || null;
+  });
+}
+
 export async function newTimeBlock(props = {}) {
   const { saveTimeBlock } = await import('./sync.js');
   const made = await saveTimeBlock({ name: 'New block', from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], ...props });

@@ -553,16 +553,24 @@ test('a named time block decides which hours and which days a task may use', asy
 
 test('only the phase the plan is in reaches the calendar', async () => {
   const { planBlocks } = await import('../src/model/agenda.js');
-  const { phases, phaseOf, inCurrentPhase } = await import('../src/model/model.js');
+  const { phases, phaseOf, inCurrentPhase, addPhase } = await import('../src/model/model.js');
   const p = plan();
-  const design = task(p, 'Design', 0);
+  const designHead = task(p, 'Design', 0);
   const wire = task(p, 'Wireframes', 2, 2);
-  const build = task(p, 'Build', 0);
+  const buildHead = task(p, 'Build', 0);
   const cms = task(p, 'CMS integration', 2, 2);
   for (const t of [wire, cms]) setTaskField(p, t.id, 'calendarShow', true);
 
+  // Phases are named, not read off the outline, and a heading passes its phase
+  // down to everything under it.
+  const design = addPhase(p, { name: 'Design' });
+  const build = addPhase(p, { name: 'Build' });
+  designHead.phaseId = design.id;
+  buildHead.phaseId = build.id;
+
   assert.deepEqual(phases(p).map((x) => x.name), ['Design', 'Build']);
-  assert.equal(phaseOf(p, wire.id), design.id);
+  assert.equal(phaseOf(p, wire.id), design.id, 'inherited from the heading above it');
+  assert.equal(phaseOf(p, cms.id), build.id);
   assert.equal(planBlocks(p, computeSchedule(p)).blocks.length > 0, true);
   const everything = new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId));
   assert.deepEqual([...everything].sort(), [wire.id, cms.id].sort(), 'with no phase set, everything is released');
@@ -576,6 +584,14 @@ test('only the phase the plan is in reaches the calendar', async () => {
   // A phase that was deleted must not empty the calendar.
   p.currentPhaseId = 'gone';
   assert.equal(new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId)).size, 2);
+
+  // A task in no phase at all is released whatever the plan is working on:
+  // saying nothing cannot mean "not yet".
+  const loose = task(p, 'Write the README', 1, 1);
+  setTaskField(p, loose.id, 'calendarShow', true);
+  p.currentPhaseId = design.id;
+  assert.ok(inCurrentPhase(p, loose.id));
+  assert.ok(new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId)).has(loose.id));
 });
 
 test('a gap keeps blocks off each other’s heels', async () => {

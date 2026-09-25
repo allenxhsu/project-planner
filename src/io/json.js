@@ -2,6 +2,7 @@
 
 import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
+import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
 
 export const FILE_EXT = '.project.json';
@@ -104,6 +105,8 @@ export function parse(text) {
       percent: Math.max(0, Math.min(100, Math.round(+t.percent) || 0)), notes: String(t.notes || ''), fixedCost: Number(t.fixedCost) || 0,
       deadline: isoValid(t.deadline) ? t.deadline : null,
       stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,
+      // Checked against the plan's phases once those are read, below.
+      phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,
@@ -161,7 +164,15 @@ export function parse(text) {
   }
 
   // The phase the plan is in, once the tasks it might name are known.
-  p.currentPhaseId = typeof raw.currentPhaseId === 'string' && p.tasks.some((t) => t.id === raw.currentPhaseId) ? raw.currentPhaseId : null;
+  // Phases are named on the plan. A file written before that carries a task id
+  // in currentPhaseId, which means nothing now, so it is dropped rather than
+  // silently gating the calendar on something that is not a phase.
+  p.phases = (Array.isArray(raw.phases) ? raw.phases : [])
+    .filter((ph) => ph && typeof ph === 'object' && String(ph.name || '').trim())
+    .map((ph) => ({ id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim() }));
+  const phaseIds = new Set(p.phases.map((ph) => ph.id));
+  for (const t of p.tasks) if (t.phaseId && !phaseIds.has(t.phaseId)) t.phaseId = null;
+  p.currentPhaseId = typeof raw.currentPhaseId === 'string' && phaseIds.has(raw.currentPhaseId) ? raw.currentPhaseId : null;
 
   repairs.push(...normalizeLevels(p));
   return { project: p, repairs };

@@ -63,6 +63,8 @@ export function createProject(name = 'Untitled project', start = null) {
     format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
+    // The phases this plan runs through, named by hand. Empty: no gating.
+    phases: [],
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
     // Which workspace this plan lives in — work, personal, school. Null is
@@ -88,7 +90,7 @@ export function newTask(props = {}) {
     // design task — and work is how much of that time is spent on it. Null
     // means "as much as the assignment says", the old full-time assumption.
     work: null,
-    stageId: null, urgency: 'normal',
+    stageId: null, phaseId: null, urgency: 'normal',
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
     calendar: { show: false, timeBlockIds: [] },
@@ -453,23 +455,80 @@ export function setFeedEvents(p, id, events, at = Date.now()) {
 // the design is still being argued about.
 
 /** The top-level summary a task belongs to, or null for a task at the top. */
+/**
+ * The phases a plan runs through — design, build, launch.
+ *
+ * These are named by hand. They used to be read off the outline: every
+ * top-level summary was a phase, which meant "Kick-off meeting with the
+ * customer" and "Trade study of rotary" were offered as phases of a project
+ * simply for being headings. An outline is how work is grouped; a phase is
+ * where the project has got to. They are not the same question.
+ */
+export const phases = (p) => (Array.isArray(p.phases) ? p.phases : []);
+export const getPhase = (p, id) => phases(p).find((ph) => ph.id === id) || null;
+
+export function addPhase(p, props = {}) {
+  if (!Array.isArray(p.phases)) p.phases = [];
+  const phase = { id: uid('ph'), name: 'New phase', ...props };
+  phase.name = String(phase.name).trim() || 'New phase';
+  p.phases.push(phase);
+  return phase;
+}
+
+export function setPhaseField(p, id, field, value) {
+  const ph = getPhase(p, id);
+  if (!ph) throw new Error('No such phase.');
+  if (field !== 'name') throw new Error(`“${field}” is not part of a phase.`);
+  const name = String(value).trim();
+  if (!name) throw new Error('A phase needs a name.');
+  ph.name = name;
+}
+
+/** Remove a phase. Tasks in it go back to having none. */
+export function removePhase(p, id) {
+  p.phases = phases(p).filter((ph) => ph.id !== id);
+  for (const t of p.tasks) if (t.phaseId === id) t.phaseId = null;
+  if (p.currentPhaseId === id) p.currentPhaseId = null;
+}
+
+export function movePhase(p, id, dir) {
+  const list = phases(p);
+  const i = list.findIndex((ph) => ph.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return false;
+  [list[i], list[j]] = [list[j], list[i]];
+  return true;
+}
+
+/**
+ * The phase a task is in: its own, or the nearest ancestor's.
+ *
+ * Inheritance is what makes this bearable to fill in — put "Build" on the
+ * heading and everything under it is build work, without a hundred edits.
+ */
 export function phaseOf(p, taskId) {
   const i = taskIndex(p, taskId);
   if (i < 0) return null;
-  const top = [...ancestors(p, i)].pop();
-  return top === undefined ? null : p.tasks[top].id;
+  const own = p.tasks[i].phaseId;
+  if (own && getPhase(p, own)) return own;
+  for (const a of [...ancestors(p, i)].reverse()) {
+    const id = p.tasks[a].phaseId;
+    if (id && getPhase(p, id)) return id;
+  }
+  return null;
 }
 
-/** Every top-level summary, in order: the phases a plan can be in. */
-export function phases(p) {
-  return p.tasks.filter((t, i) => t.level === 1 && isSummary(p, i)).map((t) => ({ id: t.id, name: t.name }));
-}
-
-/** Whether this task's phase is the one being worked on. No phase set: everything. */
+/**
+ * Whether this task's phase is the one being worked on.
+ *
+ * No phase chosen: everything is released. A task with no phase at all is
+ * released in every phase, because saying nothing cannot mean "not yet".
+ */
 export function inCurrentPhase(p, taskId) {
   if (!p.currentPhaseId) return true;
-  if (!getTask(p, p.currentPhaseId)) return true;
-  return phaseOf(p, taskId) === p.currentPhaseId;
+  if (!getPhase(p, p.currentPhaseId)) return true;
+  const mine = phaseOf(p, taskId);
+  return mine === null || mine === p.currentPhaseId;
 }
 
 // ---------------------------------------------------------------- time blocks

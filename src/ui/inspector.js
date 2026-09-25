@@ -7,7 +7,7 @@ import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkErr
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
 import { hueColour } from './calendar.js';
-import { timeBlocks, phases, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
+import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -56,7 +56,17 @@ function renderTask(root) {
       field('Urgency', select(urgencyOf(t), Object.entries(URGENCIES).map(([value, u]) => ({ value, label: u.label })), setF('urgency')),
         'who gets the earliest hours')));
     form.append(el('label', { class: 'row check-row' }, el('input', { class: 'sc-check', type: 'checkbox', checked: !!t.milestone, onchange: (e) => act.editTask(id, 'milestone', e.target.checked) }), el('span', { text: 'Milestone (zero duration)' })));
-    form.append(field('Stage', select(stageOf(project, t).id, stages(project).map((st) => ({ value: st.id, label: st.name })), (v) => act.setTaskStage(id, v)), 'the Kanban column this task sits in'));
+    const phaseList = phases(project);
+  if (phaseList.length) {
+    const inherited = phaseOf(project, id);
+    form.append(field('Phase',
+      select(t.phaseId || '', [
+        { value: '', label: inherited && inherited !== t.phaseId ? `Inherited — ${phaseList.find((ph) => ph.id === inherited)?.name}` : 'None — always released' },
+        ...phaseList.map((ph) => ({ value: ph.id, label: ph.name }))],
+        (v) => act.setTaskPhase(id, v)),
+      'everything under this task inherits it'));
+  }
+  form.append(field('Stage', select(stageOf(project, t).id, stages(project).map((st) => ({ value: st.id, label: st.name })), (v) => act.setTaskStage(id, v)), 'the Kanban column this task sits in'));
   } else form.append(el('p', { class: 'sc-muted small', text: `Summary of ${s.children.length} subtasks: ${formatDuration(s.duration)}, ${s.percent}% complete. Its dates come from them.` }));
   form.append(el('div', { class: 'two' },
     field('Start', date(s.startIso, setF('start')), s.summary ? 'from subtasks' : 'typing a date pins it'),
@@ -272,10 +282,22 @@ function renderProject(root) {
     act.setCalendar({ holidays: [...new Set(list)].sort() });
   } })), 'one date per line, YYYY-MM-DD'));
   root.append(form);
-  // ---- the phase the plan is in, which is what the calendar releases
+  // ---- the phases this plan runs through, and which one it is in
   const phaseList = phases(project);
+  root.append(el('div', { class: 'sc-section-title', text: 'Phases' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'Where the project has got to — design, build, launch. Name them here, put a task or a heading in one, and the calendar releases only the phase being worked on. A task in no phase is always released.' }));
+  const phaseBox = el('div', { class: 'link-list' });
+  phaseList.forEach((ph, i) => {
+    phaseBox.append(el('div', { class: 'tb-card sc-card' },
+      el('div', { class: 'tb-row phase-row' },
+        text(ph.name, (v) => act.editPhase(ph.id, v)),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↑', title: 'Earlier', disabled: i === 0, onclick: () => act.movePhaseBy(ph.id, -1) }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↓', title: 'Later', disabled: i === phaseList.length - 1, onclick: () => act.movePhaseBy(ph.id, 1) }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this phase', onclick: () => act.deletePhase(ph.id) }))));
+  });
+  phaseBox.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New phase', onclick: () => act.newPhase() }));
+  root.append(phaseBox);
   if (phaseList.length) {
-    root.append(el('div', { class: 'sc-section-title', text: 'Phase' }));
     root.append(field('Working on',
       select(project.currentPhaseId || '', [{ value: '', label: 'Every phase' }, ...phaseList.map((ph) => ({ value: ph.id, label: ph.name }))],
         (v) => act.setCurrentPhase(v)),
