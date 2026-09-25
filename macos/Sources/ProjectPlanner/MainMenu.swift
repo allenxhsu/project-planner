@@ -15,7 +15,14 @@ enum MainMenu {
                 ShellMenu.submenu("File", ShellMenu.documentItems() + [
                     ShellMenu.web("Open the Sample Plan", "file.sample"),
                     .separator(),
-                ] + ShellMenu.saveItems() + [
+                ] + [
+                    ShellMenu.item("Close", #selector(NSWindow.performClose(_:)), "w"),
+                    // Save is the cloud, as it is in the browser; Save As… is
+                    // AppKit's, and writes the file this document came from.
+                    ShellMenu.web("Save to the Cloud", "file.save", "s"),
+                    ShellMenu.item("Save As…", #selector(NSDocument.saveAs(_:)), "s", [.command, .shift]),
+                    ShellMenu.item("Revert to Saved", #selector(NSDocument.revertToSaved(_:))),
+                ] + [
                     .separator(),
                     ShellMenu.item("Import Microsoft Project or CSV…", #selector(NSDocumentController.openDocument(_:)), "i", [.command, .shift]),
                     ShellMenu.submenu("Export", [

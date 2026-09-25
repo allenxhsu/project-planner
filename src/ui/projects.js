@@ -9,9 +9,9 @@ import { el, clear, formatMoney } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
-import { listPlans, refreshPlans, openPlan, deletePlan, syncConfigured, syncStatus } from '../state/sync.js';
+import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
-import { showMenu, confirmDialog } from './dialog.js';
+import { showMenu, confirmDialog, promptText } from './dialog.js';
 
 /** The last list read from the shelf. Rendering is synchronous; reading is not. */
 let plans = [];
@@ -42,8 +42,21 @@ function card(p) {
   const menu = (e) => {
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
-    showMenu(r.left - 150, r.bottom + 4, [
+    showMenu(r.left - 170, r.bottom + 4, [
       { label: 'Open', run: open },
+      '-',
+      { label: 'Duplicate', run: async () => {
+        const name = await promptText('Duplicate this plan', 'What is the copy called?', `${p.name} (copy)`);
+        if (!name) return;
+        if (await duplicatePlan(p.id, { name })) { set({ view: 'gantt' }); void reloadPlans(); }
+      } },
+      { label: 'New plan from this as a template', run: async () => {
+        const name = await promptText('Use this plan as a template',
+          'The copy keeps the tasks, links, resources and stages, and starts clean: no progress, no logged hours, no pinned dates or deadlines.',
+          `${p.name} (template)`);
+        if (!name) return;
+        if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }
+      } },
       '-',
       { label: 'Delete from the shelf', danger: true, run: async () => {
         const yes = await confirmDialog('Delete this plan?',

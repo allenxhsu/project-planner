@@ -37,6 +37,22 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/web"
 cp "$BIN_DIR/ProjectPlanner" "$APP/Contents/MacOS/Project Planner"
 
+# The Dock icon: the PJ badge the app wears in its own header. Rendered from
+# macos/scripts/make-icon.mjs, then turned into the sizes macOS asks for.
+if command -v node >/dev/null 2>&1; then
+  node "$HERE/make-icon.mjs" >/dev/null
+  SET="$OUT/AppIcon.iconset"
+  rm -rf "$SET" && mkdir -p "$SET"
+  for size in 16 32 128 256 512; do
+    sips -z $size $size "$OUT/icon.png" --out "$SET/icon_${size}x${size}.png" >/dev/null
+    sips -z $((size * 2)) $((size * 2)) "$OUT/icon.png" --out "$SET/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$SET" -o "$APP/Contents/Resources/AppIcon.icns"
+  rm -rf "$SET"
+else
+  echo "no node: the app is built without its icon"
+fi
+
 # The web app, exactly as the browser gets it. Only what the page loads:
 # the kit's build scripts, Swift theme and template stay behind.
 WEB="$APP/Contents/Resources/web"
@@ -68,6 +84,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Project Planner</string>
   <key>CFBundleIdentifier</key><string>org.projectplanner.app</string>
   <key>CFBundleExecutable</key><string>Project Planner</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>1</string>

@@ -15,7 +15,7 @@ import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
 import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
-import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, openFile, loadText, COMMANDS } from './ui/toolbar.js';
+import { initHeader, renderHeader, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
 import { initSync, syncAfterSave, adoptRemoteSettings } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
@@ -54,7 +54,7 @@ function onKey(e) {
   const k = e.key.toLowerCase();
   const { ui } = store;
   const taskView = ['gantt', 'sheet'].includes(ui.view);
-  if (mod && k === 's') { e.preventDefault(); saveProject(); return; }
+  if (mod && k === 's') { e.preventDefault(); if (e.shiftKey) saveProjectAs(); else saveProject(); return; }
   if (mod && k === 'o') { e.preventDefault(); openFile(); return; }
   if (typing) return;
   if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }

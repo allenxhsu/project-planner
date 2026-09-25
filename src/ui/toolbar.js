@@ -14,7 +14,7 @@ import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
-import { syncAfterSave, syncConfigured, syncStatus } from '../state/sync.js';
+import { syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -34,7 +34,23 @@ export async function newProject() {
 }
 export async function openSample() { if (await guardDirty()) loadProject(sampleProject()); }
 
-export function saveProject() {
+/**
+ * `File ▸ Save` — to the cloud. A plan's home is the server it syncs with, so
+ * this is the one that runs on ⌘S; with no server set up yet it says so and
+ * opens the Sync settings rather than quietly writing a file instead.
+ */
+export async function saveProject() {
+  const result = await saveToCloud();
+  if (result.ok) { act.hint(`Saved to ${new URL(getSettings().url).host}.`); return; }
+  if (result.reason === 'failed') { act.hint(`Could not save to the cloud: ${result.error || 'the server did not answer'}.`); return; }
+  const set_up = await confirmDialog('No cloud to save to yet',
+    'Save keeps this plan on a sync server, so it is on every device you use. Set one up now? (Save As… writes a file to this computer instead.)',
+    'Set up sync');
+  if (set_up) settingsDialog();
+}
+
+/** `File ▸ Save As…` — a copy on this computer, the file the format describes. */
+export function saveProjectAs() {
   if (hosted) { post({ type: 'save' }); return; }
   const name = store.ui.fileName || `${slugify(store.project.name)}${FILE_EXT}`;
   downloadText(serialize(store.project), name, 'application/json');
@@ -167,7 +183,7 @@ const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt
 
 /** Every menu command by id. The web menu bar and the macOS menu bar both run these. */
 export const COMMANDS = {
-  'file.new': newProject, 'file.open': openFile, 'file.sample': openSample, 'file.save': saveProject,
+  'file.new': newProject, 'file.open': openFile, 'file.sample': openSample, 'file.save': saveProject, 'file.saveAs': saveProjectAs,
   'file.exportXml': guarded(exportXml), 'file.exportCsv': guarded(exportCsvFile),
   'file.exportMpx': guarded(() => exportVia('mpx')), 'file.exportXer': guarded(() => exportVia('xer')), 'file.exportPmxml': guarded(() => exportVia('pmxml')), 'file.exportPlanner': guarded(() => exportVia('planner')),
   'edit.undo': undo, 'edit.redo': redo, 'edit.selectAll': act.selectAll, 'edit.delete': () => (['resources', 'usage'].includes(store.ui.view) ? act.deleteResource() : act.deleteSelection()),
@@ -192,7 +208,8 @@ const run = (id) => COMMANDS[id];
 const MENUS = {
   File: () => [
     { label: 'New plan', run: run('file.new') }, { label: 'Open…', key: '⌘O', run: run('file.open') }, { label: 'Open the sample plan', run: run('file.sample') }, '-',
-    { label: 'Save', key: '⌘S', run: run('file.save') }, '-',
+    { label: 'Save to the cloud', key: '⌘S', run: run('file.save') },
+    { label: 'Save As… (a file on this computer)', key: '⇧⌘S', run: run('file.saveAs') }, '-',
     { label: 'Open Microsoft Project file (.mpp, .mpx, XML)…', run: run('file.open') },
     { label: 'Save for Microsoft Project (XML)', run: run('file.exportXml') }, '-',
     { label: 'Export Microsoft Project MPX', run: run('file.exportMpx') },

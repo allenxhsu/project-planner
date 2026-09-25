@@ -15,6 +15,8 @@ import {
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
 } from '../../sync-kit/js/index.js';
 import { store, set, loadProject, markSaved, subscribe, revision } from './store.js';
+import { uid } from '../util.js';
+import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 
@@ -25,12 +27,15 @@ const DEVICE_KEY = 'project-planner:deviceId';
 const INTERVAL_MS = 30_000;
 /** How long after the last edit the plan is written to the record store. */
 const COMMIT_MS = 800;
+/** …and how long after that it goes to the server, when sync is on. */
+const AUTOSAVE_MS = 2_500;
 
 let recordStore = null;
 let engine = null;
 let doc = null;
 let timer = null;
 let commitTimer = null;
+let autosaveTimer = null;
 let unlisten = null;
 let settings = { url: '', token: '', enabled: false };
 /** True while a pulled plan is being loaded, so the load is not sent back out. */
@@ -110,13 +115,20 @@ async function openDocument() {
   await commit();
 }
 
-/** Write the open plan into the record store, where a push can find it. */
+/**
+ * Write the open plan into the record store, where a push can find it, and —
+ * when sync is on — send it shortly after. This is what "autosaved to the
+ * cloud" means: nobody presses anything, and a plan is never only in a tab.
+ */
 async function commit() {
   if (!doc || adopting || store.project.id !== docPlanId) return;
   const body = serialize(store.project);
   if (body === doc.body && store.project.name === doc.name) return;
   doc.edit(body, store.project.name);
   await doc.save();
+  if (!syncConfigured()) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => { void syncNow(); }, AUTOSAVE_MS);
 }
 
 /** Save new settings and restart. A changed URL clears both cursors: they belong to the old server. */
@@ -180,6 +192,20 @@ export async function adoptRemoteSettings({ url, token }) {
 
 /** Sync because the plan was just written to a file, if that is switched on. */
 export function syncAfterSave() { if (syncConfigured()) void syncNow(); }
+
+/**
+ * `File ▸ Save`: put this plan on the server now, and say so. The cloud is
+ * where a plan lives; `Save As…` is for taking a copy away to a file.
+ */
+export async function saveToCloud() {
+  if (!settings.url) return { ok: false, reason: 'not-configured' };
+  if (!settings.enabled) { await applySettings({ ...settings, enabled: true }); }
+  await commit();
+  const result = await syncNow();
+  if (!result) return { ok: false, reason: 'failed', error: syncStatus().lastError };
+  markSaved(store.ui.fileName);
+  return { ok: true, pushed: result.pushed };
+}
 
 /**
  * What to do with a plan that arrived from somewhere else.
@@ -299,6 +325,40 @@ export async function deletePlan(id) {
   const at = Math.max(Date.now(), record.updatedAt + 1);
   await recordStore.put([{ ...record, body: '', deletedAt: at, updatedAt: at, origin: deviceId() }]);
   if (syncConfigured()) void syncNow();
+}
+
+/**
+ * Copy a plan. `asTemplate` keeps the shape and drops the history: nobody's
+ * progress, nobody's logged hours, and no dates pinned to a project that has
+ * already happened — which is what makes an old plan usable as a starting
+ * point rather than a thing to correct.
+ */
+export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
+  if (!recordStore) return null;
+  const record = await recordStore.get(id);
+  if (!record) return null;
+  let project;
+  try { project = parse(record.body).project; } catch { set({ hint: 'That plan could not be read.' }); return null; }
+
+  project.id = uid('plan');
+  project.name = name || `${project.name}${asTemplate ? ' (template)' : ' (copy)'}`;
+  if (asTemplate) {
+    project.start = today();
+    project.statusDate = null;
+    project.timesheets = [];
+    for (const t of project.tasks) {
+      t.percent = 0;
+      t.stageId = null;
+      t.deadline = null;
+      // A date pinned to last quarter would drag the whole copy back with it.
+      if (t.constraint?.date) t.constraint = { type: 'ASAP', date: null };
+    }
+  }
+  loadProject(project, null);
+  markSaved(null);
+  await openDocument();
+  if (syncConfigured()) void syncNow();
+  return project;
 }
 
 /** Pull now, so the shelf shows what other devices have added. */
