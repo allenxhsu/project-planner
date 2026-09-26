@@ -508,10 +508,18 @@ async function openOther(planId, taskId) {
   void taskSheet({ taskId });
 }
 
+/**
+ * Where the day is scrolled to. The grid is the whole day, midnight to
+ * midnight; it opens on the working hours (or the hour before now, today) and
+ * then stays where it was put across redraws, until the days on screen change.
+ */
+const dayScroll = { key: null, top: 0 };
+
 export function renderCalendar(root) {
   const { project, schedule, ui } = store;
   clear(root);
   const pane = el('div', { class: 'cal-pane' });
+  pane.addEventListener('scroll', () => { if (pane.isConnected) dayScroll.top = pane.scrollTop; }, { passive: true });
   root.append(pane);
 
   if (!loadedPlans) void reloadCalendarPlans();
@@ -571,8 +579,23 @@ export function renderCalendar(root) {
   for (const e of entries) for (const t of e.project.tasks) { if (!agendaOf(e.project, t).show) continue; const a = agendaOf(e.project, t); from = Math.min(from, a.from); to = Math.max(to, a.to); }
   for (const b of blocks) if (columns.includes(b.day)) { from = Math.min(from, b.start); to = Math.max(to, b.end); }
   for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) { from = Math.min(from, m.start - (m.bufferBefore || 0)); to = Math.max(to, m.end + (m.bufferAfter || 0)); }
-  const hourFrom = Math.floor(from / 60), hourTo = Math.ceil(to / 60);
+  // The whole day is drawn, and scrolls; `from` is only where it opens.
+  const hourFrom = 0, hourTo = 24;
   const y = (min) => ((min - hourFrom * 60) / 60) * HOUR_H;
+  const key = `${range}|${columns[0]}|${columns.length}`;
+  const opening = dayScroll.key !== key;
+  dayScroll.key = key;
+  const openAt = columns.includes(toDay(today())) ? Math.min(from, Math.max(0, nowMinutes() - 60)) : from;
+  if (opening) dayScroll.top = null;
+  requestAnimationFrame(() => {
+    const body = pane.querySelector('.cal-body');
+    if (!body || !pane.isConnected) return;
+    if (dayScroll.top === null) {
+      const bodyTop = body.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
+      dayScroll.top = Math.max(0, bodyTop - (pane.querySelector('.cal-head')?.offsetHeight || 0) + y(Math.max(0, openAt - 30)));
+    }
+    pane.scrollTop = dayScroll.top;
+  });
 
   const todayDay = toDay(today());
   const head = el('div', { class: 'cal-head' }, el('div', { class: 'cal-gutter cal-tz', text: timeZoneLabel(), title: 'Times are in this time zone' }));
