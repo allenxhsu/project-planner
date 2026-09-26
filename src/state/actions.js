@@ -10,7 +10,7 @@ import {
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
-  setPin, removePin, clearPins,
+  setPin, removePin, clearPins, phaseOf,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -372,6 +372,26 @@ export function duplicateTask(taskId) {
   });
   if (copy) selectTask(copy.id);
   return copy;
+}
+
+/**
+ * A new task at the end of a phase — after the last task already in it, at the
+ * same outline level — so "+ Task" under a week in the list lands in that week.
+ */
+export function newTaskInPhase(phaseId) {
+  let made = null;
+  attempt('New task', (p) => {
+    let at = p.tasks.length;
+    let level = 1;
+    if (phaseId) {
+      const inIt = p.tasks.map((t, i) => ({ t, i })).filter(({ t }) => phaseOf(p, t.id) === phaseId);
+      if (inIt.length) { const last = inIt[inIt.length - 1]; at = last.i + 1; level = last.t.level; }
+    }
+    made = insertTask(p, at, { name: 'New task', level });
+    made.phaseId = phaseId || null;
+  });
+  if (made) selectTask(made.id);
+  return made;
 }
 
 export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }

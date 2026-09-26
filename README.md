@@ -87,7 +87,7 @@ the duration.
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
 | Calendar | a day, the working week, the whole week including the weekend, or a month. Each task's hours are laid into blocks: a task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
 | Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
-| All Tasks | every task in every plan, filtered by late / unfinished / critical / unassigned, searchable, and a row opens the plan it belongs to |
+| All Tasks | every task in every plan, grouped by project and then phase — the active phase marked, each group with its task count, hours left, deadline range and progress, and + Task to add one there — or by project alone, or flat; filtered by late / unfinished / critical / unassigned, searchable, and a row opens its task sheet |
 
 The details panel on the right edits the selected task (including its
 predecessors and assignments), the selected resource, or the project itself.

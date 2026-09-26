@@ -15,7 +15,8 @@ import * as act from '../state/actions.js';
 import { planRecords, openPlan, isCurrentWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
-import { isSummary, formatAssignments } from '../model/model.js';
+import { isSummary, formatAssignments, phaseOf, getPhase, phases } from '../model/model.js';
+import { hoursLeft } from '../model/agenda.js';
 import { formatDate, toDay, today } from '../model/calendar.js';
 
 export const FILTERS = {
@@ -34,6 +35,14 @@ let loading = true;
 let loaded = false;
 let query = '';
 let filter = 'all';
+/**
+ * How the list is grouped: not at all, by project, or by project and then
+ * phase — a project's weeks or stages, each with its tasks, its hours and its
+ * deadlines, and the phase the plan is in marked as active.
+ */
+export const GROUPS = { none: 'No grouping', project: 'Project', phase: 'Project › Phase' };
+let grouping = 'phase';
+const folded = new Set();
 
 function rowsOf(record) {
   const hit = cache.get(record.id);
@@ -50,8 +59,15 @@ function rowsOf(record) {
       .filter(({ i }) => !isSummary(project, i))
       .map(({ t }) => {
         const s = schedule.tasks[t.id];
+        const phaseId = phaseOf(project, t.id);
         return {
           planId: record.id, planName: project.name || record.name, taskId: t.id,
+          phaseId, phaseName: phaseId ? getPhase(project, phaseId)?.name : null,
+          phaseOrder: phaseId ? phases(project).findIndex((ph) => ph.id === phaseId) : 1e6,
+          activePhase: !!phaseId && project.currentPhaseId === phaseId,
+          order: project.tasks.findIndex((x) => x.id === t.id),
+          hours: s.milestone ? 0 : hoursLeft(project, s, t),
+          archived: !!t.archived,
           index: s.index, name: t.name, startDay: s.start, startIso: s.startIso, finishIso: s.finishIso,
           deadline: t.deadline, percent: s.percent, critical: s.critical, milestone: s.milestone,
           who: formatAssignments(project, t),
@@ -87,10 +103,80 @@ function visible() {
 }
 
 async function openRow(r) {
-  if (r.planId !== store.project.id && !(await openPlan(r.planId))) return;
-  act.revealTask(r.taskId);
-  act.selectTask(r.taskId);
-  set({ view: 'gantt', rightTab: 'task' });
+  const { taskSheet } = await import('./blockmenu.js');
+  await taskSheet({ planId: r.planId, taskId: r.taskId });
+  void reloadAllTasks();
+}
+
+/** A new task at the end of a group, in its plan and its phase, opened at once. */
+async function addTo(planId, phaseId) {
+  if (planId !== store.project.id && !(await openPlan(planId))) return;
+  const made = act.newTaskInPhase(phaseId);
+  if (!made) return;
+  const { taskSheet } = await import('./blockmenu.js');
+  await taskSheet({ planId, taskId: made.id });
+  void reloadAllTasks();
+}
+
+const hrs = (h) => (h ? `${Math.round(h * 10) / 10}h` : '');
+const span = (list) => {
+  const due = list.map((r) => r.deadline).filter(Boolean).sort();
+  if (!due.length) return '';
+  return due[0] === due[due.length - 1] ? formatDate(due[0], 'day') : `${formatDate(due[0], 'day')} – ${formatDate(due[due.length - 1], 'day')}`;
+};
+
+/** The list in groups: project, then (optionally) phase, each foldable. */
+function groupedTable(list, root) {
+  const table = el('table', { class: 'sc-table alltasks at-grouped' },
+    el('thead', {}, el('tr', {},
+      el('th', { text: 'Name' }), el('th', { text: 'Assignee' }), el('th', { class: 'num', text: 'Hours' }),
+      el('th', { text: 'Deadline' }), el('th', { class: 'num', text: 'Done' }), el('th', { text: '' }))));
+  const body = el('tbody');
+  const byPlan = new Map();
+  for (const r of list) { if (!byPlan.has(r.planId)) byPlan.set(r.planId, []); byPlan.get(r.planId).push(r); }
+  const head = (key, level, label, items, { active = false, planId, phaseId } = {}) => {
+    const shut = folded.has(key);
+    const done = items.length ? Math.round(items.reduce((n, r) => n + r.percent, 0) / items.length) : 0;
+    body.append(el('tr', { class: `at-group-row level-${level}`, onclick: () => { if (shut) folded.delete(key); else folded.add(key); renderAllTasks(root); } },
+      el('td', {},
+        el('span', { class: 'at-twist', text: shut ? '▸' : '▾' }),
+        el('span', { class: 'at-group-name', text: label }),
+        active ? el('span', { class: 'sc-pill at-active', text: 'Active' }) : null,
+        el('span', { class: 'sc-faint at-count', text: String(items.length) })),
+      el('td', {}),
+      el('td', { class: 'num sc-mono', text: hrs(items.reduce((n, r) => n + (r.percent < 100 ? r.hours : 0), 0)) }),
+      el('td', { class: 'sc-mono sc-muted', text: span(items) }),
+      el('td', { class: 'num' }, el('span', { class: 'sc-meter at-meter' }, el('span', { style: { '--value': `${done}%` } }))),
+      el('td', {}, planId ? el('button', {
+        class: 'sc-button sc-button--ghost sc-button--sm', text: '+ Task', title: 'Add a task here',
+        onclick: (e) => { e.stopPropagation(); void addTo(planId, phaseId || null); },
+      }) : null)));
+    return shut;
+  };
+  const row = (r, level) => body.append(el('tr', { class: `clickable at-task level-${level}${r.percent === 100 ? ' is-done' : ''}`, onclick: () => { void openRow(r); } },
+    el('td', {}, el('span', { class: `at-name${r.milestone ? ' is-milestone' : ''}`, text: r.name }),
+      r.archived ? el('span', { class: 'sc-pill', text: 'Archived' }) : null),
+    el('td', { text: r.who }),
+    el('td', { class: 'num sc-mono', text: r.percent < 100 ? hrs(r.hours) : '' }),
+    el('td', { class: `sc-mono${r.deadlineMissed ? ' warn' : ' sc-muted'}`, text: r.deadline ? formatDate(r.deadline, 'day') : '' }),
+    el('td', { class: 'num', text: `${r.percent}%` }),
+    el('td', {},
+      r.late ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-warning)' }, text: 'Late' }) : null,
+      r.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : null)));
+
+  for (const [planId, items] of [...byPlan].sort((a, b) => a[1][0].planName.localeCompare(b[1][0].planName))) {
+    if (head(`p|${planId}`, 0, items[0].planName, items, { planId })) continue;
+    const ordered = [...items].sort((a, b) => a.order - b.order);
+    if (grouping === 'project') { for (const r of ordered) row(r, 1); continue; }
+    const byPhase = new Map();
+    for (const r of ordered) { const k = r.phaseId || ''; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(r); }
+    for (const [phaseId, group] of [...byPhase].sort((a, b) => a[1][0].phaseOrder - b[1][0].phaseOrder)) {
+      if (head(`f|${planId}|${phaseId}`, 1, phaseId ? group[0].phaseName : 'No phase', group, { active: group[0].activePhase, planId, phaseId })) continue;
+      for (const r of group) row(r, 2);
+    }
+  }
+  table.append(body);
+  return table;
 }
 
 export function renderAllTasks(root) {
@@ -118,6 +204,13 @@ export function renderAllTasks(root) {
     pane.append(el('p', { class: 'empty', text: rows.length ? 'No task matches that.' : 'No plans on the shelf yet.' }));
     return;
   }
+
+  pane.querySelector('.alltasks-head').prepend(el('select', {
+    class: 'sc-select at-group', title: 'Group the list',
+    onchange: (e) => { grouping = e.target.value; renderAllTasks(root); },
+  }, ...Object.entries(GROUPS).map(([id, label]) => el('option', { value: id, text: `Group: ${label}`, selected: grouping === id }))));
+
+  if (grouping !== 'none') { pane.append(groupedTable(list, root)); pane.append(el('p', { class: 'sc-faint small projects-note', text: `${list.length} of ${rows.length} tasks, across ${new Set(rows.map((r) => r.planId)).size} plans` })); return; }
 
   const table = el('table', { class: 'sc-table alltasks' },
     el('thead', {}, el('tr', {},
