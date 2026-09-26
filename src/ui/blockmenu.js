@@ -138,54 +138,97 @@ const timeInput = (min) => el('input', { class: 'sc-input sheet-time', type: 'ti
 const dateInput = (iso) => el('input', { class: 'sc-input sheet-date', type: 'date', value: iso });
 
 /**
- * A block, opened. Its day and hours can be changed, which pins it there — the
- * same as dragging it — and the task's own facts sit beside them.
+ * A task, opened — from a block on the calendar, or from anywhere else.
+ *
+ * On the left, what the task is: its name, and when it is a calendar block,
+ * that block's day and hours, which can be changed and so pin it. On the right
+ * the facts a person checks before deciding anything: done or not, which
+ * project and phase, who, urgency, how long, when it may start, when it is
+ * due, what it is waiting on and what is waiting on it. An archived task says
+ * so across the top and offers to restore or delete it.
  */
-export async function blockSheet(b, { late = null } = {}) {
-  const t = await withTask(b.planId, b.taskId);
+export async function taskSheet({ planId = store.project.id, taskId, block: b = null, late = null }) {
+  const t = await withTask(planId, taskId);
   if (!t) return;
   const project = store.project;
   const info = store.schedule.tasks[t.id];
+  const nameOfTask = (id) => project.tasks.find((x) => x.id === id)?.name || '(gone)';
+  const blockedBy = t.predecessors.map((l) => nameOfTask(l.id));
+  const blocking = project.tasks.filter((x) => x.predecessors.some((l) => l.id === t.id)).map((x) => x.name);
+  const who = t.assignments.map((a) => project.resources.find((r) => r.id === a.resourceId)?.name).filter(Boolean);
   const pins = pinsOf(t);
+
   const saved = await open(t.name, (close) => {
     const name = el('input', { class: 'sc-input sheet-title', type: 'text', value: t.name, 'data-autofocus': '' });
-    const day = dateInput(b.dateIso);
-    const from = timeInput(b.start);
-    const to = timeInput(b.end);
+    const done = el('input', { class: 'sc-check', type: 'checkbox', checked: info?.percent === 100 });
+    const day = b ? dateInput(b.dateIso) : null;
+    const from = b ? timeInput(b.start) : null;
+    const to = b ? timeInput(b.end) : null;
     const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: urgencyOf(t) === id })));
+    const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
-    const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 6, value: t.notes || '', placeholder: 'Notes' });
+    const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
     const save = () => close({
-      name: name.value, day: day.value, from: parseTime(from.value), to: parseTime(to.value),
-      urgency: urgency.value, deadline: deadline.value, notes: notes.value,
+      name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
+      ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
-    const onKey = (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } };
-    setTimeout(() => document.querySelector('.sheet')?.addEventListener('keydown', onKey), 0);
+    setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    }), 0);
+    const more = (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      showMenu(r.left - 180, r.bottom + 4, [
+        { icon: '⧉', label: 'Copy link', run: () => copy(taskLink(project.id, t.id)) },
+        { icon: '⎘', label: 'Duplicate task', run: () => { close(null); act.duplicateTask(t.id); } },
+        { icon: '▢', label: 'Create project from task', run: () => { close(null); void projectFromTask(t); } },
+        '-',
+        { icon: '▣', label: t.archived ? 'Restore from the archive' : 'Archive', run: () => { close(null); act.editTask(t.id, 'archived', !t.archived); } },
+        { icon: '🗑', label: 'Delete task', danger: true, run: async () => {
+          close(null);
+          if (!(await confirmDialog('Delete this task?', `“${t.name}” and its links go. Undo brings it back.`))) return;
+          act.selectTask(t.id); act.deleteSelection();
+        } },
+      ]);
+    };
+    const fact = (label, value) => el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), value);
+    const list = (names) => el('span', { class: names.length ? '' : 'sc-faint', text: names.length ? names.join(', ') : 'None' });
+
     return [
-      el('div', { class: 'sheet' },
-        el('div', { class: 'sheet-head' },
-          el('span', { class: 'sc-pill sheet-chip', text: b.pinned ? '⌖ Fixed time' : 'Task' }),
-          el('span', { class: 'sc-faint small', text: project.name }),
-          el('span', { class: 'sc-spacer' }),
-          el('button', { class: 'sc-button sc-button--sm', text: 'Open task', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ rightOpen: true, rightTab: 'task' }); } }),
-          el('button', { class: 'sc-button sc-button--sm', text: 'View project', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } })),
-        name,
-        el('div', { class: 'sheet-when' }, day, from, el('span', { text: '–' }), to),
-        el('div', { class: 'sc-faint small' },
-          b.pinned
+      t.archived ? el('div', { class: 'sheet-archived' },
+        el('span', { text: 'This task is archived.' }),
+        el('button', { class: 'sc-button sc-button--sm', text: 'Restore task', onclick: () => { close(null); act.editTask(t.id, 'archived', false); } }),
+        el('button', { class: 'sc-button sc-button--sm sc-button--danger', text: 'Delete permanently', onclick: async () => {
+          close(null);
+          if (!(await confirmDialog('Delete this task for good?', `“${t.name}” goes from the plan. Undo still brings it back while this window is open.`))) return;
+          act.selectTask(t.id); act.deleteSelection();
+        } })) : null,
+      el('div', { class: 'task-sheet' },
+        el('div', { class: 'task-sheet-main' },
+          el('div', { class: 'sheet-head' },
+            el('span', { class: 'sc-pill sheet-chip', text: b?.pinned ? '⌖ Fixed time' : 'Task' }),
+            el('span', { class: 'sc-spacer' }),
+            el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋯', title: 'More', onclick: more })),
+          name,
+          b ? el('div', { class: 'sheet-when' }, day, from, el('span', { text: '–' }), to) : null,
+          b ? el('div', { class: 'sc-faint small', text: b.pinned
             ? 'This block is fixed here. Changing the day or hours moves it; the rest of the week re-lays around it.'
-            : 'Placed by the calendar. Changing the day or hours fixes it there, the same as dragging it.'),
-        late ? el('div', { class: 'sc-alert sc-alert--danger sheet-late', text: late }) : null,
-        el('div', { class: 'sheet-grid' },
-          el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: 'Urgency' }), urgency),
-          el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: 'Deadline' }), deadline),
-          el('div', { class: 'sc-field' }, el('span', { class: 'sc-label', text: 'Left to do' }),
-            el('span', { class: 'sc-mono', text: `${Math.round(hoursLeft(project, info, t) * 10) / 10}h · ${info.percent}% done` })),
-          el('div', { class: 'sc-field' }, el('span', { class: 'sc-label', text: 'Fixed blocks' }),
-            el('span', { class: 'sc-mono', text: String(pins.length) }))),
-        notes),
+            : 'Placed by the calendar. Changing the day or hours fixes it there, the same as dragging it.' }) : null,
+          late ? el('div', { class: 'sc-alert sc-alert--danger sheet-late', text: late }) : null,
+          notes),
+        el('aside', { class: 'task-sheet-facts' },
+          el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' })),
+          fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
+          fact('Assignee', list(who)),
+          fact('Urgency', urgency),
+          fact('Duration', el('span', { class: 'sc-mono', text: `${info?.duration ?? 0}d open · ${Math.round(hoursLeft(project, info, t) * 10) / 10}h left · ${info?.percent ?? 0}%` })),
+          fact('Start date', start),
+          fact('Deadline', deadline),
+          fact('On the calendar', el('span', { text: agendaOf(project, t).show ? `Yes${pins.length ? `, ${pins.length} fixed` : ''}` : 'No' })),
+          fact('Blocked by', list(blockedBy)),
+          fact('Blocking', list(blocking)),
+          el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Set blockers…', onclick: () => { close(null); void blockersDialog(t); } }))),
       foot(
-        b.pinned ? button('Unpin', () => { close(null); act.unpinBlock(t.id, b.pinIndex); }) : el('span'),
+        b?.pinned ? button('Unpin', () => { close(null); act.unpinBlock(t.id, b.pinIndex); }) : el('span'),
         el('span', { class: 'sc-spacer' }),
         button('Cancel', () => close(null)),
         button('Save  ⌘S', save, 'sc-button--primary')),
@@ -194,16 +237,47 @@ export async function blockSheet(b, { late = null } = {}) {
   if (!saved) return;
 
   if (saved.name.trim() && saved.name !== t.name) act.editTask(t.id, 'name', saved.name);
+  if (saved.done !== (info?.percent === 100)) act.setPercent(t.id, saved.done ? 100 : 0);
   if (saved.urgency !== urgencyOf(t)) act.editTask(t.id, 'urgency', saved.urgency);
+  const hadStart = t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '';
+  if (saved.start !== hadStart) act.editTask(t.id, 'start', saved.start);
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
-  // The day or the hours changed: that is a decision about when, so it pins.
-  const moved = saved.day !== b.dateIso || saved.from !== b.start || saved.to !== b.end;
-  if (moved && saved.day && saved.from !== null && saved.to !== null && saved.to > saved.from) {
-    act.pinBlock(t.id, { day: saved.day, start: saved.from, minutes: saved.to - saved.from }, b.pinned ? b.pinIndex : null);
-  } else if (moved) {
-    act.hint('A block ends after it starts.');
+  if (b) {
+    // The day or the hours changed: that is a decision about when, so it pins.
+    const moved = saved.day !== b.dateIso || saved.from !== b.start || saved.to !== b.end;
+    if (moved && saved.day && saved.from !== null && saved.to !== null && saved.to > saved.from) {
+      act.pinBlock(t.id, { day: saved.day, start: saved.from, minutes: saved.to - saved.from }, b.pinned ? b.pinIndex : null);
+    } else if (moved) act.hint('A block ends after it starts.');
   }
+}
+
+/** A block, opened: the task's sheet with that block's day and hours in it. */
+export const blockSheet = (b, { late = null } = {}) => taskSheet({ planId: b.planId, taskId: b.taskId, block: b, late });
+
+/**
+ * A task grown into a project: a new plan named after it, holding it, and the
+ * original archived so the work is not counted twice.
+ */
+async function projectFromTask(t) {
+  const yes = await confirmDialog(`Make “${t.name}” a project?`,
+    'A new plan is made with this task in it, in the same workspace. The task here is archived rather than deleted, so nothing is lost.', 'Make a project');
+  if (!yes) return;
+  const { createProject } = await import('../model/model.js');
+  const { loadProject } = await import('../state/store.js');
+  const from = store.project;
+  act.editTask(t.id, 'archived', true);
+  const p = createProject(t.name);
+  p.workspaceId = from.workspaceId || null;
+  p.resources = from.resources.filter((r) => t.assignments.some((a) => a.resourceId === r.id)).map((r) => ({ ...r }));
+  const copyOf = structuredClone(t);
+  delete copyOf.id;
+  const { insertTask } = await import('../model/model.js');
+  const made = insertTask(p, 0, { ...copyOf, level: 1, predecessors: [], archived: false });
+  made.calendar = { ...(t.calendar || {}), pins: [] };
+  loadProject(p, null);
+  set({ view: 'gantt' });
+  act.hint(`“${t.name}” is a project of its own now; the task in ${from.name} is archived.`);
 }
 
 /**

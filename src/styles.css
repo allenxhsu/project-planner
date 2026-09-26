@@ -458,6 +458,18 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .sheet-notes { min-height: 110px; }
 .sheet-late { font-size: 12.5px; }
 .cal-meeting { cursor: pointer; }
+.sheet-archived { display: flex; align-items: center; justify-content: center; gap: 10px; margin: -4px -4px 12px; padding: 8px 12px;
+  background: color-mix(in srgb, var(--sc-danger) 70%, transparent); color: #fff; font-size: 13px; }
+.task-sheet { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; width: min(1000px, calc(92vw - 48px)); }
+.task-sheet-main { display: grid; align-content: start; gap: 12px; }
+.task-sheet-main .sheet-notes { min-height: 220px; }
+.task-sheet-facts { display: grid; align-content: start; gap: 10px; padding-left: 16px; border-left: 1px solid var(--sc-line); font-size: 12.5px; }
+.fact { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 8px; }
+.fact-label { color: var(--sc-text-3); }
+.fact .sc-input, .fact .sc-select { width: 100%; }
+.fact-done { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: -2px 0 4px; background: color-mix(in srgb, var(--sc-line) 30%, transparent); font-weight: 600; }
+.fact-done.is-done { background: color-mix(in srgb, var(--sc-ok, #3c9) 22%, transparent); }
+.sc-dialog:has(.task-sheet) { max-width: 96vw; width: auto; }
 .sched-list { display: grid; padding: 0; }
 .sched-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--sc-line); }
 .sched-row:last-child { border-bottom: 0; }

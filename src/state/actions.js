@@ -355,6 +355,25 @@ export function newTaskFromEvent({ name, day, start, minutes, notes = '' }) {
   return ok ? made : null;
 }
 
+/** A copy of a task, just below it: same hours, links and people, no progress and no pins. */
+export function duplicateTask(taskId) {
+  let copy = null;
+  attempt('Duplicate the task', (p) => {
+    const i = taskIndex(p, taskId);
+    if (i < 0) throw new Error('No such task.');
+    const t = p.tasks[i];
+    const props = structuredClone(t);
+    delete props.id;                      // a copy gets an id of its own
+    const made = insertTask(p, i + 1, { ...props, level: t.level, name: `${t.name} (copy)` });
+    made.percent = 0;
+    made.calendar = { ...(t.calendar || {}), pins: [] };
+    made.archived = false;
+    copy = made;
+  });
+  if (copy) selectTask(copy.id);
+  return copy;
+}
+
 export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }
 export function unpinAll(taskId) { return attempt('Unpin every block', (p) => clearPins(p, taskId)); }
 
