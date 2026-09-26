@@ -26,6 +26,7 @@ const PLACES = [
   { view: 'people', icon: '☺', label: 'People' },
 ];
 const PLAN_VIEWS = [
+  { view: 'list', icon: '☰', label: 'Task list' },
   { view: 'gantt', icon: '▤', label: 'Gantt' },
   { view: 'kanban', icon: '▥', label: 'Kanban' },
   { view: 'sheet', icon: '☰', label: 'Task sheet' },
@@ -194,7 +195,7 @@ async function newFolder(w) {
 
 /** A project's window (its ↗ button, a double-click, or Open project), over a view of it. */
 async function openPlanFromSidebar(id) {
-  if (!['gantt', 'kanban', 'sheet', 'network', 'priority', 'alltasks'].includes(store.ui.view)) set({ view: 'gantt' });
+  if (!['list', 'gantt', 'kanban', 'sheet', 'network', 'priority', 'alltasks'].includes(store.ui.view)) set({ view: 'gantt' });
   const { projectSheet } = await import('./projectsheet.js');
   await projectSheet({ planId: id });
   renderSidebar();

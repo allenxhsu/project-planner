@@ -256,7 +256,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar' || view === 'today') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); if (view === 'usage') void reloadUsage(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks' || view === 'list') void reloadAllTasks(); if (view === 'calendar' || view === 'today') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); if (view === 'usage') void reloadUsage(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -273,7 +273,7 @@ export const COMMANDS = {
   'task.link': act.linkSelection, 'task.unlink': act.unlinkSelection, 'task.info': () => { const id = act.activeId(); if (id) void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); else act.hint('Select a task first.'); },
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
   'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ view: 'resources' }),
-  'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'), 'view.team': goView('team'),
+  'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'), 'view.list': goView('list'), 'view.team': goView('team'),
   'view.calendar': goView('calendar'), 'view.priority': goView('priority'),
   'view.weekBack': () => shiftWeek(-1), 'view.weekOn': () => shiftWeek(1), 'view.thisWeek': showThisWeek,
   'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },

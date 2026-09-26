@@ -83,6 +83,7 @@ enum MainMenu {
                     ShellMenu.web("Kanban", "view.kanban", "3"),
                     ShellMenu.web("All Tasks", "view.alltasks", "4"),
                     ShellMenu.web("Calendar", "view.calendar", "5"),
+                    ShellMenu.web("Task List of This Project", "view.list"),
                     ShellMenu.web("Team Schedule", "view.team"),
                     ShellMenu.web("People", "view.people"),
                     ShellMenu.web("Priority", "view.priority", "6"),

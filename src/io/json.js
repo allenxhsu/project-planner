@@ -75,6 +75,8 @@ export function parse(text) {
   p.folderId = p.workspaceId && typeof raw.folderId === 'string' && raw.folderId ? raw.folderId : null;
   p.sortOrder = Number.isFinite(raw.sortOrder) ? raw.sortOrder : null;
   p.pinned = raw.pinned === true;
+  // The project's own saved views of its tasks (ui/alltasks.js reads them).
+  if (Array.isArray(raw.views)) p.views = raw.views.filter((v) => v && typeof v === 'object' && typeof v.id === 'string');
   p.template = raw.template === true;
   p.archived = raw.archived === true;
   p.archivedAt = typeof raw.archivedAt === 'string' ? raw.archivedAt : null;

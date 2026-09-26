@@ -38,7 +38,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
+const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 function render() {
   const { ui } = store;
@@ -57,7 +57,7 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('view-calendar', calSide);
-  for (const v of ['team', 'today', 'alltasks']) $('app').classList.toggle(`view-${v}`, ui.view === v);
+  for (const v of ['team', 'today', 'alltasks', 'list']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.
