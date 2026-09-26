@@ -10,14 +10,14 @@ import { serialize, parse, FILE_EXT } from '../io/json.js';
 import { exportMspdi, importMspdi } from '../io/mspdi.js';
 import { exportCsv, importCsv } from '../io/csv.js';
 import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
-import { showMenu, confirmDialog, showText, promptText } from './dialog.js';
+import { showMenu, showPanel, confirmDialog, showText, promptText } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { reloadPeople } from './people.js';
 import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
-import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf, currentLayout } from './calendar.js';
+import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf, currentLayout, calendarTitle, displayOptions } from './calendar.js';
 import { formatClock } from '../model/agenda.js';
 import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, persistence, lastCounts, storeCounts, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
@@ -358,7 +358,7 @@ const MENUS = {
 // ---------------------------------------------------------------- header
 
 /** + New: the things a person starts, wherever they are. */
-function newMenu(x, y) {
+export function newMenu(x, y) {
   showMenu(x, y, [
     { icon: '☐', label: 'New task…', run: () => { void import('./taskpanel.js').then((m) => m.newTaskPanel()); } },
     { icon: '▦', label: 'New event…', run: () => {
@@ -378,18 +378,17 @@ export function initHeader(root) {
     onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); showMenu(r.left, r.bottom + 4, MENUS[name]()); },
   })));
   const find = el('input', { class: 'sc-input find', placeholder: 'Find task', id: 'find', oninput: (e) => findResults(e.target), onkeydown: (e) => { if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); } e.stopPropagation(); } });
+  // New, search, the workspaces and what is on now live in the sidebar
+  // (ui/sidebar.js); the header keeps the menus, the file and undo.
+  void find;
   root.append(
-    el('span', { class: 'sc-brand-mark', text: 'PJ' }), el('h1', { class: 'sc-header-title', text: 'Project Planner' }),
-    el('button', { class: 'sc-button sc-button--primary sc-button--sm new-pick', text: '+ New', title: 'A new task, project or schedule', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); newMenu(r.left, r.bottom + 4); } }),
-    el('button', { class: 'sc-button sc-button--sm running-chip', id: 'running-chip', hidden: true }),
-    el('button', { class: 'sc-button sc-button--ghost sc-button--sm workspace-pick', id: 'workspace-pick', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); void workspaceMenu(r.left, r.bottom + 4); } }, 'All workspaces'),
+    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm side-show', title: 'Show the sidebar', text: '»', onclick: () => { void import('./sidebar.js').then((m) => m.toggleSidebar()); } }),
     menubar, el('span', { class: 'sc-spacer' }),
     el('span', { class: 'sc-mono sc-muted', id: 'file-name' }),
     el('span', { class: 'sc-resource', title: 'Tasks' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-tasks' })),
     el('span', { class: 'sc-resource sc-resource--alt', title: 'Resources' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-resources' })),
     el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-undo', title: 'Undo', text: '↶', onclick: undo }),
-    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-redo', title: 'Redo', text: '↷', onclick: redo }),
-    find);
+    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-redo', title: 'Redo', text: '↷', onclick: redo }));
 }
 
 /**
@@ -441,7 +440,7 @@ export async function workspaceMenu(x, y) {
   showMenu(x, y, items);
 }
 
-function findResults(input) {
+export function findResults(input) {
   const q = input.value.trim().toLowerCase();
   if (!q) return;
   const { project, schedule } = store;
@@ -476,20 +475,7 @@ export function renderHeader() {
   document.getElementById('btn-undo').disabled = !canUndo();
   document.getElementById('btn-redo').disabled = !canRedo();
   document.title = `${project.name} — Project Planner`;
-  // The task that was started and not stopped, wherever it is: one click stops it.
-  const chip = document.getElementById('running-chip');
-  if (chip) {
-    let live = null;
-    try { live = currentLayout().all.blocks.find((b) => b.live && b.dateIso === localDay()) || null; } catch { live = null; }
-    chip.hidden = !live;
-    if (live) {
-      const entry = currentLayout().entries.find((e) => e.project.id === live.planId);
-      const name = entry?.project.tasks.find((t) => t.id === live.taskId)?.name || 'Task';
-      chip.textContent = `▶ ${name} · ${formatClock(live.start)}`;
-      chip.title = 'Running now — click to stop and log the time';
-      chip.onclick = () => { void import('./blockmenu.js').then((m) => m.stopNowDialog({ planId: live.planId, taskId: live.taskId })); };
-    }
-  }
+  // What is on now is drawn by the sidebar (ui/sidebar.js).
 }
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -504,6 +490,7 @@ export function renderViewTabs(root) {
 
 export function renderToolbar(root) {
   clear(root);
+  root.classList.remove('is-cal');
   const { ui } = store;
   const taskView = ['gantt', 'sheet'].includes(ui.view);
   const resView = ['resources', 'usage'].includes(ui.view);
@@ -518,16 +505,26 @@ export function renderToolbar(root) {
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'calendar') {
+    // Motion's bar: Today ‹ › and the month, then the options on the right.
     const r = RANGES[rangeOf()];
     const unit = r.step === 3 ? '3 days' : r.unit;
-    const Unit = unit[0].toUpperCase() + unit.slice(1);
-    root.append(b(`‹ ${Unit}`, `The ${unit} before`, () => shiftWeek(-1)), b('Today', 'Back to today', showThisWeek), b(`${Unit} ›`, `The ${unit} after`, () => shiftWeek(1)), sep(),
-      ...Object.entries(RANGES).map(([id, r]) => b(r.label, `Show ${r.step === 3 ? 'three days' : `one ${r.unit === 'week' && id === 'work' ? 'working week' : r.unit}`}`, () => set({ calendarRange: id }), { on: rangeOf() === id })), sep(),
-      b('↻ Plans', 'Re-read every plan on the shelf', () => { void reloadCalendarPlans(); }),
-      b('+ Task', 'New task below the selection', act.newTaskBelow),
-      b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
-      b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar),
-      b('Schedules…', 'The hours each kind of work may use', () => set({ view: 'schedules' })));
+    const title = calendarTitle();
+    root.classList.add('is-cal');
+    root.append(
+      b('Today', 'Back to today', showThisWeek),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '‹', title: `The ${unit} before`, onclick: () => shiftWeek(-1) }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '›', title: `The ${unit} after`, onclick: () => shiftWeek(1) }),
+      el('span', { class: 'cal-title' }, el('strong', { text: title.month }), ' ', el('span', { text: title.year })),
+      el('span', { class: 'sc-spacer' }),
+      b('⚙ Display options', 'Who and what the calendar shows', (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        showPanel(rect.left, rect.bottom + 4, (close) => displayOptions(close));
+      }),
+      b('↻ Refresh all tasks', 'Re-read every plan and lay the week again', () => { void reloadCalendarPlans(); }),
+      b('＋', 'A new task', () => { void import('./taskpanel.js').then((m) => m.newTaskPanel()); }),
+      el('select', { class: 'sc-select sc-select--sm cal-range', title: 'How much of the calendar to show', onchange: (e) => set({ calendarRange: e.target.value }) },
+        ...Object.entries(RANGES).map(([id, rr]) => el('option', { value: id, text: rr.label, selected: rangeOf() === id }))),
+      b(ui.rightOpen ? 'Close »' : '« Calendars', ui.rightOpen ? 'Hide the right-hand panel' : 'Show the month and the calendars', () => set({ rightOpen: !ui.rightOpen })));
   } else if (ui.view === 'priority') {
     root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),

@@ -6,7 +6,8 @@ import * as act from './state/actions.js';
 import { sampleProject } from './model/sample.js';
 import { parse, serialize } from './io/json.js';
 import { hosted, post, initHost } from './host.js';
-import { saveOpenDialog } from './ui/dialog.js';
+import { saveOpenDialog, showMenu } from './ui/dialog.js';
+import { initSidebar, renderSidebar, refreshSidebar } from './ui/sidebar.js';
 import { renderGantt, zoomGantt, scrollToToday } from './ui/gantt.js';
 import { renderTaskSheet, editActiveCell, moveActiveCol } from './ui/taskgrid.js';
 import { renderResourceSheet, renderResourceUsage } from './ui/resources.js';
@@ -17,11 +18,11 @@ import { renderSchedules } from './ui/schedules.js';
 import { renderToday } from './ui/today.js';
 import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
-import { renderCalendar, shiftWeek, showThisWeek } from './ui/calendar.js';
+import { renderCalendar, renderCalendarSide, shiftWeek, showThisWeek } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
 import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
-import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
+import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
 import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, keepsEdits, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
@@ -42,7 +43,7 @@ const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: r
 function render() {
   const { ui } = store;
   renderHeader();
-  renderViewTabs($('view-tabs'));
+  renderSidebar();
   renderToolbar($('toolbar'));
   $('app').classList.toggle('no-right', !ui.rightOpen);
   $('app').classList.toggle('no-bottom', !ui.bottomOpen);
@@ -50,8 +51,12 @@ function render() {
   renderStatus($('statusbar'));
   tabs($('bottom-tabs'), 'bottomTab', [['checks', 'Checks', checkBadge()], ['stats', 'Statistics']]);
   if (ui.bottomOpen) renderBottom($('bottom-body'));
+  // On the calendar the right-hand panel is the month and the calendars, as
+  // in Motion; everywhere else it is the details of what is selected.
+  const calSide = ui.view === 'calendar';
+  $('app').classList.toggle('cal-side', calSide);
   tabs($('right-tabs'), 'rightTab', [['task', 'Task'], ['resource', 'Resource'], ['project', 'Project']]);
-  if (ui.rightOpen) renderInspector($('inspector'));
+  if (ui.rightOpen) { if (calSide) renderCalendarSide($('inspector')); else renderInspector($('inspector')); }
 }
 
 function onKey(e) {
@@ -120,6 +125,18 @@ function initHosting() {
 }
 
 initHeader($('header'));
+initSidebar($('sidebar'), {
+  newMenu, findResults,
+  settings: () => {
+    const r = document.querySelector('.side-top .side-icon:nth-of-type(2)')?.getBoundingClientRect() || { left: 40, bottom: 40 };
+    showMenu(r.left, r.bottom + 4, [
+      { label: 'Sync…', run: () => COMMANDS['view.sync']() },
+      { label: 'Appearance…', run: () => COMMANDS['view.appearance']() },
+      { label: 'Custom fields…', run: () => { void import('./ui/newproject.js').then((m) => m.editFieldsDialog()); } },
+      { label: 'Schedules', run: () => set({ view: 'schedules' }) },
+    ]);
+  },
+});
 subscribe(render);
 document.addEventListener('keydown', onKey);
 initHosting();

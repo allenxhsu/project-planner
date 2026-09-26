@@ -112,6 +112,126 @@ export function flashTask(taskId) {
   }, 60);
 }
 
+/** "PDT", "GMT+1": the short name of the zone the hours are drawn in. */
+export function timeZoneLabel() {
+  try {
+    return new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date()).find((p) => p.type === 'timeZoneName')?.value || '';
+  } catch { return ''; }
+}
+
+/** "Sep 2026", or "Sep – Oct 2026" when the days on screen cross a month. */
+export function calendarTitle() {
+  const screen = daysOnScreen(store.project);
+  const range = rangeOf();
+  const first = fromDay(range === 'month' ? screen.start : screen.days[0]);
+  const last = fromDay(range === 'month' ? screen.start : screen.days[screen.days.length - 1]);
+  const mon = (iso) => MONTH_NAMES[+iso.slice(5, 7) - 1].slice(0, 3);
+  if (first.slice(0, 7) === last.slice(0, 7)) return { month: mon(first), year: first.slice(0, 4) };
+  return { month: `${mon(first)} – ${mon(last)}`, year: last.slice(0, 4) };
+}
+
+/** Display options: who and what the calendar shows, and how it is coloured. */
+export function displayOptions(close) {
+  const { project, ui } = store;
+  const { entries } = currentLayout();
+  const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const toggle = (label, key, hint) => el('label', { class: 'dopt-row', title: hint },
+    el('span', { text: label }),
+    el('input', { type: 'checkbox', class: 'tp-switch-box', checked: ui[key] !== false, onchange: (e) => set({ [key]: e.target.checked }) }),
+    el('span', { class: 'tp-switch' }));
+  const pick = (label, value, options, onchange) => el('label', { class: 'dopt-row' }, el('span', { text: label }),
+    el('select', { class: 'sc-select', onchange: (e) => onchange(e.target.value) },
+      ...options.map(([v, t]) => el('option', { value: v, text: t, selected: v === value }))));
+  const phaseList = phases(project);
+  return el('div', { class: 'dopt' },
+    el('div', { class: 'dopt-title', text: 'Calendar' }),
+    pick('Calendar for', ui.calendarWho || '', [['', 'Everyone'], ...everyone], (v) => set({ calendarWho: v })),
+    pick('Projects', ui.calendarScope === 'plan' ? 'plan' : 'all', [['all', `All projects (${others.length + 1})`], ['plan', 'This project only']], (v) => set({ calendarScope: v })),
+    pick('Colour by', ui.calendarColour || 'auto', Object.entries(COLOUR_BY), (v) => set({ calendarColour: v })),
+    phaseList.length ? pick('Releasing', project.currentPhaseId || '', [['', 'Every stage'], ...phaseList.map((ph) => [ph.id, ph.name])], (v) => act.setCurrentPhase(v)) : null,
+    el('div', { class: 'dopt-sep' }),
+    toggle('Show tasks in calendar', 'calShowTasks', 'Work the calendar has placed, and fixed blocks'),
+    toggle('Show completed work', 'calShowWorked', 'Time logged by starting and stopping a task, where it was worked'),
+    el('div', { class: 'dopt-sep' }),
+    el('button', { class: 'dopt-link', text: 'Put every unfinished task on the calendar', onclick: () => { close(); act.showAllInCalendar(); } }),
+    el('button', { class: 'dopt-link', text: 'Schedules — the hours work may use ⚙', onclick: () => { close(); set({ view: 'schedules' }); } }),
+    el('button', { class: 'dopt-link', text: 'Auto-scheduling settings ⚙', onclick: () => { close(); set({ rightOpen: true, rightTab: 'project', view: 'gantt' }); } }));
+}
+
+let miniMonth = null;
+/**
+ * The right-hand panel on the calendar, as Motion has it: a month to jump
+ * around in, then the calendars — the connected ones with their colours, the
+ * people whose week this can be, and the projects with the colour each is
+ * drawn in.
+ */
+export function renderCalendarSide(root) {
+  clear(root);
+  const { project, ui } = store;
+  const { entries, all } = currentLayout();
+  const todayDay = toDay(today());
+  const screen = daysOnScreen(project);
+  const onScreen = new Set(rangeOf() === 'month' ? [] : screen.days);
+  const month = miniMonth ?? monthStart(anchor ?? todayDay);
+  const iso = fromDay(month);
+  const grid = el('div', { class: 'mini-grid' }, ...['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => el('span', { class: 'mini-dow', text: d })));
+  const startGrid = month - weekday(month);
+  for (let d = startGrid; d < startGrid + 42; d++) {
+    const inMonth = fromDay(d).slice(0, 7) === iso.slice(0, 7);
+    grid.append(el('button', {
+      class: `mini-day${inMonth ? '' : ' is-out'}${d === todayDay ? ' is-today' : ''}${onScreen.has(d) ? ' is-shown' : ''}`,
+      text: String(+fromDay(d).slice(8, 10)), title: formatDate(fromDay(d), 'long'),
+      onclick: () => { miniMonth = null; goToWeek(d); },
+    }));
+  }
+  const peopleQ = { value: '' };
+  const everyone = [...new Map(entries.flatMap((e) => e.project.resources.filter((r) => r.type === 'work').map((r) => [personKeyOf(r), r.name]))).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const peopleList = el('div', { class: 'cals-list' });
+  const drawPeople = () => {
+    peopleList.replaceChildren(
+      el('button', { class: `cals-item${!ui.calendarWho ? ' is-on' : ''}`, onclick: () => set({ calendarWho: '' }) },
+        el('span', { class: 'cals-chip', style: { background: 'var(--sc-text-3)' } }), el('span', { text: 'Everyone' })),
+      ...everyone.filter(([, n]) => n.toLowerCase().includes(peopleQ.value.toLowerCase())).map(([key, name]) => {
+        const c = personColour(name);
+        return el('button', { class: `cals-item${ui.calendarWho === key ? ' is-on' : ''}`, onclick: () => set({ calendarWho: ui.calendarWho === key ? '' : key }) },
+          el('span', { class: 'cals-chip', style: { background: c.line } }), el('span', { text: name }));
+      }));
+  };
+  drawPeople();
+  const palette = planPalette(entries);
+  const feedsList = entries.flatMap((e) => (e.project.feeds || []).map((f) => ({ f, plan: e.project })));
+  const section = (title, count, body, extra = null) => el('details', { class: 'cals-section', open: true },
+    el('summary', {}, el('span', { text: `${title}${count !== null ? ` (${count})` : ''}` }), extra), body);
+  root.append(el('div', { class: 'cal-side' },
+    el('div', { class: 'mini-head' },
+      el('strong', { text: `${MONTH_NAMES[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Today', onclick: () => { miniMonth = null; showThisWeek(); } }),
+      el('span', { class: 'sc-spacer' }),
+      el('button', { class: 'side-icon', text: '‹', title: 'Month before', onclick: () => { miniMonth = addMonths(month, -1); set({}); } }),
+      el('button', { class: 'side-icon', text: '›', title: 'Month after', onclick: () => { miniMonth = addMonths(month, 1); set({}); } })),
+    grid,
+    el('div', { class: 'cals-head' }, el('strong', { text: 'Calendars' }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '＋ Add calendar', onclick: () => act.connectCalendarDialog() })),
+    el('input', { class: 'sc-input cals-search', type: 'search', placeholder: 'Search teammates', oninput: (e) => { peopleQ.value = e.target.value; drawPeople(); } }),
+    section('People', everyone.length, peopleList),
+    section('My calendars', feedsList.length, el('div', { class: 'cals-list' },
+      ...(feedsList.length ? feedsList.map(({ f, plan }) => el('div', { class: 'cals-item is-static', title: `${f.events.length} events · on ${plan.name}` },
+        el('span', { class: 'cals-chip', style: { background: 'var(--sc-accent-2)' } }), el('span', { text: f.name }),
+        el('span', { class: 'cals-src', text: f.provider === 'google' ? 'G' : f.provider === 'outlook' ? 'O' : 'ics' })))
+        : [el('div', { class: 'sc-faint small', text: 'None connected. Add a Google or Outlook calendar and its meetings become busy time.' })]))),
+    section('Projects', entries.length, el('div', { class: 'cals-list' },
+      ...entries.map((e) => {
+        const c = palette.get(e.project.id) || personColour(e.project.name);
+        const hours = Math.round(all.blocks.filter((b) => b.planId === e.project.id && onScreen.has(b.day)).reduce((n, b) => n + b.minutes, 0) / 6) / 10;
+        return el('button', { class: `cals-item${e.project.id === project.id ? ' is-on' : ''}`, title: e.project.id === project.id ? 'The open project' : 'Open this project',
+          onclick: () => { if (e.project.id !== project.id) void openOther(e.project.id, null); } },
+        el('span', { class: 'cals-chip', style: { background: c.line } }), el('span', { text: e.project.name }),
+        hours ? el('span', { class: 'cals-src', text: `${hours}h` }) : null);
+      })))));
+}
+
 /** What will not make its deadline, across the plans the calendar covers. */
 export const lateness = () => currentLayout().all.late || [];
 
@@ -251,20 +371,25 @@ export function lateSentence(l) {
     : `${l.name} will not be finished by ${by}: ${hoursText(l.minutesShort)} does not fit anywhere in the next six months at this rate.`;
 }
 
+/**
+ * What will be late, in one line that opens into the list. The week is the
+ * page; the warning is a strip above it, not a panel pushing it down.
+ */
+let lateOpen = false;
 function lateBanner(list) {
-  const box = el('div', { class: 'sc-alert sc-alert--danger cal-late', role: 'status' },
-    el('strong', { text: list.length === 1 ? 'One deadline will be missed.' : `${list.length} deadlines will be missed.` }));
+  const box = el('details', { class: 'cal-late', open: lateOpen, ontoggle: (e) => { lateOpen = e.currentTarget.open; } },
+    el('summary', {},
+      el('span', { class: 'cal-late-dot' }),
+      el('strong', { text: list.length === 1 ? 'One deadline will be missed' : `${list.length} deadlines will be missed` }),
+      el('span', { class: 'cal-late-first', text: ` — ${lateSentence(list[0])}` })));
   const ul = el('ul', { class: 'cal-late-list' });
-  for (const l of list.slice(0, 5)) {
+  for (const l of list.slice(0, 12)) {
     ul.append(el('li', {
       class: 'clickable', title: `${l.planName} — click to open the task`,
-      onclick: () => {
-        if (l.planId !== store.project.id) { void openOther(l.planId, l.taskId); return; }
-        act.revealTask(l.taskId); act.selectTask(l.taskId); set({ rightOpen: true, rightTab: 'task' });
-      },
-    }, lateSentence(l)));
+      onclick: () => { void taskSheet({ planId: l.planId, taskId: l.taskId }); },
+    }, lateSentence(l), el('span', { class: 'sc-faint', text: ` · ${l.planName}` })));
   }
-  if (list.length > 5) ul.append(el('li', { class: 'sc-faint', text: `and ${list.length - 5} more — see Checks.` }));
+  if (list.length > 12) ul.append(el('li', { class: 'sc-faint', text: `and ${list.length - 12} more.` }));
   box.append(ul);
   return box;
 }
@@ -340,7 +465,7 @@ export function renderCalendar(root) {
   const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
   const who = ui.calendarWho && everyone.some(([k]) => k === ui.calendarWho) ? ui.calendarWho : '';
-  const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : all.blocks;
+  const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : [...all.blocks];
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who || m.lane === '*') : all.meetings;
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
@@ -348,49 +473,14 @@ export function renderCalendar(root) {
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getPhase(project, project.currentPhaseId) : null;
   const planCount = entries.length;
-  const bar = el('div', { class: 'cal-phase' },
-    el('span', { class: 'sc-label', text: 'Calendar for' }),
-    el('select', { class: 'sc-select', onchange: (e) => set({ calendarWho: e.target.value }) },
-      el('option', { value: '', text: 'Everyone', selected: !who }),
-      ...everyone.map(([key, name]) => el('option', { value: key, text: name, selected: key === who }))),
-    el('select', { class: 'sc-select', onchange: (e) => set({ calendarScope: e.target.value }) },
-      el('option', { value: 'all', text: `All projects (${others.length + 1})`, selected: ui.calendarScope !== 'plan' }),
-      el('option', { value: 'plan', text: 'This project only', selected: ui.calendarScope === 'plan' })),
-    el('span', { class: 'sc-label', text: 'Colour by' }),
-    el('select', { class: 'sc-select', onchange: (e) => set({ calendarColour: e.target.value }) },
-      ...Object.entries(COLOUR_BY).map(([id, label]) => el('option', {
-        value: id, selected: (store.ui.calendarColour || 'auto') === id,
-        text: id === 'auto' ? `Automatic — ${COLOUR_BY[colourMode].toLowerCase()}` : label,
-      }))),
-    el('span', { class: 'sc-faint small', text: who
-      ? `One person’s week, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.`
-      : `Everyone’s hours, across ${planCount === 1 ? 'this project' : `${planCount} projects`}. Colour is the ${colourMode === 'plan' ? 'project' : 'person'}.` }));
-  pane.append(bar);
+  // The filters live in Display options (the toolbar) and the colours in
+  // the right-hand panel, as Motion keeps them: the page is the week.
+  const showTasks = ui.calShowTasks !== false;
+  const showWorked = ui.calShowWorked !== false;
+  if (!showTasks) blocks.splice(0, blocks.length, ...blocks.filter((b) => b.worked && showWorked));
+  else if (!showWorked) blocks.splice(0, blocks.length, ...blocks.filter((b) => !b.worked));
+  void current; void phaseList;
 
-  // What the colours stand for. Without this a colour is decoration; with it,
-  // a glance at the week says which project is eating it.
-  if (colourMode === 'plan' && planCount > 1) {
-    const used = new Set(blocks.map((b) => b.planId));
-    const legend = el('div', { class: 'cal-legend' });
-    for (const e of entries) {
-      if (!used.has(e.project.id)) continue;
-      const colour = palette.get(e.project.id);
-      legend.append(el('span', { class: 'cal-legend-item', title: e.project.id === project.id ? 'The open project' : 'Click to open this project' ,
-        onclick: () => { if (e.project.id !== project.id) void openOther(e.project.id, null); } },
-        el('span', { class: 'cal-legend-dot', style: { background: colour.fill, borderColor: colour.line } }),
-        el('span', { text: e.project.name })));
-    }
-    if (legend.children.length) pane.append(legend);
-  }
-
-  if (phaseList.length) {
-    pane.append(el('div', { class: 'cal-phase' },
-      el('span', { class: 'sc-label', text: 'Releasing' }),
-      el('select', { class: 'sc-select', onchange: (e) => act.setCurrentPhase(e.target.value) },
-        el('option', { value: '', text: 'Every phase', selected: !current }),
-        ...phaseList.map((ph) => el('option', { value: ph.id, text: ph.name, selected: ph.id === project.currentPhaseId }))),
-      el('span', { class: 'sc-faint small', text: current ? `Only ${current.name} tasks reach the calendar.` : 'Every phase’s tasks reach the calendar.' })));
-  }
   const shown = entries.flatMap((e) => e.project.tasks.filter((t, i) => !isSummary(e.project, i) && agendaOf(e.project, t).show));
   if (!shown.length) {
     pane.append(el('div', { class: 'empty-note sc-muted' },
@@ -421,11 +511,12 @@ export function renderCalendar(root) {
   const y = (min) => ((min - hourFrom * 60) / 60) * HOUR_H;
 
   const todayDay = toDay(today());
-  const head = el('div', { class: 'cal-head' }, el('div', { class: 'cal-gutter sc-mono', text: '' }));
+  const head = el('div', { class: 'cal-head' }, el('div', { class: 'cal-gutter cal-tz', text: timeZoneLabel(), title: 'Times are in this time zone' }));
   for (const d of columns) {
+    // "Sun 20", today's number in a pill — the week reads as dates, not labels.
     head.append(el('div', { class: `cal-col-head${d === todayDay ? ' is-today' : ''}` },
-      el('span', { class: 'sc-label', text: WEEKDAY_NAMES[((d + 4) % 7 + 7) % 7].slice(0, 3) }),
-      el('span', { class: 'cal-date', text: formatDate(fromDay(d), 'day') })));
+      el('span', { class: 'cal-dow', text: WEEKDAY_NAMES[((d + 4) % 7 + 7) % 7].slice(0, 3) }),
+      el('span', { class: 'cal-dnum', text: String(+fromDay(d).slice(8, 10)) })));
   }
   pane.append(head);
 

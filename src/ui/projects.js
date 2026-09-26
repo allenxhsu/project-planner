@@ -13,6 +13,7 @@ import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTe
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 import { newProjectWizard } from './newproject.js';
+import { refreshSidebar } from './sidebar.js';
 
 /** The last list read from the shelf. Rendering is synchronous; reading is not. */
 let plans = [];
@@ -37,6 +38,7 @@ export async function reloadPlans({ pull = false } = {}) {
   loading = false;
   loaded = true;
   set({});
+  void refreshSidebar();
 }
 
 /** Everything you can do to a plan, from a card or from a row. */
