@@ -9,6 +9,18 @@ import ToolkitShell
 /// A plan. `.project.json` is the only thing ever written; everything else
 /// MPXJ can read opens as an untitled, unsaved plan.
 final class ModelDocument: WebDocument {
+    /// No document undo manager. Typing in any text field of the page registers
+    /// an undo step with the window's undo manager — which is the document's —
+    /// and AppKit counts every one as an unsaved edit, so closing a window after
+    /// naming a task asked where to save it. The page keeps each edit in its own
+    /// store within a moment and runs Undo itself (Edit ▸ Undo is a web command),
+    /// so the only edits the window should count are the ones the page reports
+    /// unsaved, which it does only when its store cannot keep them.
+    override init() {
+        super.init()
+        hasUndoManager = false
+    }
+
     override func makeWindowControllers() {
         addWindowController(PlannerWindowController())
     }

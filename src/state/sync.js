@@ -330,7 +330,8 @@ async function commit() {
     && !(store.project.events || []).length
     && store.project.name === 'Untitled project'
     && !doc.record.updatedAt;
-  if (untouched) return;
+  // Nothing in it is nothing to lose: an empty new window is not "unsaved".
+  if (untouched) { if (store.ui.dirty) markSaved(null); return; }
   const body = serialize(store.project);
   const changed = body !== doc.body || store.project.name !== doc.name;
   if (changed) {
