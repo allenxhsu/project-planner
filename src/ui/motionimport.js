@@ -91,7 +91,7 @@ export async function importMotion(picked = null) {
           el('li', { text: `${counts.completed} completed, with when they were done` }),
           el('li', { text: `${counts.worked} stretches of time worked, drawn on the calendar where they happened` }),
           el('li', { text: `${result.plans.filter((p) => p.archived).length} completed projects go to the archive` }),
-          schedules.blocks.length ? el('li', { text: `${schedules.blocks.length} schedules (${schedules.blocks.map((b) => b.name).join(', ')})${schedules.defaultId ? ` — “${schedules.blocks.find((b) => b.id === schedules.defaultId).name}”, Motion’s default, is these projects’ default` : ''}` }) : null,
+          schedules.blocks.length ? el('li', { text: `${schedules.blocks.length} schedules (${schedules.blocks.map((b) => b.name).join(', ')})` }) : null,
         again ? el('li', { text: `${again} project${again === 1 ? ' was' : 's were'} imported before and will be replaced by this copy` }) : null),
         el('p', { class: 'sc-faint small', text: `Workspaces: ${result.workspaces.join(', ')}.` }),
         el('label', { class: 'np-check' }, history, el('span', { text: `Bring the archived history too (${counts.archived} tasks)` })),
@@ -148,7 +148,8 @@ export async function importMotion(picked = null) {
     }
     if (shared.length) {
       sync.applyTimeBlocks(p, shared);
-      if (schedules.defaultId) p.agenda = { ...p.agenda, timeBlockId: schedules.defaultId };
+      // A task that names no schedule uses Any, as everywhere else.
+      if (shared.some((b) => b.id === 'tb_any')) p.agenda = { ...p.agenda, timeBlockId: 'tb_any' };
     }
     if (p.motionId && known.has(p.motionId)) p.id = known.get(p.motionId);
     if (await sync.storePlan(p)) stored++;
@@ -175,7 +176,7 @@ export async function importMotionSchedules(picked = null) {
   if (!blocks.length) { act.hint('No schedules were found in that export — it needs user/settings.json.'); return; }
   const main = blocks.find((b) => b.id === defaultId);
   const choice = await open('Import Motion’s schedules', (close) => {
-    const everywhere = el('input', { type: 'checkbox', class: 'sc-check', checked: !!main });
+    const everywhere = el('input', { type: 'checkbox', class: 'sc-check', checked: false });
     return [
       el('p', {}, el('strong', { text: `${blocks.length} schedules: ` }), blocks.map((b) => b.name).join(', '), '.'),
       el('p', { class: 'sc-faint small', text: 'Imported again, they are updated rather than doubled.' }),

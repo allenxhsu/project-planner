@@ -16,7 +16,7 @@ import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, feeds, bu
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
 /** A plan's defaults, which a task inherits until it says otherwise. */
-export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 0 };
+export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_any', gapMinutes: 0, assumedLoad: 100, dailyCap: 0 };
 /** Breathing room between one block and the next, in minutes. */
 export const GAP_CHOICES = [0, 5, 10, 15, 30];
 /**

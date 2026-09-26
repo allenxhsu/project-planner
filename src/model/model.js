@@ -93,7 +93,7 @@ export function createProject(name = 'Untitled project', start = null) {
     // A task with no hours of its own takes its days in full — Microsoft
     // Project's rule (work = duration × units × hours a day). Plans made
     // before kept the half-day assumption in their own setting.
-    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 0 },
+    agenda: { blockHours: 1, timeBlockId: 'tb_any', gapMinutes: 0, assumedLoad: 100, dailyCap: 0 },
     // Which workspace this plan lives in — work, personal, school. Null is
     // unfiled, which shows up wherever you are.
     workspaceId: null,
@@ -884,6 +884,8 @@ export function inCurrentPhase(p, taskId) {
 // it into those hours by itself, rather than asking for a time per task.
 
 export const DEFAULT_TIME_BLOCKS = [
+  // Any: every day, 8 am to 9 pm — the schedule a task uses when it names none.
+  { id: 'tb_any', name: 'Any', from: '08:00', to: '21:00', days: [0, 1, 2, 3, 4, 5, 6] },
   { id: 'tb_work', name: 'Work', from: '08:00', to: '17:00', days: [1, 2, 3, 4, 5] },
   { id: 'tb_focus', name: 'Deep focus', from: '08:00', to: '10:00', days: [1, 2, 3, 4, 5] },
 ];

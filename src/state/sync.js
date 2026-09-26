@@ -22,6 +22,7 @@ import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { freshCopy } from '../model/setup.js';
+import { slotsOf } from '../model/model.js';
 import { parseTime } from '../model/agenda.js';
 import { readProfile } from '../io/profile.js';
 
@@ -630,18 +631,27 @@ export async function spreadTimeBlocks() {
  * whichever plan happened to be open.
  */
 /**
- * "Any": every day, 5:30 am to 11 pm — Motion's hours for its default
- * schedule. A task set to Any can be laid any day, the weekend included.
- * Made once, when no schedule of that name exists; after that it is yours to
- * change or delete like any other.
+ * "Any": every day, 8 am to 9 pm — the schedule a task uses when it names
+ * none, in every project. Made when missing (unless it was deleted on
+ * purpose), and made every project's default once, on each device; after
+ * that the default is whatever Settings ▸ Schedules says.
  */
+const ANY_HOURS = { from: '08:00', to: '21:00' };
+const ANY_DEFAULT_KEY = 'project-planner:any-default-v2';
 async function ensureAnySchedule() {
   if (!recordStore) return;
-  const list = await listTimeBlocks();
-  if (!list.length || list.some((b) => /^any(time)?$/i.test(String(b.name).trim()))) return;
-  if (await recordStore.get('tb_any')) return;          // deleted on purpose: not brought back
   const days = [0, 1, 2, 3, 4, 5, 6];
-  await saveTimeBlocks([{ id: 'tb_any', name: 'Any', from: '05:30', to: '23:00', days, slots: days.map((day) => ({ day, from: '05:30', to: '23:00' })) }]);
+  const fresh = { id: 'tb_any', name: 'Any', ...ANY_HOURS, days, slots: days.map((day) => ({ day, ...ANY_HOURS })) };
+  const record = await recordStore.get('tb_any');
+  // The first Any (5:30 am – 11 pm, Motion's hours) was never chosen by anyone: it becomes 8 am – 9 pm.
+  const first = record?.block && slotsOf(record.block).every((r) => r.from === '05:30' && r.to === '23:00');
+  if (!record || (first && !record.deletedAt)) await saveTimeBlocks([fresh]);
+  else if (record.deletedAt) return;
+  let done = false;
+  try { done = localStorage.getItem(ANY_DEFAULT_KEY) === '1'; } catch { /* private mode */ }
+  if (done) return;
+  await setDefaultScheduleEverywhere('tb_any');
+  try { localStorage.setItem(ANY_DEFAULT_KEY, '1'); } catch { /* private mode */ }
 }
 
 async function seedTimeBlocks() {
