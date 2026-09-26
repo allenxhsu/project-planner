@@ -163,3 +163,22 @@ export function showPanel(x, y, build) {
   menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - r.height - 4))}px`;
   openMenu = menu;
 }
+
+/**
+ * A confirmation that has to be typed: the action only enables when `word`
+ * is typed exactly, for things that are hard to take back.
+ */
+export function typedConfirm(title, body, word, okLabel = 'Delete') {
+  return open(title, (close) => {
+    const input = el('input', { class: 'sc-input', type: 'text', placeholder: word, autocomplete: 'off', spellcheck: false, 'data-autofocus': '' });
+    const ok = el('button', { class: 'sc-button sc-button--danger', text: okLabel, disabled: true, onclick: () => close(true) });
+    input.addEventListener('input', () => { ok.disabled = input.value !== word; });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value === word) { e.preventDefault(); close(true); } });
+    return [
+      el('p', { class: 'typed-body', text: body }),
+      el('p', { class: 'typed-ask' }, el('span', { text: 'Confirm by typing ' }), el('strong', { class: 'typed-word', text: word }), el('span', { text: ' below.' })),
+      input,
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(false)), ok),
+    ];
+  });
+}

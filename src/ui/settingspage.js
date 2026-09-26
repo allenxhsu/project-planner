@@ -17,7 +17,7 @@ import { URGENCIES } from '../model/model.js';
 import { BLOCK_CHOICES } from '../model/agenda.js';
 import { taskDefaults, setTaskDefaults, DEADLINE_RULES } from './taskdefaults.js';
 import { icon } from './icons.js';
-import { promptText, confirmDialog } from './dialog.js';
+import { promptText, confirmDialog, typedConfirm } from './dialog.js';
 
 /** [id, label, icon, section] — the settings list in the sidebar. */
 export const SETTINGS_PAGES = [
@@ -195,7 +195,11 @@ async function workspacePage(id) {
       section('Projects', note(`${open.filter((p) => !p.archived).length} open, ${open.filter((p) => p.archived).length} archived.`),
         button('Archived tasks', () => { void import('./alltasks.js').then((m) => m.showArchived(id)); })),
       section(null, button('Delete workspace', async () => {
-        if (!(await confirmDialog(`Delete the workspace “${w.name}”?`, 'Its projects are kept and become unfiled — nothing is deleted but the workspace.', 'Delete workspace'))) return;
+        const n = open.length;
+        const ok = await typedConfirm('Are you sure you want to delete this workspace?',
+          `The workspace “${w.name}” and its ${folders.length} folder${folders.length === 1 ? '' : 's'} are deleted on every device. Its ${n} project${n === 1 ? '' : 's'} and their tasks are kept, unfiled, under No workspace.`,
+          w.name, 'Delete workspace');
+        if (!ok) return;
         await sync.deleteWorkspace(id);
         const { refreshSidebar } = await import('./sidebar.js');
         await refreshSidebar();

@@ -1153,3 +1153,6 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .st-line { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--sc-line) 60%, transparent); }
 .st-wide { max-width: 520px; }
 .side-item.is-archived { opacity: .55; }
+.typed-body { margin: 0 0 10px; }
+.typed-ask { margin: 0 0 8px; }
+.typed-word { color: var(--sc-danger); }
