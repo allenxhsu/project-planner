@@ -796,9 +796,10 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cal-late .cal-late-list { margin: 0 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; }
 
 /* ================================================================ project window */
-.sc-dialog:has(.ps) { width: min(1560px, 97vw); }
+/* Motion's proportions: the description twice the width of each side panel, the two side panels equal, about 1550 × 890. */
+.sc-dialog:has(.ps) { width: min(1550px, 97vw); }
 .sc-dialog:has(.ps) .sc-dialog-head { display: none; }
-.ps { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .85fr) minmax(340px, 1fr); height: min(82vh, 900px); margin: -8px; }
+.ps { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr) minmax(280px, 1fr); height: min(86vh, 890px); margin: -8px; }
 .ps-col { min-height: 0; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
 .ps-mid { background: color-mix(in srgb, var(--sc-panel) 70%, var(--sc-bg)); border-left: 1px solid var(--sc-line); border-right: 1px solid var(--sc-line); padding: 0 0 16px; }
 .ps-mid > .ps-group, .ps-mid > .ps-links { padding: 0 16px; }
@@ -882,7 +883,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .sm-icon { width: 16px; text-align: center; color: var(--sc-text-3); }
 .side-plan-name { border: 0; background: none; font: inherit; cursor: pointer; text-align: left; width: 100%; }
 .side-plan-name:hover { color: var(--sc-text-1); }
-@media (max-width: 1100px) { .ps { grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr); } .ps-left { display: none; } }
+@media (max-width: 1100px) { .ps { grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr); } .ps-left { display: none; } }
 .cs { display: flex; flex-direction: column; gap: 12px; min-width: 420px; }
 .cs .sc-field { display: flex; flex-direction: column; gap: 4px; }
 .cs-dur { display: grid; grid-template-columns: 80px 1fr; gap: 6px; }
