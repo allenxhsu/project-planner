@@ -198,6 +198,9 @@ const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h$
  * its next block on the calendar stands in for "this block", or today when
  * the calendar has none; fixing a time is left to the calendar itself.
  */
+/** A block's circle, clicked: the task is done (or, if it was, not). */
+export function completeBlock(b, done) { return run(b, (t) => act.setPercent(t.id, done ? 100 : 0))(); }
+
 /** A fixed block's lock, clicked: the task goes back to being placed by the calendar there and then. */
 export function unlockBlock(b) { return run(b, (t) => act.unpinBlock(t.id, b.pinIndex))(); }
 

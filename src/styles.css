@@ -1214,3 +1214,29 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .cal-lock { margin-left: auto; border: 0; background: none; color: inherit; opacity: .8; cursor: pointer; padding: 0 2px; line-height: 0; }
 .cal-lock:hover { opacity: 1; color: var(--sc-text-1); }
 .cal-lock .ic svg { width: 12px; height: 12px; }
+
+/* ================================================================ calendar tasks, Motion's way
+   A neutral card with a coloured edge: a circle to complete it, the name, the
+   icons that matter; the hours underneath in grey. */
+.cal-block { background: color-mix(in srgb, var(--sc-panel) 55%, #3a3d44); border: 1px solid rgb(255 255 255 / .07); border-left: 3px solid var(--who, var(--sc-text-3)); border-radius: 4px; padding: 3px 6px 3px 5px; gap: 1px; }
+.cal-block:hover { background: color-mix(in srgb, var(--sc-panel) 35%, #474a52); }
+.cal-block.is-critical { background: color-mix(in srgb, var(--sc-panel) 55%, #3a3d44); }
+.cal-block.is-sel { box-shadow: inset 0 0 0 1px var(--sc-accent); }
+.cal-block.is-pinned { box-shadow: none; }
+.cal-block-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.cal-ring { flex: none; width: 11px; height: 11px; border-radius: 50%; border: 1.3px solid var(--sc-text-3); background: none; padding: 0; cursor: pointer; font-size: 8px; line-height: 9px; color: #fff; text-align: center; }
+.cal-ring:hover { border-color: var(--sc-text-1); }
+.cal-ring.is-done { background: var(--sc-success); border-color: var(--sc-success); }
+.cal-block .cal-block-name { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; color: var(--sc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.cal-block:not(.is-tight):not(.is-day) .cal-block-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cal-block-icons { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.cal-due-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sc-danger); }
+.cal-live { color: var(--sc-accent); font-size: 9px; }
+.cal-block .cal-block-time { font-size: 10px; color: var(--sc-text-3); padding-left: 16px; font-family: inherit; }
+.cal-block .cal-block-plan { padding-left: 16px; }
+.cal-block.is-tight { padding: 1px 5px; }
+.cal-block.is-worked .cal-block-name { color: var(--sc-text-2); text-decoration: line-through; text-decoration-color: rgb(255 255 255 / .25); }
+/* The card says late with its red dot, as Motion does — no dashes or hatching over it. */
+.cal-block.is-late { outline: none; }
+.cal-block.is-overdue { background-image: none; }
+.cal-block.is-other-plan { border-left-style: solid; }

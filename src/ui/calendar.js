@@ -16,7 +16,7 @@ import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, forma
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu, showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
-import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock } from './blockmenu.js';
+import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
 import { icon } from './icons.js';
 
 /**
@@ -678,7 +678,7 @@ export function renderCalendar(root) {
         class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
-          '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
+          '--who': colour.line, borderLeftColor: colour.line,
         },
         title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
         onclick: (e) => {
@@ -694,18 +694,28 @@ export function renderCalendar(root) {
           blockMenu(b, e.clientX, e.clientY);
         },
       },
-        el('div', { class: 'cal-block-time sc-mono' },
-          b.worked ? el('span', { class: 'cal-pin', title: 'Worked — logged time', text: '✓' })
-            : b.live ? el('span', { class: 'cal-pin', title: 'Running now', text: '▶' })
-            : null,
-          oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
-          person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null,
-          // Fixed at this time: a lock, and clicking it lets the calendar place the task again.
-          b.pinned ? el('button', { class: 'cal-lock', title: 'This task is locked at this time — click to release it',
+        // Motion's card: a circle and the name, the icons that matter on the
+        // right; the hours underneath.
+        el('div', { class: 'cal-block-head' },
+          el('button', {
+            class: `cal-ring${info.percent === 100 || b.worked ? ' is-done' : ''}`,
+            title: b.worked ? 'Worked — logged time' : info.percent === 100 ? 'Completed — click to reopen' : 'Mark complete',
             onpointerdown: (e) => e.stopPropagation(),
-            onclick: (e) => { e.stopPropagation(); void unlockBlock(b); } }, icon('lock')) : null),
-        el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),
-        (planCount > 1 && !who) || foreign || tight ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
+            onclick: (e) => { e.stopPropagation(); if (!b.worked) void completeBlock(b, info.percent !== 100); },
+          }, info.percent === 100 || b.worked ? '✓' : ''),
+          el('span', { class: 'cal-block-name' }, t.name),
+          el('span', { class: 'cal-block-icons' },
+            b.live ? el('span', { class: 'cal-live', title: 'Running now', text: '▶' }) : null,
+            urgencyOf(t) === 'now' || urgencyOf(t) === 'high' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: `${URGENCIES[urgencyOf(t)].label} priority` }) : null,
+            b.late || (t.deadline && toDay(t.deadline) < toDay(today()) && info.percent < 100) ? el('span', { class: 'cal-due-dot', title: t.deadline ? `Deadline ${formatDate(t.deadline, 'long')}` : 'Late' }) : null,
+            // Fixed at this time: a lock, and clicking it lets the calendar place the task again.
+            b.pinned ? el('button', { class: 'cal-lock', title: 'This task is locked at this time — click to release it',
+              onpointerdown: (e) => e.stopPropagation(),
+              onclick: (e) => { e.stopPropagation(); void unlockBlock(b); } }, icon('lock')) : null)),
+        tight && !oneDay ? null : el('div', { class: 'cal-block-time' },
+          `${formatClock(b.start)} – ${formatClock(b.end)}`,
+          person.initials && !who ? el('span', { class: 'cal-who', text: person.initials }) : null),
+        oneDay || foreign ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
         oneDay ? el('div', { class: 'cal-block-facts sc-mono sc-faint' },
           `${b.minutes % 60 ? `${b.minutes}m` : `${b.minutes / 60}h`}`,
           person.names.length ? el('span', { text: person.names.join(', ') }) : null,
