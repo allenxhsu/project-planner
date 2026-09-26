@@ -595,3 +595,50 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cal-block.is-worked, .today-block.is-worked { opacity: .55; background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(var(--sc-text-rgb), .06) 6px 12px); }
 .running-chip { border-color: var(--sc-accent); color: var(--sc-accent); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .running-chip[hidden] { display: none; }
+.cal-slot-ghost { position: absolute; left: 3px; right: 3px; z-index: 3; border: 1.5px solid var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 14%, transparent); color: var(--sc-accent); font-size: 11px; padding: 2px 6px; pointer-events: none; border-radius: 3px; }
+
+/* ---- the event window */
+.sc-dialog:has(.ev-sheet) { width: min(820px, 94vw); }
+.ev-sheet { display: flex; flex-direction: column; gap: 14px; }
+.ev-head { --ev: #3fb67a; margin: -4px -4px 0; padding: 14px 16px 12px; border-top: 3px solid var(--ev); background: color-mix(in srgb, var(--ev) 22%, var(--sc-panel)); display: flex; flex-direction: column; gap: 10px; }
+.ev-head-row { display: flex; align-items: center; gap: 10px; }
+.ev-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--ev) 40%, transparent); color: var(--sc-text-1); }
+.ev-series { font-size: 11.5px; color: var(--sc-text-2); }
+.ev-title { font: inherit; font-size: 19px; font-weight: 600; background: transparent; border: 0; border-bottom: 1px solid transparent; color: var(--sc-text-1); padding: 2px 0; outline: none; }
+.ev-title:focus { border-bottom-color: color-mix(in srgb, var(--ev) 70%, transparent); }
+.ev-title::placeholder { color: color-mix(in srgb, var(--sc-text-1) 45%, transparent); }
+.ev-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ev-when .sc-input { width: auto; background: color-mix(in srgb, var(--sc-bg) 55%, transparent); }
+.ev-when .sc-input[hidden] { display: none; }
+.ev-dash { color: var(--sc-text-2); }
+.ev-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12.5px; }
+.ev-allday { display: inline-flex; align-items: center; gap: 6px; }
+.ev-mini { width: auto; font-size: 12.5px; background: color-mix(in srgb, var(--sc-bg) 55%, transparent); }
+.ev-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; }
+.ev-details, .ev-side { display: flex; flex-direction: column; gap: 8px; }
+.ev-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+.ev-notes { min-height: 140px; }
+.cal-meeting.is-own { --ev: #3fb67a; background: color-mix(in srgb, var(--ev) 26%, var(--sc-panel)); border-left: 3px solid var(--ev); }
+.cal-meeting.is-free { background: transparent; border: 1px dashed color-mix(in srgb, var(--ev, var(--sc-text-3)) 70%, transparent); opacity: .85; }
+@media (max-width: 640px) { .ev-body { grid-template-columns: 1fr; } }
+
+/* ---- the new-task panel */
+.sc-dialog:has(.tp-sheet) { width: min(980px, 95vw); }
+.tp-name { font-size: 19px; margin: 4px 0 8px; }
+.tp-notes { flex: 1; min-height: 300px; }
+.tp-mode select { width: 100%; font-weight: 600; }
+.tp-mode[data-mode="auto"] select { color: #b48cff; background: color-mix(in srgb, #8c6ad9 20%, transparent); }
+.tp-mode[data-mode="fixed"] select { color: var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 14%, transparent); }
+.tp-when { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tp-when .sc-input { width: auto; }
+.fact[hidden] { display: none; }
+
+/* ---- task sheet: state across the top of the facts */
+.sheet-state { margin: -2px 0 0; padding: 8px 10px; font-weight: 600; font-size: 13px; border-left: 3px solid currentColor; }
+.sheet-state.is-ok, .sheet-state.is-done { color: var(--sc-success); background: color-mix(in srgb, var(--sc-success) 14%, transparent); }
+.sheet-state.is-late { color: var(--sc-danger); background: color-mix(in srgb, var(--sc-danger) 14%, transparent); }
+.sheet-state.is-live { color: var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 14%, transparent); }
+.sheet-state.is-off { color: var(--sc-text-3); background: color-mix(in srgb, var(--sc-line) 30%, transparent); }
+.sheet-sched { padding: 7px 10px; font-size: 12.5px; color: #b48cff; background: color-mix(in srgb, #8c6ad9 18%, transparent); }
+.sheet-sched.is-fixed { color: var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 12%, transparent); }
+.sheet-complete.is-done { color: var(--sc-success); border-color: var(--sc-success); }

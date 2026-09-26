@@ -360,10 +360,11 @@ const MENUS = {
 /** + New: the things a person starts, wherever they are. */
 function newMenu(x, y) {
   showMenu(x, y, [
-    { icon: '☐', label: 'New task', key: 'Ins', run: () => {
-      // A task needs a plan to be in and a place in its outline; the task list is that place.
-      if (!['gantt', 'sheet', 'priority', 'calendar', 'alltasks', 'today'].includes(store.ui.view)) set({ view: 'gantt' });
-      act.newTaskBelow();
+    { icon: '☐', label: 'New task…', run: () => { void import('./taskpanel.js').then((m) => m.newTaskPanel()); } },
+    { icon: '▦', label: 'New event…', run: () => {
+      const d = new Date();
+      const start = Math.min(23 * 60, Math.ceil((d.getHours() * 60 + d.getMinutes()) / 30) * 30);
+      void import('./blockmenu.js').then((m) => m.eventDialog({ day: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, start, end: Math.min(24 * 60, start + 30) }));
     } },
     { icon: '▢', label: 'New project…', run: () => { void newProjectWizard(); } },
     { icon: '◷', label: 'New schedule…', run: () => { void import('./schedules.js').then((m) => m.editSchedule(null)); } },

@@ -16,10 +16,10 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue } from '../model/model.js';
-import { formatClock, parseTime, agendaOf, hoursLeft } from '../model/agenda.js';
+import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, TRAVEL_CHOICES } from '../model/model.js';
+import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
-import { showMenu, open, foot, button, confirmDialog, showText } from './dialog.js';
+import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
 import { datePanel, quickDates } from './datepick.js';
 void _unused;
 
@@ -44,14 +44,10 @@ async function copy(text) {
   catch { showText('Copy this link', text); }
 }
 
-/** How much work the calendar expects of a task now: its own figure when it states one. */
+/** How much work the calendar expects of a task now: the planner's own figure. */
 function expectedHours(project, t) {
   const info = store.schedule.tasks[t.id];
-  if (Number.isFinite(+t.work) && t.work !== null && t.work !== undefined) return +t.work;
-  if (!info) return 0;
-  // The same assumption the calendar places it under, so adding an hour adds an hour.
-  const load = (project.agenda?.assumedLoad ?? 50) / 100;
-  return Math.round((info.work > 0 ? info.work : info.duration * (project.calendar?.hoursPerDay || 8)) * load * 100) / 100;
+  return info ? Math.round(agendaExpected(project, info, t) * 100) / 100 : 0;
 }
 
 /** "Set blockers": which tasks this one waits for, as tick boxes. */
@@ -225,7 +221,7 @@ const dateInput = (iso) => el('input', { class: 'sc-input sheet-date', type: 'da
  * numbers and links, a date, a choice or a set of ticks for options and
  * people. `get` reads it back as the value the field keeps.
  */
-function fieldInput(project, field, value) {
+export function fieldInput(project, field, value) {
   const people = project.resources.map((r) => ({ value: r.id, label: r.name }));
   const choices = field.type === 'select' || field.type === 'multi' ? field.options.map((o) => ({ value: o, label: o })) : people;
   if (field.type === 'select' || field.type === 'person') {
@@ -271,6 +267,30 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   const blocking = project.tasks.filter((x) => x.predecessors.some((l) => l.id === t.id)).map((x) => x.name);
   const who = t.assignments.map((a) => project.resources.find((r) => r.id === a.resourceId)?.name).filter(Boolean);
   const pins = pinsOf(t);
+  // Where the calendar has it: the state across the top of the facts, and
+  // the next time it is on — what someone opening a task wants first.
+  const { currentLayout, lateSentence } = await import('./calendar.js');
+  const layout = currentLayout().all;
+  const lateLine = (layout.late || []).find((l) => l.taskId === t.id && l.planId === project.id);
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const todayNum = toDay(today());
+  const next = (layout.blocks || []).filter((x) => x.taskId === t.id && x.planId === project.id && !x.worked
+    && (x.day > todayNum || (x.day === todayNum && x.end > nowMin))).sort((a, c) => a.day - c.day || a.start - c.start)[0];
+  const running = pins.some((x) => x.live);
+  const state = info?.percent === 100 ? { cls: 'is-done', text: `✓ Done${t.doneAt ? ` · ${formatDate(t.doneAt.slice(0, 10), 'day')}` : ''}` }
+    : t.archived ? { cls: 'is-off', text: '▣ Archived' }
+    : running ? { cls: 'is-live', text: '▶ Running now' }
+    : lateLine ? { cls: 'is-late', text: '⏱ Will be late', title: lateSentence(lateLine) }
+    : !agendaOf(project, t).show ? { cls: 'is-off', text: 'Not on the calendar' }
+    : { cls: 'is-ok', text: '✓ On track' };
+  const whenLine = info?.percent === 100 || t.archived ? null
+    : next ? `${next.pinned ? 'Fixed' : 'Scheduled'} ${formatDate(next.dateIso, 'day')} at ${formatClock(next.start)}`
+    : agendaOf(project, t).show ? 'Not placed yet — nothing free before the horizon' : null;
+  const expectedMin = info ? Math.round(expectedHours(project, t) * 60) : 0;
+  // Done is what is no longer left — logged hours or progress, whichever says more.
+  const leftMin = info ? Math.round(hoursLeft(project, info, t) * 60) : 0;
+  const spentMin = Math.max(0, expectedMin - leftMin);
+  const minText = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`);
 
   const saved = await open(t.name, (close) => {
     const name = el('input', { class: 'sc-input sheet-title', type: 'text', value: t.name, 'data-autofocus': '' });
@@ -289,17 +309,24 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
     setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 's') { e.preventDefault(); e.stopPropagation(); save(); }
+      if (k === 'l') { e.preventDefault(); e.stopPropagation(); void copy(taskLink(project.id, t.id)); }
+      if (k === 'd') { e.preventDefault(); e.stopPropagation(); close(null); act.duplicateTask(t.id); }
     }), 0);
     const more = (e) => {
       const r = e.currentTarget.getBoundingClientRect();
       showMenu(r.left - 180, r.bottom + 4, [
-        { icon: '⧉', label: 'Copy link', run: () => copy(taskLink(project.id, t.id)) },
-        pins.some((x) => x.live)
+        { icon: '⧉', label: 'Copy link', key: '⌘L', run: () => copy(taskLink(project.id, t.id)) },
+        running
           ? { icon: '■', label: 'Stop task…', run: () => { close(null); void stopNowDialog({ planId: project.id, taskId: t.id }); } }
           : { icon: '▶', label: 'Start task now…', disabled: info?.percent === 100 || t.milestone, run: () => { close(null); void startNowDialog(t, b); } },
-        { icon: '⎘', label: 'Duplicate task', run: () => { close(null); act.duplicateTask(t.id); } },
+        '-',
+        { icon: '⎘', label: 'Duplicate task', key: '⌘D', run: () => { close(null); act.duplicateTask(t.id); } },
+        { icon: '⧉', label: 'Bulk duplicate task…', run: () => { close(null); void bulkDuplicate(t); } },
         { icon: '▢', label: 'Create project from task', run: () => { close(null); void projectFromTask(t); } },
+        { icon: '✦', label: 'Save as template…', run: () => { close(null); void templateFromTask(t); } },
         '-',
         { icon: '▣', label: t.archived ? 'Restore from the archive' : 'Archive', run: () => { close(null); act.editTask(t.id, 'archived', !t.archived); } },
         { icon: '🗑', label: 'Delete task', danger: true, run: async () => {
@@ -326,6 +353,13 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           el('div', { class: 'sheet-head' },
             el('span', { class: 'sc-pill sheet-chip', text: b?.pinned ? '⌖ Fixed time' : 'Task' }),
             el('span', { class: 'sc-spacer' }),
+            el('button', {
+              class: `sc-button sc-button--sm sheet-complete${info?.percent === 100 ? ' is-done' : ''}`,
+              text: info?.percent === 100 ? '✓ Completed' : '✓ Mark complete',
+              title: info?.percent === 100 ? 'Mark it not complete' : 'Mark it complete and take its time off the calendar',
+              onclick: () => { done.checked = info?.percent !== 100; save(); },
+            }),
+            el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⎘', title: 'Duplicate (⌘D)', onclick: () => { close(null); act.duplicateTask(t.id); } }),
             el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋯', title: 'More', onclick: more })),
           name,
           b ? el('div', { class: 'sheet-when' }, day, from, el('span', { text: '–' }), to) : null,
@@ -335,12 +369,15 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           late ? el('div', { class: 'sc-alert sc-alert--danger sheet-late', text: late }) : null,
           notes),
         el('aside', { class: 'task-sheet-facts' },
+          el('div', { class: `sheet-state ${state.cls}`, title: state.title || '', text: state.text }),
+          whenLine ? el('div', { class: `sheet-sched${next?.pinned ? ' is-fixed' : ''}`, text: whenLine }) : null,
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
           fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
           fact('Assignee', list(who)),
           fact('Urgency', urgency),
-          fact('Duration', el('span', { class: 'sc-mono', text: `${info?.duration ?? 0}d open · ${Math.round(hoursLeft(project, info, t) * 10) / 10}h left · ${info?.percent ?? 0}%` })),
+          fact('Duration', el('span', { class: 'sc-mono', title: `${info?.duration ?? 0} day(s) open in the plan · ${info?.percent ?? 0}% complete`,
+            text: `${minText(spentMin)} of ${minText(expectedMin)} done · ${minText(leftMin)} left` })),
           fact('Start date', start),
           fact('Deadline', deadline),
           ...custom.map((c) => fact(c.field.name, c.node)),
@@ -386,6 +423,39 @@ export const blockSheet = (b, { late = null } = {}) => taskSheet({ planId: b.pla
  * A task grown into a project: a new plan named after it, holding it, and the
  * original archived so the work is not counted twice.
  */
+/**
+ * Save as template: a template plan holding this task as it is set up — its
+ * hours, people, notes and fields — with no progress and no dates, for the
+ * next time the same work comes round. The task itself is left alone.
+ */
+async function templateFromTask(t) {
+  const name = await promptText('Save as template', 'A template plan is made with this task in it, ready to start again from New project.', `${t.name}`);
+  if (!name) return;
+  const { createProject, insertTask } = await import('../model/model.js');
+  const { freshCopy } = await import('../model/setup.js');
+  const from = store.project;
+  const p = createProject(name.trim(), from.start);
+  p.workspaceId = from.workspaceId || null;
+  p.fields = structuredClone(from.fields || []);
+  p.resources = from.resources.filter((r) => t.assignments.some((a) => a.resourceId === r.id)).map((r) => ({ ...r }));
+  const copyOf = structuredClone(t);
+  delete copyOf.id;
+  delete copyOf.doneAt;
+  insertTask(p, 0, { ...copyOf, level: 1, predecessors: [], archived: false });
+  freshCopy(p, from.start);
+  p.template = true;
+  const { saveTemplatePlan } = await import('../state/sync.js');
+  if (await saveTemplatePlan(p)) act.hint(`“${p.name}” is saved as a template — New project offers it.`);
+}
+
+async function bulkDuplicate(t) {
+  const n = await promptText('Bulk duplicate', `How many copies of “${t.name}”? (1–50)`, '3');
+  const count = Math.round(+n);
+  if (!(count >= 1 && count <= 50)) { if (n) act.hint('Between 1 and 50 copies.'); return; }
+  for (let i = 0; i < count; i++) act.duplicateTask(t.id);
+  act.hint(`${count} cop${count === 1 ? 'y' : 'ies'} of “${t.name}” made, just below it.`);
+}
+
 async function projectFromTask(t) {
   const yes = await confirmDialog(`Make “${t.name}” a project?`,
     'A new plan is made with this task in it, in the same workspace. The task here is archived rather than deleted, so nothing is lost.', 'Make a project');
@@ -408,11 +478,122 @@ async function projectFromTask(t) {
 }
 
 /**
- * An event from a connected calendar, opened. The calendar it came from is
+ * The event window: an event made here, new or opened. Across the top, what
+ * and when — title, start and end (which can be different days), all day,
+ * repeat, travel time — on the event's own colour. Below, the details: a
+ * meeting link, the place, busy or free, whose time, colour, guests, notes.
+ * "Add to project" turns it into a task at the same time instead.
+ */
+export async function eventDialog({ day, start, end, ev = null }) {
+  const project = store.project;
+  const saved = await open(ev ? 'Event' : 'New event', (close) => {
+    const head = el('div', { class: 'ev-head' });
+    const paint = (c) => head.style.setProperty('--ev', EVENT_COLOURS[c]?.hex || EVENT_COLOURS.mint.hex);
+    const title = el('input', { class: 'ev-title', type: 'text', value: ev?.title || '', placeholder: 'Event title', 'data-autofocus': '' });
+    const fromDate = dateInput(ev?.day || day);
+    const fromTime = timeInput(ev?.allDay ? 540 : (ev?.start ?? start));
+    const toDate = dateInput(ev?.endDay || ev?.day || day);
+    const toTime = timeInput(ev?.allDay ? 600 : (ev?.end ?? end) % (24 * 60));
+    fromDate.addEventListener('change', () => { if (toDate.value < fromDate.value) toDate.value = fromDate.value; });
+    const allDay = el('input', { type: 'checkbox', class: 'sc-check', checked: !!ev?.allDay });
+    const showTimes = () => { fromTime.hidden = allDay.checked; toTime.hidden = allDay.checked; };
+    allDay.addEventListener('change', showTimes);
+    showTimes();
+    const repeat = el('select', { class: 'sc-select ev-mini' }, ...Object.entries(EVENT_REPEATS).map(([id, label]) => el('option', { value: id, text: label, selected: (ev?.repeat || 'none') === id })));
+    const travel = el('select', { class: 'sc-select ev-mini', title: 'Held either side of it, to get there and back' },
+      ...TRAVEL_CHOICES.map((m) => el('option', { value: m, text: m ? `${m} min travel` : 'No travel time', selected: (ev?.travel || 0) === m })));
+    const link = el('input', { class: 'sc-input', type: 'url', value: ev?.link || '', placeholder: 'Meeting link (Teams, Zoom, Meet…)' });
+    const place = el('input', { class: 'sc-input', type: 'text', value: ev?.location || '', placeholder: 'Location' });
+    const busy = el('select', { class: 'sc-select' },
+      el('option', { value: 'busy', text: 'Busy — work goes around it', selected: ev?.busy !== false }),
+      el('option', { value: 'free', text: 'Free — shown, not blocking', selected: ev?.busy === false }));
+    const who = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Everyone on the plan' }),
+      ...project.resources.filter((r) => r.type === 'work').map((r) => el('option', { value: r.id, text: r.name, selected: ev?.resourceId === r.id })));
+    const colour = el('select', { class: 'sc-select', onchange: (e) => paint(e.target.value) },
+      ...Object.entries(EVENT_COLOURS).map(([id, c]) => el('option', { value: id, text: c.label, selected: (ev?.colour || 'mint') === id })));
+    const notes = el('textarea', { class: 'sc-textarea ev-notes', rows: 7, value: ev?.notes || '', placeholder: 'Notes' });
+    const guests = el('textarea', { class: 'sc-textarea', rows: 4, value: (ev?.guests || []).join('\n'), placeholder: 'Add guests — a name or address a line' });
+    paint(ev?.colour || 'mint');
+
+    const read = () => ({
+      title: title.value, day: fromDate.value, endDay: toDate.value, allDay: allDay.checked,
+      start: parseTime(fromTime.value), end: parseTime(toTime.value) === 0 && toDate.value > fromDate.value ? 24 * 60 : parseTime(toTime.value),
+      repeat: repeat.value, travel: +travel.value, link: link.value, location: place.value, busy: busy.value === 'busy',
+      resourceId: who.value || null, colour: colour.value, guests: guests.value, notes: notes.value,
+    });
+    const save = () => close(read());
+    setTimeout(() => document.querySelector('.ev-sheet')?.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); save(); }
+      if (e.key === 'Enter' && e.target === title) save();
+    }), 0);
+
+    head.append(
+      el('div', { class: 'ev-head-row' },
+        el('span', { class: 'ev-chip', text: '▦ Event' }),
+        ev?.repeat && ev.repeat !== 'none' ? el('span', { class: 'ev-series', text: 'Changes apply to every repeat' }) : null,
+        el('span', { class: 'sc-spacer' }),
+        el('button', { class: 'sc-button sc-button--sm', text: '＋ Add to project', title: `Make it a task in ${project.name}, at this time, instead`, onclick: () => close({ ...read(), toProject: true }) })),
+      title,
+      el('div', { class: 'ev-when' }, fromDate, fromTime, el('span', { class: 'ev-dash', text: '–' }), toDate, toTime),
+      el('div', { class: 'ev-opts' }, el('label', { class: 'ev-allday' }, allDay, el('span', { text: 'All day' })), repeat, travel));
+    return [
+      el('div', { class: 'ev-sheet' },
+        head,
+        el('div', { class: 'ev-body' },
+          el('div', { class: 'ev-details' },
+            el('div', { class: 'sc-label', text: 'Event details' }),
+            link, place,
+            el('div', { class: 'ev-pair' }, busy, who),
+            el('div', { class: 'ev-pair' }, colour, el('span', { class: 'sc-faint small', text: `In ${project.name}` })),
+            notes),
+          el('div', { class: 'ev-side' },
+            el('div', { class: 'sc-label', text: 'Guests' }),
+            guests,
+            el('p', { class: 'sc-faint small', text: 'Kept with the event so you know who is coming. Nothing is sent to them.' })))),
+      foot(
+        ev ? button('Delete', () => close({ delete: true }), 'sc-button--danger') : el('span'),
+        el('span', { class: 'sc-spacer' }),
+        button('Cancel  Esc', () => close(null)),
+        button(ev ? 'Save  ⌘S' : 'Create event  ⌘S', save, 'sc-button--primary')),
+    ];
+  }, { wide: true });
+  if (!saved) return;
+  if (saved.delete) { act.deleteOwnEvent(ev.id); act.hint(`“${ev.title}” is off the calendar.`); return; }
+  if (!saved.title.trim()) { act.hint('An event needs a title.'); return; }
+  if (!saved.allDay && (saved.start === null || saved.end === null || (saved.endDay === saved.day && saved.end <= saved.start))) { act.hint('An event ends after it starts.'); return; }
+  if (saved.toProject) {
+    // The same hours, as project work: a task fixed there. The event goes, or
+    // the hour would be booked twice — once as busy, once as work.
+    if (saved.allDay || saved.endDay !== saved.day) { act.hint('Only an event inside one day can become a task at a fixed time.'); return; }
+    const t = act.newTaskFromEvent({ name: saved.title.trim(), day: saved.day, start: saved.start, minutes: saved.end - saved.start,
+      notes: [saved.location, saved.link, saved.notes].filter(Boolean).join('\n\n') });
+    if (t) { if (ev) act.deleteOwnEvent(ev.id); act.hint(`“${t.name}” is now a task in ${store.project.name}, fixed at ${formatClock(saved.start)}.`); }
+    return;
+  }
+  if (act.saveOwnEvent({ ...(ev || {}), ...saved })) act.hint(`“${saved.title.trim()}” is on the calendar${saved.busy ? '; work is laid around it' : ', as free time'}.`);
+}
+
+/** Right-click on empty calendar time: make something there. */
+export function slotMenu({ day, start, end }, x, y, onClose = () => {}) {
+  showMenu(x, y, [
+    { note: `${formatDate(day, 'day')} · ${formatClock(start)}` },
+    { icon: '▦', label: 'Create event', run: () => { onClose(); void eventDialog({ day, start, end }); } },
+    { icon: '☑', label: 'Create task (fixed time)', run: () => { onClose(); void import('./taskpanel.js').then((m) => m.newTaskPanel({ day, start, end, fixed: true })); } },
+    { icon: '✦', label: 'Create task (auto-scheduled)', run: () => { onClose(); void import('./taskpanel.js').then((m) => m.newTaskPanel({ day, start, end, fixed: false })); } },
+  ]);
+}
+
+/**
+ * An event from a connected calendar, opened (one made here opens in the event window). The calendar it came from is
  * where it is edited, so its time is shown and not changed here; what the
  * planner owns about it — travel time, and whether it is project work — is.
  */
 export function meetingSheet(m) {
+  if (m.own) {
+    const plan = m.planId === store.project.id ? store.project : null;
+    const ev = plan?.events?.find((x) => x.id === m.eventId);
+    if (ev) return eventDialog({ day: ev.day, start: ev.start, end: ev.end, ev });
+  }
   const plan = m.planId === store.project.id ? store.project : null;
   const feed = plan ? getFeed(plan, m.feedId) : null;
   return open(m.title, (close) => {

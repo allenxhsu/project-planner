@@ -251,7 +251,13 @@ export async function readStoredAutosave() {
   return readAutosave();
 }
 
-export async function initSync() {
+/**
+ * @param {{ preferStored?: boolean }} opts  preferStored: what is on screen is
+ *   only the stand-in shown while the database opened (the sample), so the
+ *   stored autosave replaces it — before anything below can edit the stand-in
+ *   and write it over the plan that was really being worked on.
+ */
+export async function initSync({ preferStored = false } = {}) {
   try { settings = { ...settings, ...JSON.parse(read(SETTINGS_KEY, '{}')) }; } catch { /* keep defaults */ }
   // On the Portal the server is the origin this page came from, and the
   // signed-in session is the credential. Off it this is null and nothing
@@ -261,6 +267,10 @@ export async function initSync() {
   }
   recordStore = await openStore();
   await adoptAutosave();
+  if (preferStored && !store.ui.dirty) {
+    const stored = await readStoredAutosave();
+    if (stored) { try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ } }
+  }
   // Asked once a launch, and again whenever sync is switched on.
   void requestPersistence();
   await openDocument();
@@ -546,7 +556,9 @@ export function applyTimeBlocks(project, list) {
 export async function spreadTimeBlocks() {
   const list = await listTimeBlocks();
   if (!list.length) return;
-  if (applyTimeBlocks(store.project, list)) {
+  // Asked of a copy: the open plan changes only through a commit, or it is
+  // changed without being marked, and the commit after finds nothing to do.
+  if (applyTimeBlocks(JSON.parse(JSON.stringify(store.project)), list)) {
     tryCommit('Time blocks', (p) => { applyTimeBlocks(p, list); });
   }
   for (const record of await planRecords()) {
@@ -982,6 +994,15 @@ export async function readPlan(id) {
   const record = recordStore && await recordStore.get(id);
   if (!record || record.deletedAt) return null;
   try { return parse(record.body).project; } catch { return null; }
+}
+
+/** Put a plan on the shelf without opening it — a template made from a task. */
+export async function saveTemplatePlan(project) {
+  if (!recordStore) { set({ hint: 'Templates live on the shelf, which is not open yet.' }); return false; }
+  const at = Date.now();
+  await recordStore.put([{ id: project.id, type: 'document', format: 'project-planner', name: project.name, body: serialize(project), updatedAt: at, deletedAt: null, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return true;
 }
 
 /** Open a plan made here — by the new-project wizard — and put it on the shelf. */

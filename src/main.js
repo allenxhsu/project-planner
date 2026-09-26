@@ -120,11 +120,16 @@ initHosting();
 // The status line carries the sync indicator, so a status event redraws it.
 window.addEventListener(SYNC_EVENTS.status, () => renderStatus($('statusbar')));
 
+let startedOnFallback = false;
 if (!hosted) {
   // Whatever localStorage still holds gets the first plan on screen without a
   // wait; the store's own copy, which is the newer one once the move has
   // happened, replaces it as soon as the database is open.
   const saved = readAutosave();
+  // Nothing in localStorage is the usual case once the autosave has moved to
+  // the database: the sample goes up for now, and is replaced by the stored
+  // plan the moment the database is open (below).
+  startedOnFallback = !saved;
   if (saved) {
     try { loadProject(parse(JSON.stringify(saved)).project); } catch { loadProject(sampleProject()); }
   } else loadProject(sampleProject());
@@ -159,11 +164,12 @@ function mountPortalBar() {
 }
 mountPortalBar();
 
-initSync()
+initSync({ preferStored: !hosted && startedOnFallback })
   .then(async () => {
-    if (!hosted && !store.ui.dirty && store.project.tasks.length === 0) {
-      // Nothing typed yet: if the store holds a newer autosave than the one
-      // localStorage had, that is the plan to show.
+    if (!hosted && !store.ui.dirty && !startedOnFallback && store.project.tasks.length === 0) {
+      // An empty plan came out of localStorage: if the store holds another
+      // plan, that is the one to show. (A start on the sample is restored
+      // inside initSync, before anything can edit the sample.)
       const stored = await readStoredAutosave();
       if (stored && stored.id !== store.project.id) {
         try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ }

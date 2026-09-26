@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, inCurrentPhase, feeds, bufferOf, getResource, identityOf, pinsOf, URGENCIES, urgencyOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, inCurrentPhase, feeds, bufferOf, getResource, identityOf, pinsOf, eventsOf, eventPieces, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -263,6 +263,24 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
       });
     }
   }
+  // Events made in the planner itself. One with a person takes that person's
+  // time; one with nobody takes everyone's — lane '*'. A repeating event is
+  // expanded over the days the calendar can show; a free one is drawn and
+  // books nothing.
+  for (const { project } of entries) for (const ev of eventsOf(project)) {
+    const owner = ev.resourceId ? getResource(project, ev.resourceId) : null;
+    for (const piece of eventPieces(ev, todayDay - 62, todayDay + horizonDays)) {
+      const travel = !ev.allDay && ev.travel > 0;
+      meetings.push({
+        lane: owner ? personKeyOf(owner) : '*', day: piece.day, start: piece.start, end: piece.end, title: ev.title,
+        allDay: !!ev.allDay, location: ev.location || null, description: ev.notes || null, uid: `${ev.id}@${piece.occurrence}`,
+        eventId: ev.id, occurrence: piece.occurrence, colour: ev.colour, free: ev.busy === false,
+        feedId: null, feedName: 'Made here', planId: project.id, buffer: ev.travel || 0, own: true,
+        bufferBefore: travel && piece.first ? Math.min(ev.travel, piece.start) : 0,
+        bufferAfter: travel && piece.last ? Math.min(ev.travel, 24 * 60 - piece.end) : 0,
+      });
+    }
+  }
   const bookedOn = (lane, day) => {
     if (!booked.has(lane)) booked.set(lane, new Map());
     const days = booked.get(lane);
@@ -271,7 +289,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
       // travel time included.
       days.set(day, [
         ...(day === todayDay && nowMinute > 0 ? [{ start: 0, end: nowMinute }] : []),
-        ...meetings.filter((m) => m.lane === lane && m.day === day)
+        ...meetings.filter((m) => !m.free && (m.lane === lane || m.lane === '*') && m.day === day)
           .map((m) => ({ start: m.start - m.bufferBefore, end: m.end + m.bufferAfter }))]);
     }
     return days.get(day);

@@ -250,3 +250,35 @@ test('stopping a started task logs the time where it was worked and re-lays the 
   stopWork(p, t.id, { worked: 30, more: 0 });
   assert.equal(p.tasks.find((x) => x.id === t.id).percent, 100);
 });
+
+test('an event made in the planner is busy time for everyone, and survives a save', async () => {
+  const { saveEvent } = await import('../src/model/model.js');
+  const { serialize, parse } = await import('../src/io/json.js');
+  const { p, ann } = week();
+  const t = job(p, ann, 'Draft', { days: 1, work: 2 });
+  saveEvent(p, { title: 'Dentist', day: MON, start: 9 * 60, end: 11 * 60 });
+  const mine = lay(p).blocks.filter((b) => b.taskId === t.id && b.dateIso === MON);
+  assert.ok(mine.length && mine.every((b) => b.start >= 11 * 60), 'the work goes around it');
+  assert.deepEqual(parse(serialize(p)).project.events.map((e) => [e.title, e.day, e.start, e.end]), [['Dentist', MON, 540, 660]]);
+  assert.throws(() => saveEvent(p, { title: 'Bad', day: MON, start: 600, end: 600 }));
+});
+
+test('events repeat, run past midnight, can be free, and keep travel time', async () => {
+  const { saveEvent, eventPieces } = await import('../src/model/model.js');
+  const { toDay } = await import('../src/model/calendar.js');
+  const { p, ann } = week();
+  const standup = saveEvent(p, { title: 'Stand-up', day: MON, start: 9 * 60, end: 9 * 60 + 30, repeat: 'weekdays' });
+  const days = eventPieces(standup, toDay(MON), toDay(MON) + 13).map((x) => x.day - toDay(MON));
+  assert.deepEqual(days, [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]);
+  const night = saveEvent(p, { title: 'Flight', day: MON, start: 22 * 60, endDay: TUE, end: 6 * 60 });
+  assert.deepEqual(eventPieces(night, toDay(MON), toDay(TUE)).map((x) => [x.day - toDay(MON), x.start, x.end]), [[0, 1320, 1440], [1, 0, 360]]);
+  saveEvent(p, { title: 'Maybe', day: MON, start: 10 * 60, end: 12 * 60, busy: false });
+  saveEvent(p, { title: 'Offsite', day: MON, start: 13 * 60, end: 14 * 60, travel: 30, location: 'Town' });
+  const t = job(p, ann, 'Report', { days: 1, work: 4 });
+  const { blocks, meetings } = lay(p);
+  const mine = blocks.filter((b) => b.taskId === t.id && b.dateIso === MON);
+  // 9:30–12:30 is free (the free event books nothing), 12:30–14:30 is the offsite with travel.
+  assert.ok(mine.some((b) => b.start === 9 * 60 + 30), 'work sits in the free event');
+  assert.ok(mine.every((b) => b.end <= 12 * 60 + 30 || b.start >= 14 * 60 + 30), 'travel either side is held');
+  assert.ok(meetings.some((m) => m.title === 'Maybe' && m.free));
+});

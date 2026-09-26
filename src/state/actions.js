@@ -10,8 +10,8 @@ import {
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
-  cleanField, fieldsOf, getField, removeField, setFieldValue,
-  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork,
+  cleanField, fieldsOf, getField, removeField, setFieldValue, getResource,
+  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -371,6 +371,10 @@ export function startTaskNow(taskId, minutes, { pinIndex = null } = {}) {
   return ok;
 }
 
+/** An event made on the calendar: busy time the work is laid around. */
+export function saveOwnEvent(ev) { return attempt(ev.id ? 'Edit the event' : 'New event', (p) => saveEvent(p, ev)); }
+export function deleteOwnEvent(id) { return attempt('Delete the event', (p) => removeEvent(p, id)); }
+
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
   return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => stopWork(p, taskId, { worked, more }));
@@ -392,6 +396,55 @@ export function newTaskFromEvent({ name, day, start, minutes, notes = '' }) {
     setTaskField(p, t.id, 'calendarShow', true);
     if (notes) setTaskField(p, t.id, 'notes', notes);
     setPin(p, t.id, { day, start, minutes });
+    made = t;
+  });
+  return ok ? made : null;
+}
+
+/**
+ * A task from the new-task panel, in the open plan: everything the panel
+ * asked, set in one step so Undo takes it all back. `fixed` holds it at an
+ * hour; without it the calendar places it (auto-scheduled).
+ */
+export function createTask(spec) {
+  let made = null;
+  const ok = attempt('New task', (p) => {
+    const t = insertTask(p, p.tasks.length, { name: spec.name, duration: 1, level: 1 });
+    if (spec.resourceId && getResource(p, spec.resourceId)) assign(p, t.id, spec.resourceId, 1);
+    setTaskField(p, t.id, 'work', String(Math.round((spec.minutes / 60) * 100) / 100));
+    if (spec.startDay) setTaskField(p, t.id, 'start', spec.startDay);
+    if (spec.deadline) setTaskField(p, t.id, 'deadline', spec.deadline);
+    if (spec.urgency) setTaskField(p, t.id, 'urgency', spec.urgency);
+    if (spec.notes) setTaskField(p, t.id, 'notes', spec.notes);
+    setTaskField(p, t.id, 'calendarShow', true);
+    if (spec.blockHours) setTaskField(p, t.id, 'blockHours', spec.blockHours);
+    if (spec.timeBlockId) setTaskField(p, t.id, 'timeBlock', spec.timeBlockId);
+    if (spec.stageId) setStage(p, t.id, spec.stageId);
+    for (const [fieldId, value] of Object.entries(spec.fields || {})) setFieldValue(p, t.id, fieldId, value);
+    if (spec.fixed) setPin(p, t.id, spec.fixed);
+    made = t;
+  });
+  return ok ? made : null;
+}
+
+/**
+ * A task that already happened: made on time that has gone, it is work done
+ * then — logged at that hour, drawn there ticked, and complete as of its end.
+ */
+export function newTaskDoneAt({ name, day, start, minutes, notes = '' }) {
+  let made = null;
+  const ok = attempt('Log a task that happened', (p) => {
+    const t = insertTask(p, p.tasks.length, { name, duration: 1, level: 1 });
+    const who = p.resources.find((r) => r.type === 'work');
+    if (who) assign(p, t.id, who.id, 1);
+    setTaskField(p, t.id, 'work', String(Math.round((minutes / 60) * 100) / 100));
+    setTaskField(p, t.id, 'start', day);
+    setTaskField(p, t.id, 'calendarShow', true);
+    if (notes) setTaskField(p, t.id, 'notes', notes);
+    addTimesheet(p, { taskId: t.id, resourceId: who?.id || null, date: day, start, hours: minutes / 60, note: 'Worked' });
+    setTaskField(p, t.id, 'percent', 100);
+    const end = start + minutes;
+    t.doneAt = `${day}T${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
     made = t;
   });
   return ok ? made : null;

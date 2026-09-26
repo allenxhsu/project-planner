@@ -69,6 +69,9 @@ export function createProject(name = 'Untitled project', start = null) {
     // code, a link to the brief. Each task keeps its values in `fields`.
     fields: [],
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
+    // Events made here, on the calendar — a dentist, a call — rather than read
+    // from a connected calendar. Busy time the work goes around.
+    events: [],
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
     // Which workspace this plan lives in — work, personal, school. Null is
     // unfiled, which shows up wherever you are.
@@ -492,6 +495,104 @@ function checkPin(pin) {
   // `live`: the block of a task someone started and has not stopped yet.
   return { day: pin.day, start, minutes, ...(pin.live ? { live: true } : {}) };
 }
+
+// ---------------------------------------------------------------- own events
+
+export const eventsOf = (p) => (Array.isArray(p.events) ? p.events : []);
+
+export const EVENT_COLOURS = {
+  mint: { label: 'Mint', hex: '#3fb67a' }, sky: { label: 'Sky', hex: '#3d8bd9' }, lavender: { label: 'Lavender', hex: '#8c6ad9' },
+  rose: { label: 'Rose', hex: '#d9557a' }, amber: { label: 'Amber', hex: '#d99a2b' }, slate: { label: 'Slate', hex: '#6b7a8c' },
+};
+export const EVENT_REPEATS = { none: 'Does not repeat', daily: 'Every day', weekdays: 'Every weekday (Mon–Fri)', weekly: 'Every week', monthly: 'Every month' };
+export const TRAVEL_CHOICES = [0, 10, 15, 30, 45, 60, 90];
+
+/**
+ * An event made safe. It runs from `day` at `start` to `endDay` at `end`
+ * (minutes into those days), or all of those days when `allDay`. `repeat`
+ * copies it forward; `busy: false` shows it without taking the time;
+ * `travel` is minutes held either side of it. `resourceId` says whose time
+ * it takes — none means everyone on the plan, which for a plan of one's own
+ * work is simply "me". Guests are names or addresses kept with it; nothing is
+ * sent to them.
+ */
+export function cleanEvent(p, raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const title = String(raw.title || '').trim();
+  if (!title) return null;
+  if (!isoValid(raw.day)) return null;
+  const endDay = isoValid(raw.endDay) && raw.endDay >= raw.day ? raw.endDay : raw.day;
+  const allDay = raw.allDay === true;
+  const start = allDay ? 0 : Math.round(+raw.start);
+  const end = allDay ? 24 * 60 : Math.round(+raw.end);
+  if (!(start >= 0 && start < 24 * 60 && end > 0 && end <= 24 * 60)) return null;
+  if (endDay === raw.day && end <= start) return null;
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : uid('ev'),
+    title, day: raw.day, start, endDay, end, allDay,
+    repeat: EVENT_REPEATS[raw.repeat] ? raw.repeat : 'none',
+    busy: raw.busy !== false,
+    travel: TRAVEL_CHOICES.includes(+raw.travel) ? +raw.travel : 0,
+    location: String(raw.location || '').trim(),
+    link: String(raw.link || '').trim(),
+    colour: EVENT_COLOURS[raw.colour] ? raw.colour : 'mint',
+    guests: [...new Set((Array.isArray(raw.guests) ? raw.guests : String(raw.guests || '').split(/[,;\n]/)).map((g) => String(g).trim()).filter(Boolean))],
+    notes: String(raw.notes || ''),
+    resourceId: raw.resourceId && p.resources.some((r) => r.id === raw.resourceId) ? raw.resourceId : null,
+  };
+}
+
+/**
+ * The pieces of an event that fall between two day numbers, one per day it
+ * touches: `{ day, start, end, first, last, occurrence }`. A repeating event
+ * is copied forward from its first day; one running past midnight is cut at
+ * each midnight.
+ */
+export function eventPieces(ev, from, to) {
+  const first = toDay(ev.day);
+  const span = toDay(ev.endDay || ev.day) - first;
+  const starts = [];
+  const push = (d) => { if (d + span >= from && d <= to) starts.push(d); };
+  if (ev.repeat === 'none' || !ev.repeat) push(first);
+  else if (ev.repeat === 'monthly') {
+    const [y, m, dd] = ev.day.split('-').map(Number);
+    for (let k = 0; k < 240; k++) {
+      const date = new Date(Date.UTC(y, m - 1 + k, dd));
+      if (date.getUTCDate() !== dd) continue;               // no 31 February
+      const d = toDay(date.toISOString().slice(0, 10));
+      if (d > to) break;
+      push(d);
+    }
+  } else {
+    const step = ev.repeat === 'weekly' ? 7 : 1;
+    let d = first;
+    if (d < from - span) d += Math.floor((from - span - d) / step) * step;
+    for (; d <= to; d += step) {
+      if (ev.repeat === 'weekdays') { const w = ((d % 7) + 11) % 7; if (w === 0 || w === 6) continue; }
+      push(d);
+    }
+  }
+  const out = [];
+  for (const s of starts) {
+    for (let k = 0; k <= span; k++) {
+      const day = s + k;
+      if (day < from || day > to) continue;
+      out.push({ day, start: k === 0 ? ev.start : 0, end: k === span ? ev.end : 24 * 60, first: k === 0, last: k === span, occurrence: fromDay(s) });
+    }
+  }
+  return out;
+}
+
+/** Add an event, or change one that is there already (same id). */
+export function saveEvent(p, raw) {
+  const ev = cleanEvent(p, raw);
+  if (!ev) throw new Error('An event needs a title, a day, and an end after its start.');
+  if (!Array.isArray(p.events)) p.events = [];
+  const i = p.events.findIndex((x) => x.id === ev.id);
+  if (i >= 0) p.events[i] = ev; else p.events.push(ev);
+  return ev;
+}
+export function removeEvent(p, id) { p.events = eventsOf(p).filter((x) => x.id !== id); }
 
 /** Which of a task's pins is the one running now, or -1. */
 export const livePinIndex = (t) => pinsOf(t).findIndex((x) => x.live);

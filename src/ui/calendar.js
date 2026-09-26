@@ -15,7 +15,8 @@ import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu, showText } from './dialog.js';
-import { blockMenu, blockSheet, meetingSheet, taskSheet } from './blockmenu.js';
+import { EVENT_COLOURS } from '../model/model.js';
+import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu } from './blockmenu.js';
 
 /**
  * How much of the calendar is on screen.
@@ -330,7 +331,7 @@ export function renderCalendar(root) {
     .sort((a, b) => a[1].localeCompare(b[1]));
   const who = ui.calendarWho && everyone.some(([k]) => k === ui.calendarWho) ? ui.calendarWho : '';
   const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : all.blocks;
-  const meetings = who ? (all.meetings || []).filter((m) => m.lane === who) : all.meetings;
+  const meetings = who ? (all.meetings || []).filter((m) => m.lane === who || m.lane === '*') : all.meetings;
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
   const palette = planPalette(entries);
@@ -428,6 +429,20 @@ export function renderCalendar(root) {
   for (const d of columns) {
     const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
+    // Right-click empty time: an event or a fixed-time task there, half an
+    // hour from the quarter hour clicked, marked while the menu is open.
+    col.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('.cal-block, .cal-meeting, .cal-buffer')) return;
+      e.preventDefault();
+      const raw = hourFrom * 60 + ((e.clientY - col.getBoundingClientRect().top) / HOUR_H) * 60;
+      const start = Math.max(0, Math.min(24 * 60 - 30, Math.floor(raw / 15) * 15));
+      const end = start + 30;
+      const ghost = el('div', { class: 'cal-slot-ghost', style: { top: `${y(start)}px`, height: `${y(end) - y(start)}px` } }, `${formatClock(start)} – ${formatClock(end)}`);
+      col.append(ghost);
+      const drop = () => ghost.remove();
+      slotMenu({ day: col.dataset.day, start, end }, e.clientX, e.clientY, drop);
+      setTimeout(() => addEventListener('pointerdown', drop, { once: true, capture: true }), 0);
+    });
     // Meetings from a connected calendar sit behind the work, because that is
     // what they are: hours already spoken for.
     for (const m of (meetings || []).filter((x) => x.day === d)) {
@@ -442,9 +457,9 @@ export function renderCalendar(root) {
           style: { top: `${y(m.end)}px`, height: `${Math.max(3, y(m.end + m.bufferAfter) - y(m.end))}px` } }));
       }
       col.append(el('div', {
-        class: `cal-meeting${m.allDay ? ' is-allday' : ''}`,
+        class: `cal-meeting${m.allDay ? ' is-allday' : ''}${m.own ? ' is-own' : ''}${m.free ? ' is-free' : ''}`,
         onclick: () => { void meetingSheet(m); },
-        style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px` },
+        style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px`, ...(m.colour && EVENT_COLOURS[m.colour] ? { '--ev': EVENT_COLOURS[m.colour].hex } : {}) },
         title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}${m.location ? `\n${m.location}` : ''}${m.bufferBefore ? `\n${m.bufferBefore} minutes' travel either side` : ''}`,
       }, el('div', { class: 'cal-meeting-name', text: m.title })));
     }
