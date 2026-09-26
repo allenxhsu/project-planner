@@ -154,7 +154,7 @@ export function displayOptions(close) {
     toggle('Show tasks in calendar', 'calShowTasks', 'Work the calendar has placed, and fixed blocks'),
     toggle('Show completed work', 'calShowWorked', 'Time logged by starting and stopping a task, where it was worked'),
     el('div', { class: 'dopt-sep' }),
-    el('button', { class: 'dopt-link', text: 'Put every unfinished task on the calendar', onclick: () => { close(); act.showAllInCalendar(); } }),
+    el('button', { class: 'dopt-link', text: 'Auto-schedule every unfinished task', onclick: () => { close(); act.showAllInCalendar(); } }),
     el('button', { class: 'dopt-link', text: 'Schedules — the hours work may use ⚙', onclick: () => { close(); set({ view: 'schedules' }); } }),
     el('button', { class: 'dopt-link', text: 'Auto-scheduling settings ⚙', onclick: () => { close(); set({ rightOpen: true, rightTab: 'project', view: 'gantt' }); } }));
 }
@@ -485,8 +485,8 @@ export function renderCalendar(root) {
   if (!shown.length) {
     pane.append(el('div', { class: 'empty-note sc-muted' },
       el('p', { text: 'Nothing is on the calendar yet.' }),
-      el('p', { text: 'Open a task’s details and switch on “Show in calendar”. It will be cut into blocks of the size you choose — half an hour, one, one and a half, two or four — and laid inside the hours you say you work.' }),
-      el('button', { class: 'sc-button sc-button--sm', text: 'Put every unfinished task on the calendar', onclick: () => act.showAllInCalendar() })));
+      el('p', { text: 'Open a task’s details and switch on “Auto-schedule”. It will be cut into blocks of the size you choose — half an hour, one, one and a half, two or four — and laid inside the hours you say you work.' }),
+      el('button', { class: 'sc-button sc-button--sm', text: 'Auto-schedule every unfinished task', onclick: () => act.showAllInCalendar() })));
     return;
   }
 
@@ -695,7 +695,7 @@ export function renderCalendar(root) {
       notReleased ? el('button', {
         class: 'sc-button sc-button--ghost sc-button--sm', text: 'Show what is held back',
         title: 'Every unfinished task that is not on the calendar, by project',
-        onclick: () => showText('Not on the calendar', heldBackDetail.join('\n')),
+        onclick: () => showText('Not auto-scheduled', heldBackDetail.join('\n')),
       }) : null));
   }
 

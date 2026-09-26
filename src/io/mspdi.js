@@ -4,7 +4,7 @@
 // leaves the rest (baselines, custom fields, timephased data) behind.
 
 import { escapeXml, parseXml, child, childText, children } from '../util.js';
-import { createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS } from '../model/model.js';
+import { createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, URGENCIES, urgencyOf, urgencyFromMsp } from '../model/model.js';
 import { isoValid, weekday } from '../model/calendar.js';
 
 const LINK_CODE = { FF: 0, FS: 1, SF: 2, SS: 3 };
@@ -54,16 +54,17 @@ export function exportMspdi(p, sched) {
   p.tasks.forEach((t, i) => {
     const s = sched.tasks[t.id];
     out.push('<Task>', tag('UID', i + 1), tag('ID', i + 1), tag('Name', t.name), tag('Type', 0), tag('IsNull', 0), tag('CreateDate', startOf(sched.startIso)),
-      tag('WBS', s.wbs), tag('OutlineNumber', s.wbs), tag('OutlineLevel', t.level), tag('Priority', 500),
+      tag('WBS', s.wbs), tag('OutlineNumber', s.wbs), tag('OutlineLevel', t.level), tag('Priority', URGENCIES[urgencyOf(t)].msp),
       tag('Start', startOf(s.startIso)), tag('Finish', finishOf(s.finishIso)), tag('Duration', hours(s.duration, hpd)), tag('DurationFormat', 7),
-      tag('Work', hours(s.work / hpd, hpd)), tag('ManualStart', ''), tag('Manual', 0),
+      // A task's own duration (Motion's hours) is its Work; otherwise the schedule's.
+      tag('Work', t.work !== null && t.work !== undefined && !s.summary ? `PT${Math.round(+t.work * 100) / 100}H0M0S` : hours(s.work / hpd, hpd)), tag('ManualStart', ''), tag('Manual', 0),
       tag('Milestone', s.milestone ? 1 : 0), tag('Summary', s.summary ? 1 : 0), tag('Critical', s.critical ? 1 : 0), tag('IsSubproject', 0),
       tag('ConstraintType', CONSTRAINT_CODE[t.constraint?.type] ?? 0), t.constraint?.date ? tag('ConstraintDate', startOf(t.constraint.date)) : '',
       t.deadline ? tag('Deadline', finishOf(t.deadline)) : '',
       tag('PercentComplete', s.percent), tag('PercentWorkComplete', s.percent), tag('FixedCost', t.fixedCost || 0), tag('Cost', Math.round(s.cost * 100)),
       tag('TotalSlack', s.summary ? 0 : s.slack * hpd * 60 * 10), tag('EarlyStart', startOf(s.startIso)), tag('EarlyFinish', finishOf(s.finishIso)),
       tag('LateStart', startOf(fromDayIso(s.ls))), tag('LateFinish', finishOf(fromDayIso(s.lf))),
-      tag('Notes', t.notes), tag('Active', 1));
+      tag('Notes', t.notes), tag('Active', t.archived ? 0 : 1));
     for (const l of t.predecessors) {
       if (!uidOf.has(l.id)) continue;
       out.push('<PredecessorLink>', tag('PredecessorUID', uidOf.get(l.id)), tag('Type', LINK_CODE[l.type] ?? 1), tag('CrossProject', 0), tag('LinkLag', Math.round((l.lag || 0) * hpd * 60 * 10)), tag('LagFormat', 7), '</PredecessorLink>');
@@ -174,6 +175,13 @@ export function importMspdi(text) {
       notes: childText(x, 'Notes'), fixedCost: +childText(x, 'FixedCost', '0') || 0, deadline: dateOf(childText(x, 'Deadline')),
     });
     if (t.milestone) t.duration = 0;
+    // Motion's fields, as Microsoft Project carries them: priority on its
+    // 0–1000 scale, an inactive task as archived, and Work as the task's own
+    // hours when the file states some and nobody is assigned to derive them.
+    t.urgency = urgencyFromMsp(childText(x, 'Priority', '500'));
+    if (childText(x, 'Active') === '0') t.archived = true;
+    const workHours = parseIsoDuration(childText(x, 'Work'));
+    if (workHours !== null && workHours > 0 && childText(x, 'Summary') !== '1') t.work = Math.round(workHours * 100) / 100;
     const ctype = CONSTRAINT_FROM[+childText(x, 'ConstraintType', '0')] || 'ASAP';
     const cdate = dateOf(childText(x, 'ConstraintDate'));
     t.constraint = CONSTRAINTS[ctype] && (cdate || !CONSTRAINTS[ctype].dated) ? { type: ctype, date: CONSTRAINTS[ctype].dated ? cdate : null } : { type: 'ASAP', date: null };

@@ -174,3 +174,23 @@ Option lists:
    stage pill and status on a project page.
 5. **Statuses** beyond stages (Backlog, Blocked, Cancelled) and an **Inbox**
    of stage changes.
+
+---
+
+## 9. Motion as the core logic, Microsoft Project kept compatible
+
+What changed so the planner behaves like Motion, and how each maps onto
+Microsoft Project files (`io/mspdi.js`, MPXJ for `.mpp`):
+
+| Motion rule | In the planner | Microsoft Project |
+|---|---|---|
+| Every new task is auto-scheduled | `insertTask` sets `calendar.show` on; a file's tasks keep what the file says | not in the file; an imported plan is laid only when asked |
+| Priority ASAP / High / Medium / Low | labels of `URGENCIES` (ids unchanged) | `Priority` 900 / 700 / 500 / 300 out; read back by band |
+| Status Backlog · Todo · In Progress · Blocked · Completed · Cancelled | the default statuses (Kanban columns); plans on the old three columns move onto them | Completed = 100 %; Cancelled = archived = `Active 0` (inactive task), both ways |
+| Duration is the hours a task takes | `work` (hours), used as stated | written and read as task `Work` |
+| A stage is a step of a project with a deadline | "Stage" in the interface (`phases` in the file) | outline headings stay headings; stages ride along in the `.project.json` |
+
+Removed as incompatible: the assumption that a task with no hours of its own
+needs only half its days. New plans count work as Microsoft Project does —
+duration × units × hours a day — so the calendar and the Gantt agree about
+how big a task is. Plans made before keep their own setting.

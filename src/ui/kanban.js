@@ -20,7 +20,7 @@ import { formatAssignments, isSummary, getResource, stages, stageOf, URGENCIES, 
 import { formatDate, formatDuration } from '../model/calendar.js';
 import { showMenu, promptText, confirmDialog } from './dialog.js';
 
-export const GROUPINGS = { stage: 'Stage', status: 'Progress', resource: 'Resource' };
+export const GROUPINGS = { stage: 'Status', status: 'Progress', resource: 'Resource' };
 
 const STATUS_COLUMNS = [
   { id: 'todo', label: 'Not started', percent: 0, match: (p) => p === 0 },
@@ -95,7 +95,7 @@ function card(t, grouping) {
         '-',
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',
-        { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
+        { label: 'ASAP', run: () => act.editTask(t.id, 'urgency', 'now') },
         { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
         { label: 'Urgency: normal', run: () => act.editTask(t.id, 'urgency', 'normal') },
         '-',
@@ -167,13 +167,13 @@ export function renderKanban(root) {
           const r = e.currentTarget.getBoundingClientRect();
           const st = column.stage;
           showMenu(r.left - 150, r.bottom + 4, [
-            { label: 'Rename…', run: async () => { const name = await promptText('Rename column', 'What is this stage called?', st.name); if (name) act.renameStageColumn(st.id, name); } },
+            { label: 'Rename…', run: async () => { const name = await promptText('Rename column', 'What is this status called?', st.name); if (name) act.renameStageColumn(st.id, name); } },
             { label: st.done ? 'Stop meaning finished' : 'Tasks here are finished', run: () => act.setStageIsDone(st.id, !st.done) },
             '-',
             { label: 'Move left', run: () => act.moveStageColumn(st.id, -1) },
             { label: 'Move right', run: () => act.moveStageColumn(st.id, 1) },
             '-',
-            { label: 'New column…', run: async () => { const name = await promptText('New column', 'What is this stage called?', 'New stage'); if (name) act.newStageColumn(name); } },
+            { label: 'New column…', run: async () => { const name = await promptText('New column', 'What is this status called?', 'New status'); if (name) act.newStageColumn(name); } },
             { label: 'Delete column', danger: true, run: async () => {
               if (items.length && !(await confirmDialog('Delete this column?', `Its ${items.length} ${items.length === 1 ? 'task goes' : 'tasks go'} back to the first column. No task is deleted.`))) return;
               act.deleteStageColumn(st.id);
@@ -201,7 +201,7 @@ export function renderKanban(root) {
   if (grouping === 'stage') {
     pane.append(el('button', {
       class: 'kb-add-col sc-card sc-brackets',
-      onclick: async () => { const name = await promptText('New column', 'What is this stage called?', 'New stage'); if (name) act.newStageColumn(name); },
+      onclick: async () => { const name = await promptText('New column', 'What is this status called?', 'New status'); if (name) act.newStageColumn(name); },
     }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'Add column' })));
   }
 }

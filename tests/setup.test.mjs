@@ -177,3 +177,25 @@ test('a task keeps a log of what happened to it, with comments, through a save',
   const copy = insertTask(p, 1, { ...structuredClone(t), id: undefined });
   assert.deepEqual(copy.activity.map((x) => x.kind), ['created']);
 });
+
+test('Motion statuses replace the old default columns, and priority and inactive tasks cross to Microsoft Project', async () => {
+  const { exportMspdi: writeMspdi, importMspdi: readMspdi } = await import('../src/io/mspdi.js');
+  const { computeSchedule } = await import('../src/model/schedule.js');
+  // An older plan, saved with the three columns every plan used to start with.
+  const old = createProject('Old', '2026-09-28');
+  old.stages = [{ id: 'stage_todo', name: 'To do', done: false }, { id: 'stage_doing', name: 'In progress', done: false }, { id: 'stage_done', name: 'Done', done: true }];
+  const back = parse(serialize(old)).project;
+  assert.deepEqual(back.stages.map((s) => s.name), ['Backlog', 'Todo', 'In Progress', 'Blocked', 'Completed', 'Cancelled']);
+  // A plan that chose its own columns keeps them.
+  old.stages = [{ id: 'a', name: 'Ideas', done: false }, { id: 'b', name: 'Shipped', done: true }];
+  assert.deepEqual(parse(serialize(old)).project.stages.map((s) => s.name), ['Ideas', 'Shipped']);
+
+  const p = createProject('MSP', '2026-09-28');
+  const a = newTask({ name: 'Urgent', urgency: 'now', work: 3 });
+  const b = newTask({ name: 'Dropped', urgency: 'low', archived: true });
+  p.tasks.push(a, b);
+  const xml = writeMspdi(p, computeSchedule(p));
+  const round = readMspdi(xml).project;
+  assert.deepEqual(round.tasks.map((t) => [t.name, t.urgency, !!t.archived]), [['Urgent', 'now', false], ['Dropped', 'low', true]]);
+  assert.equal(round.tasks[0].work, 3);
+});

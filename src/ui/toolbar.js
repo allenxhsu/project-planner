@@ -327,7 +327,7 @@ const MENUS = {
     { label: 'Move up', key: '⌥⇧↑', run: run('task.up') }, { label: 'Move down', key: '⌥⇧↓', run: run('task.down') }, '-',
     { label: 'Link selected tasks', key: '⌘L', run: run('task.link') }, { label: 'Unlink selected tasks', key: '⇧⌘L', run: run('task.unlink') }, '-',
     { label: 'Toggle milestone', run: run('task.toggleMilestone') }, { label: 'Mark 100% complete', run: run('task.complete') }, '-',
-    { label: 'Show in calendar', run: run('task.calendar') },
+    { label: 'Auto-schedule', run: run('task.calendar') },
     { label: 'Break into subtasks…', run: run('task.breakUp') },
   ],
   Resource: () => [

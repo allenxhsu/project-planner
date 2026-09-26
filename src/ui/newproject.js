@@ -16,7 +16,7 @@ import { datePanel } from './datepick.js';
 
 const STEPS = [
   { id: 'name', label: 'Name & workspace' },
-  { id: 'phases', label: 'Phases & dates' },
+  { id: 'phases', label: 'Stages & dates' },
   { id: 'people', label: 'Assign people' },
   { id: 'fields', label: 'Custom fields' },
 ];
@@ -165,9 +165,9 @@ export async function newProjectWizard() {
         el('div', { class: 'np-card-mark', text: mark }), el('div', { class: 'np-card-title', text: title }), el('div', { class: 'sc-faint small', text: sub }));
       const pick = (kind, id) => async () => { if (await begin(kind, id)) draw(); };
       put(
-        el('p', { class: 'sc-muted small', text: 'Start from nothing, or from a plan already shaped like this one. A template’s tasks, links, phases and fields come across; its dates and progress do not.' }),
+        el('p', { class: 'sc-muted small', text: 'Start from nothing, or from a plan already shaped like this one. A template’s tasks, links, stages and fields come across; its dates and progress do not.' }),
         el('div', { class: 'np-gallery' },
-          card('+', 'Create from scratch', 'An empty plan, with the phases and fields you name', pick('scratch')),
+          card('+', 'Create from scratch', 'An empty project, with the stages and fields you name', pick('scratch')),
           ...shelf.map((t) => card('▤', t.name.replace(/\s*\(template\)\s*$/i, ''), `${t.tasks} task${t.tasks === 1 ? '' : 's'} · template`, pick('template', t.id))),
           card('◈', 'Website relaunch', 'The sample plan, as a template', pick('sample'))),
         shelf.length ? null : el('p', { class: 'sc-faint small', text: 'Your own templates show here: on Projects, a plan’s menu has “Mark as a template”.' }));
@@ -205,7 +205,7 @@ export async function newProjectWizard() {
         el('label', { class: 'np-check' },
           el('input', { class: 'sc-check', type: 'checkbox', checked: s.onCalendar, onchange: (e) => { s.onCalendar = e.target.checked; } }),
           el('span', { text: 'Put its tasks on the calendar' })),
-        s.from ? el('p', { class: 'sc-faint small', text: `From “${s.from}”: ${s.base.tasks.length} tasks, ${s.phases.length} phase${s.phases.length === 1 ? '' : 's'}, ${s.fields.length} custom field${s.fields.length === 1 ? '' : 's'}.` }) : null);
+        s.from ? el('p', { class: 'sc-faint small', text: `From “${s.from}”: ${s.base.tasks.length} tasks, ${s.phases.length} stage${s.phases.length === 1 ? '' : 's'}, ${s.fields.length} custom field${s.fields.length === 1 ? '' : 's'}.` }) : null);
       setTimeout(() => name.focus(), 0);
     };
 
@@ -216,7 +216,7 @@ export async function newProjectWizard() {
       const now = toDay(today());
       const quick = [
         { label: 'Project start', day: toDay(s.start) },
-        endOfLast ? { label: 'End of the last phase', day: toDay(endOfLast) } : null,
+        endOfLast ? { label: 'End of the last stage', day: toDay(endOfLast) } : null,
         { label: '7 days from now', day: now + 7 },
         { label: 'End of this month', day: addMonths(monthStart(now), 1) - 1 },
       ].filter(Boolean);
@@ -224,7 +224,7 @@ export async function newProjectWizard() {
       s.phases.forEach((ph, k) => {
         const len = el('input', {
           class: 'sc-input np-len', type: 'number', min: 1, step: 1, value: lens[k] ?? '', placeholder: '—',
-          title: k === 0 ? 'Working days from the project start' : 'Working days after the phase before it ends',
+          title: k === 0 ? 'Working days from the project start' : 'Working days after the stage before it ends',
           onchange: (e) => {
             const n = Math.round(+e.target.value);
             if (!(n >= 1)) { draw(); return; }
@@ -247,12 +247,12 @@ export async function newProjectWizard() {
         });
         rows.append(el('div', { class: 'np-phase' },
           el('span', { class: 'np-phase-num sc-mono', text: String(k + 1) }),
-          el('input', { class: 'sc-input', type: 'text', value: ph.name, placeholder: 'Phase name', oninput: (e) => { ph.name = e.target.value; } }),
+          el('input', { class: 'sc-input', type: 'text', value: ph.name, placeholder: 'Stage name', oninput: (e) => { ph.name = e.target.value; } }),
           el('span', { class: 'np-len-wrap' }, len, el('span', { class: 'sc-faint small', text: 'working days' })),
           due,
           el('span', { class: 'sc-faint small np-count', text: ph.id && ph.count ? `${ph.count} task${ph.count === 1 ? '' : 's'}` : '' }),
           el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↑', title: 'Earlier', disabled: k === 0, onclick: () => { [s.phases[k - 1], s.phases[k]] = [s.phases[k], s.phases[k - 1]]; draw(); } }),
-          el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '×', title: ph.count ? 'Remove this phase — its tasks keep going, in no phase' : 'Remove this phase', onclick: () => { s.phases.splice(k, 1); draw(); } })));
+          el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '×', title: ph.count ? 'Remove this stage — its tasks keep going, in no stage' : 'Remove this stage', onclick: () => { s.phases.splice(k, 1); draw(); } })));
       });
       const add = (name) => {
         const last = s.phases[s.phases.length - 1];
@@ -262,10 +262,10 @@ export async function newProjectWizard() {
         if (!last || last.deadline) { const L = lengths(s.base, s.start, s.phases); L[L.length - 1] = 5; relay(s.base, s.start, s.phases, L); }
       };
       rows.append(el('div', { class: 'np-phase-add' },
-        el('button', { class: 'sc-button sc-button--sm', text: '+ Add phase', onclick: () => { add(''); draw(); setTimeout(() => body.querySelector('.np-phase:last-of-type input[type=text]')?.focus(), 0); } }),
+        el('button', { class: 'sc-button sc-button--sm', text: '+ Add stage', onclick: () => { add(''); draw(); setTimeout(() => body.querySelector('.np-phase:last-of-type input[type=text]')?.focus(), 0); } }),
         s.phases.length ? null : el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: `Use ${SUGGESTED.join(' · ')}`, onclick: () => { for (const n of SUGGESTED) add(n); draw(); } })));
       put(
-        el('p', { class: 'sc-muted small', text: 'The stages the project runs through, and when each is due. A phase’s deadline becomes the deadline of every task in it that has none, so the calendar works towards it.' }),
+        el('p', { class: 'sc-muted small', text: 'The stages the project runs through, and when each is due. A stage’s deadline becomes the deadline of every task in it that has none, so the calendar works towards it.' }),
         el('div', { class: 'np-phase-head sc-faint small' }, el('span', { text: `Starts ${formatDate(s.start, 'day')}` })),
         rows);
     };
@@ -273,7 +273,7 @@ export async function newProjectWizard() {
     // ---- step 3
     const stepPeople = () => {
       if (!s.phases.length) {
-        put(el('p', { class: 'sc-muted small', text: 'There are no phases to hand out. Add some in Phases & dates, or skip this — people can be put on tasks later.' }));
+        put(el('p', { class: 'sc-muted small', text: 'There are no stages to hand out. Add some in Stages & dates, or skip this — people can be put on tasks later.' }));
         return;
       }
       const known = [
@@ -300,12 +300,12 @@ export async function newProjectWizard() {
           },
         });
         list.append(el('div', { class: 'np-person-row' },
-          el('div', { class: 'np-person-phase' }, el('strong', { text: ph.name || 'Unnamed phase' }),
+          el('div', { class: 'np-person-phase' }, el('strong', { text: ph.name || 'Unnamed stage' }),
             el('span', { class: 'sc-faint small', text: ph.id && ph.count ? `${ph.count} task${ph.count === 1 ? '' : 's'}` : 'no tasks yet' })),
           el('div', { class: 'np-chips' }, ...chips, addBtn)));
       }
       put(
-        el('p', { class: 'sc-muted small', text: 'Who does the work of each phase. They are put on every task in it that has nobody yet; tasks that already name someone keep them.' }),
+        el('p', { class: 'sc-muted small', text: 'Who does the work of each stage. They are put on every task in it that has nobody yet; tasks that already name someone keep them.' }),
         list);
     };
 
@@ -345,7 +345,7 @@ export async function newProjectWizard() {
   if (!done) return;
   await sync.startPlan(done);
   set({ view: 'gantt' });
-  act.hint(`“${done.name}” is ready${done.phases.length ? `, in ${done.phases.length} phase${done.phases.length === 1 ? '' : 's'}` : ''}.`);
+  act.hint(`“${done.name}” is ready${done.phases.length ? `, in ${done.phases.length} stage${done.phases.length === 1 ? '' : 's'}` : ''}.`);
   const { reloadPlans } = await import('./projects.js');
   void reloadPlans();
 }

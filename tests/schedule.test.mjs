@@ -341,13 +341,20 @@ test('a task sits in a stage, and a finished stage means finished', async () => 
   assert.equal(stageOf(p, b).id, 'stage_done', 'completing a task puts it in the finished column');
 
   const review = addStage(p, 'Review');
-  assert.deepEqual(stages(p).map((s) => s.name), ['To do', 'In progress', 'Review', 'Done'], 'a new column goes before the finished ones');
+  assert.deepEqual(stages(p).map((s) => s.name), ['Backlog', 'Todo', 'In Progress', 'Blocked', 'Review', 'Completed', 'Cancelled'], 'a new column goes before the finished ones');
   assert.ok(moveStage(p, review.id, -1));
-  assert.deepEqual(stages(p).map((s) => s.name), ['To do', 'Review', 'In progress', 'Done']);
+  assert.deepEqual(stages(p).map((s) => s.name), ['Backlog', 'Todo', 'In Progress', 'Review', 'Blocked', 'Completed', 'Cancelled']);
 
   setStage(p, a.id, review.id);
   removeStage(p, review.id);
-  assert.equal(stageOf(p, a).id, stages(p)[0].id, 'deleting a column sends its tasks back to the first');
+  assert.equal(stageOf(p, a).id, 'stage_todo', 'deleting a column sends its tasks back to Todo');
+
+  // Cancelled is resolved without being done: the task is archived, and back out of it, it is not.
+  setStage(p, a.id, 'stage_cancelled');
+  assert.equal(a.archived, true);
+  assert.notEqual(a.percent, 100);
+  setStage(p, a.id, 'stage_todo');
+  assert.equal(a.archived, false);
   assert.throws(() => setStageDone(p, 'stage_done', false), /one column that means finished/);
 });
 
@@ -451,7 +458,7 @@ test('two tasks for one person never overlap, and a different person is free at 
   const ann = addResource(p, { name: 'Ann' }), bob = addResource(p, { name: 'Bob' });
   const one = task(p, 'One', 1), two = task(p, 'Two', 1), three = task(p, 'Three', 1);
   assign(p, one.id, ann.id, 1); assign(p, two.id, ann.id, 1); assign(p, three.id, bob.id, 1);
-  for (const t of [one, two, three]) { setTaskField(p, t.id, 'calendarShow', true); setTaskField(p, t.id, 'blockHours', 4); }
+  for (const t of [one, two, three]) { setTaskField(p, t.id, 'calendarShow', true); setTaskField(p, t.id, 'blockHours', 4); setTaskField(p, t.id, 'work', 4); }
 
   const { blocks } = planBlocks(p, computeSchedule(p));
   const annBlocks = blocks.filter((b) => b.lane === ann.id).sort((x, y) => x.day - y.day || x.start - y.start);
@@ -463,7 +470,7 @@ test('two tasks for one person never overlap, and a different person is free at 
   const annFirst = annBlocks[0];
   assert.equal(bobFirst.day, annFirst.day);
   assert.equal(bobFirst.start, annFirst.start, 'two people can work the same hour');
-  // Ann has 16 hours in an 8-hour window, so her work runs into the next day.
+  // Ann has 8 hours against a 6-hour day, so her work runs into the next day.
   assert.equal(new Set(annBlocks.map((b) => b.day)).size, 2);
 });
 
@@ -865,11 +872,14 @@ test('urgency decides who gets the earliest hours', async () => {
   const list = priorities(p, computeSchedule(p));
   assert.equal(list[0].taskId, vital.id, '“do it now” is first');
   assert.equal(list[0].urgency, 'now');
-  assert.ok(list[0].reasons.includes('do it now'));
+  assert.ok(list[0].reasons.includes('ASAP'));
   assert.ok(list[0].score > list[1].score + 100, 'and by a wide margin');
 
-  // "Do it now" also puts the task on the calendar, since that is the point.
+  // A new task is auto-scheduled (Motion's default); switched off, "ASAP"
+  // puts it back on the calendar, since that is the point.
   const fresh = task(p, 'Something else', 1);
+  assert.equal(fresh.calendar.show, true, 'a new task is auto-scheduled');
+  setTaskField(p, fresh.id, 'calendarShow', false);
   assert.equal(fresh.calendar.show, false);
   setTaskField(p, fresh.id, 'urgency', 'now');
   assert.equal(fresh.calendar.show, true);
@@ -877,33 +887,31 @@ test('urgency decides who gets the earliest hours', async () => {
   assert.deepEqual(Object.keys(URGENCIES), ['now', 'high', 'normal', 'low']);
 });
 
-test('a duration is not an estimate of work: an unstated task takes half a day, not all of it', async () => {
+test('an unstated task takes its days in full, as Microsoft Project counts it; stated hours are believed', async () => {
   const { planBlocks, hoursLeft } = await import('../src/model/agenda.js');
   const p = plan();
   const r = addResource(p, { name: 'Ann' });
-  // Five days of design, with nothing said about how many hours it takes. The
-  // scheduler implies forty hours for costing; the calendar must not book
-  // every one of them, or the week has room for nothing else.
+  // Five days of design, with nothing said about how many hours it takes:
+  // work = duration × units × hours a day, Microsoft Project's rule.
   const design = task(p, 'Design', 5);
   assign(p, design.id, r.id, 1);
   setTaskField(p, design.id, 'calendarShow', true);
   setTaskField(p, design.id, 'blockHours', 2);
 
   const s = computeSchedule(p);
-  assert.equal(s.tasks[design.id].work, 40, 'the plan still costs it at full time');
-  assert.equal(hoursLeft(p, s.tasks[design.id], design), 20, 'the calendar assumes half of it by default');
-  const { blocks } = planBlocks(p, s);
-  assert.equal(blocks.reduce((n, b) => n + b.minutes, 0) / 60, 20);
+  assert.equal(s.tasks[design.id].work, 40, 'the plan costs it at full time');
+  assert.equal(hoursLeft(p, s.tasks[design.id], design), 40, 'and the calendar books the same');
 
-  // Stated work is used exactly as stated, whatever the assumption is.
+  // Stated work — Motion's duration — is used exactly as stated.
   setTaskField(p, design.id, 'work', 12);
   const s2 = computeSchedule(p);
   assert.equal(hoursLeft(p, s2.tasks[design.id], design), 12, 'a task that says how long it takes is believed');
+  assert.equal(planBlocks(p, s2).blocks.reduce((n, b) => n + b.minutes, 0) / 60, 12);
 
-  // …and the assumption is the plan's to set.
+  // …and a plan may assume less of an unstated task, as older plans did.
   setTaskField(p, design.id, 'work', '');
-  p.agenda = { ...p.agenda, assumedLoad: 100 };
-  assert.equal(hoursLeft(p, computeSchedule(p).tasks[design.id], design), 40);
+  p.agenda = { ...p.agenda, assumedLoad: 50 };
+  assert.equal(hoursLeft(p, computeSchedule(p).tasks[design.id], design), 20);
 });
 
 test('no day is filled wall to wall: the calendar keeps to the day’s limit', async () => {

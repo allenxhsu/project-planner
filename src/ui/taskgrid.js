@@ -24,7 +24,7 @@ export const COLUMN_DEFS = {
   work: { label: 'Work', width: 70, edit: 'text', align: 'right' },
   spent: { label: 'Spent', width: 70, readonly: true, align: 'right' },
   remaining: { label: 'Left', width: 70, readonly: true, align: 'right' },
-  stage: { label: 'Stage', width: 120, readonly: true },
+  stage: { label: 'Status', width: 120, readonly: true },
   urgency: { label: 'Urgency', width: 96, edit: 'select', options: Object.entries(URGENCIES).map(([value, u]) => ({ value, label: u.label })) },
   cost: { label: 'Cost', width: 90, readonly: true, align: 'right' },
   slack: { label: 'Slack', width: 60, readonly: true, align: 'right' },

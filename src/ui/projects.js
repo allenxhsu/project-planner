@@ -57,7 +57,7 @@ function cardMenu(p, x, y) {
       } },
       { label: 'New plan from this as a template', run: async () => {
         const name = await promptText('Use this plan as a template',
-          'The copy keeps the tasks, links, resources and stages, and starts clean: no progress, no logged hours, no pinned dates or deadlines.',
+          'The copy keeps the tasks, links, resources, stages and statuses, and starts clean: no progress, no logged hours, no pinned dates or deadlines.',
           `${p.name} (template)`);
         if (!name) return;
         if (await duplicatePlan(p.id, { asTemplate: true, name })) { set({ view: 'gantt' }); void reloadPlans(); }

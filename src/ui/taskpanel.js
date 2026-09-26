@@ -84,7 +84,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       stage = el('select', { class: 'sc-select' }, ...stages(plan).map((st) => el('option', { value: st.id, text: st.name })));
       schedule = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Any — the plan’s default hours' }),
         ...timeBlocks(plan).map((b) => el('option', { value: b.id, text: b.name })));
-      phase.replaceChildren(el('option', { value: '', text: phases(plan).length ? 'No phase' : 'No phases in this project' }),
+      phase.replaceChildren(el('option', { value: '', text: phases(plan).length ? 'No stage' : 'No stages in this project' }),
         ...phases(plan).map((ph) => el('option', { value: ph.id, text: ph.name, selected: ph.id === plan.currentPhaseId })));
       phase.disabled = !phases(plan).length;
       custom = fieldsOf(plan).map((f) => ({ field: f, ...fieldInput(plan, f, null) }));
@@ -93,7 +93,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
         el('div', { class: 'tp-where' },
           fact('workspace', 'Workspace', workspace),
           fact('project', 'Project', project),
-          fact('phase', 'Phase', phase)),
+          fact('phase', 'Stage', phase)),
         autoRow,
         fact('when', 'When', whenBox),
         el('div', { class: 'tp-group' },

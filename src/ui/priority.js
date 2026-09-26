@@ -30,11 +30,11 @@ function row(r, rank) {
         { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',
-        { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
+        { label: 'ASAP', run: () => act.editTask(t.id, 'urgency', 'now') },
         { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
         { label: 'Urgency: low', run: () => act.editTask(t.id, 'urgency', 'low') },
         '-',
-        { label: onCalendar ? 'Take off the calendar' : 'Put on the calendar', run: () => act.editTask(t.id, 'calendarShow', !onCalendar) },
+        { label: onCalendar ? 'Turn off auto-schedule' : 'Auto-schedule', run: () => act.editTask(t.id, 'calendarShow', !onCalendar) },
         { label: 'Break into subtasks…', run: () => act.breakUpDialog(t.id) },
         '-',
         { label: 'Mark 100% complete', run: () => act.setPercent(t.id, 100) },
@@ -84,7 +84,7 @@ export function renderPriority(root) {
       el('div', { class: 'sc-muted', text: top.reasons.join(' · ') }),
       el('div', { class: 'row', style: { marginTop: '8px' } },
         el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: 'Open it', onclick: () => { act.revealTask(top.taskId); act.selectTask(top.taskId); set({ view: 'gantt', rightOpen: true, rightTab: 'task' }); } }),
-        el('button', { class: 'sc-button sc-button--sm', text: agendaOf(project, getTask(project, top.taskId)).show ? 'On the calendar' : 'Put on the calendar', onclick: () => act.editTask(top.taskId, 'calendarShow', true) }))));
+        el('button', { class: 'sc-button sc-button--sm', text: agendaOf(project, getTask(project, top.taskId)).show ? 'Auto-scheduled' : 'Auto-schedule', onclick: () => act.editTask(top.taskId, 'calendarShow', true) }))));
   }
 
   pane.append(el('div', { class: 'sc-section-title', text: `Ready to work on (${ready.length})` }));

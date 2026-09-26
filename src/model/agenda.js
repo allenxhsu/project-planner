@@ -16,7 +16,7 @@ import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, inCurrent
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
 /** A plan's defaults, which a task inherits until it says otherwise. */
-export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 };
+export const DEFAULT_AGENDA = { blockHours: 1, from: '09:00', to: '17:00', timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 6 };
 /** Breathing room between one block and the next, in minutes. */
 export const GAP_CHOICES = [0, 5, 10, 15, 30];
 /**
@@ -531,7 +531,7 @@ export function priorities(project, schedule, { now = null } = {}) {
     const reasons = [];
     let score = 0;
     const urgency = urgencyOf(t);
-    if (urgency !== 'normal') { score += URGENCIES[urgency].weight; reasons.push(URGENCIES[urgency].label.toLowerCase()); }
+    if (urgency !== 'normal') { score += URGENCIES[urgency].weight; reasons.push(urgency === 'now' ? 'ASAP' : `${URGENCIES[urgency].label.toLowerCase()} priority`); }
 
     if (info.deadlineMissed) { score += 100; reasons.push('past its deadline'); }
     else if (t.deadline) {

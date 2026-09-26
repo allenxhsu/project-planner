@@ -40,7 +40,7 @@ let filter = 'all';
  * phase — a project's weeks or stages, each with its tasks, its hours and its
  * deadlines, and the phase the plan is in marked as active.
  */
-export const GROUPS = { none: 'No grouping', project: 'Project', phase: 'Project › Phase' };
+export const GROUPS = { none: 'No grouping', project: 'Project', phase: 'Project › Stage' };
 let grouping = 'phase';
 const folded = new Set();
 
@@ -171,7 +171,7 @@ function groupedTable(list, root) {
     const byPhase = new Map();
     for (const r of ordered) { const k = r.phaseId || ''; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(r); }
     for (const [phaseId, group] of [...byPhase].sort((a, b) => a[1][0].phaseOrder - b[1][0].phaseOrder)) {
-      if (head(`f|${planId}|${phaseId}`, 1, phaseId ? group[0].phaseName : 'No phase', group, { active: group[0].activePhase, planId, phaseId })) continue;
+      if (head(`f|${planId}|${phaseId}`, 1, phaseId ? group[0].phaseName : 'No stage', group, { active: group[0].activePhase, planId, phaseId })) continue;
       for (const r of group) row(r, 2);
     }
   }

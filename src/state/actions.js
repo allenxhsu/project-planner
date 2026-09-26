@@ -320,7 +320,7 @@ export function disconnectCalendar(id) { return attempt('Disconnect a calendar',
 
 /** Say which phase the plan is in; '' means every phase at once. */
 export function setCurrentPhase(id) {
-  return attempt('Current phase', (p) => { p.currentPhaseId = id || null; });
+  return attempt('Current stage', (p) => { p.currentPhaseId = id || null; });
 }
 
 // ---------------------------------------------------------------- time blocks
@@ -505,11 +505,11 @@ export function newTaskInPhase(phaseId) {
 export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }
 export function unpinAll(taskId) { return attempt('Unpin every block', (p) => clearPins(p, taskId)); }
 
-export function newPhase(name) { return commit('New phase', (p) => addPhase(p, name ? { name } : {})); }
-export function editPhase(id, name) { return attempt('Rename the phase', (p) => setPhaseField(p, id, 'name', name)); }
-export function setPhaseDeadline(id, iso) { return attempt('Phase deadline', (p) => setPhaseField(p, id, 'deadline', iso || null)); }
-export function deletePhase(id) { return attempt('Delete the phase', (p) => removePhase(p, id)); }
-export function movePhaseBy(id, dir) { return attempt('Reorder the phases', (p) => { if (!movePhase(p, id, dir)) throw new Error('It is already at the end.'); }); }
+export function newPhase(name) { return commit('New stage', (p) => addPhase(p, name ? { name } : {})); }
+export function editPhase(id, name) { return attempt('Rename the stage', (p) => setPhaseField(p, id, 'name', name)); }
+export function setPhaseDeadline(id, iso) { return attempt('Stage deadline', (p) => setPhaseField(p, id, 'deadline', iso || null)); }
+export function deletePhase(id) { return attempt('Delete the stage', (p) => removePhase(p, id)); }
+export function movePhaseBy(id, dir) { return attempt('Reorder the stages', (p) => { if (!movePhase(p, id, dir)) throw new Error('It is already at the end.'); }); }
 /** Put a task in a phase. Everything under it inherits, unless it says otherwise. */
 /** Replace the plan's custom fields; values for a field taken out go with it. */
 export function setCustomFields(list) {
@@ -527,10 +527,10 @@ export function setTaskFieldValue(taskId, fieldId, value) {
 }
 
 export function setTaskPhase(taskId, phaseId) {
-  return attempt('Phase', (p) => {
+  return attempt('Stage', (p) => {
     const t = getTask(p, taskId);
     if (!t) throw new Error('No such task.');
-    if (phaseId && !getPhase(p, phaseId)) throw new Error('No such phase.');
+    if (phaseId && !getPhase(p, phaseId)) throw new Error('No such stage.');
     t.phaseId = phaseId || null;
   });
 }
@@ -615,11 +615,11 @@ export function deleteTimeLine(id) { return attempt('Delete timesheet line', (p)
 // ---------------------------------------------------------------- stages
 
 export function setTaskStage(taskId, stageId) { return attempt('Move task', (p) => setStage(p, taskId, stageId)); }
-export function newStageColumn(name) { return commit('New stage', (p) => addStage(p, name)); }
-export function renameStageColumn(id, name) { return attempt('Rename stage', (p) => renameStage(p, id, name)); }
-export function deleteStageColumn(id) { return attempt('Delete stage', (p) => removeStage(p, id)); }
-export function moveStageColumn(id, dir) { return attempt('Move stage', (p) => { if (!moveStage(p, id, dir)) throw new Error('There is no column that way.'); }); }
-export function setStageIsDone(id, done) { return attempt('Stage means finished', (p) => setStageDone(p, id, done)); }
+export function newStageColumn(name) { return commit('New status', (p) => addStage(p, name)); }
+export function renameStageColumn(id, name) { return attempt('Rename status', (p) => renameStage(p, id, name)); }
+export function deleteStageColumn(id) { return attempt('Delete status', (p) => removeStage(p, id)); }
+export function moveStageColumn(id, dir) { return attempt('Move status', (p) => { if (!moveStage(p, id, dir)) throw new Error('There is no column that way.'); }); }
+export function setStageIsDone(id, done) { return attempt('Status means finished', (p) => setStageDone(p, id, done)); }
 
 // ---------------------------------------------------------------- project
 

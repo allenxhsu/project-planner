@@ -199,7 +199,7 @@ export function blockMenu(b, x, y) {
     '-',
     { icon: '⊘', label: 'Set blockers…', run: run(b, (t) => { void blockersDialog(t); }) },
     '-',
-    { icon: '⊠', label: 'Unschedule (take off the calendar)', run: run(b, (t) => act.editTask(t.id, 'calendarShow', false)) },
+    { icon: '⊠', label: 'Unschedule', run: run(b, (t) => act.editTask(t.id, 'calendarShow', false)) },
     '-',
     { icon: '▣', label: t0?.archived ? 'Unarchive' : 'Archive', run: run(b, (t) => act.editTask(t.id, 'archived', !t.archived)) },
     { icon: '🗑', label: 'Delete task', danger: true, run: run(b, async (t) => {
@@ -326,7 +326,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     : t.archived ? { cls: 'is-off', text: '▣ Archived' }
     : running ? { cls: 'is-live', text: '▶ Running now' }
     : lateLine ? { cls: 'is-late', text: '⏱ Will be late', title: lateSentence(lateLine) }
-    : !agendaOf(project, t).show ? { cls: 'is-off', text: 'Not on the calendar' }
+    : !agendaOf(project, t).show ? { cls: 'is-off', text: 'Not auto-scheduled' }
     : { cls: 'is-ok', text: '✓ On track' };
   const whenLine = info?.percent === 100 || t.archived ? null
     : next ? `${next.pinned ? 'Fixed' : 'Scheduled'} ${formatDate(next.dateIso, 'day')} at ${formatClock(next.start)}`
@@ -433,7 +433,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
             el('label', { class: 'tp-hard', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' })))),
           fact('Labels', labels),
           ...custom.map((c) => fact(c.field.name, c.node)),
-          fact('On the calendar', el('span', { text: agendaOf(project, t).show ? `Yes${pins.length ? `, ${pins.length} fixed` : ''}` : 'No' })),
+          fact('Auto-schedule', el('span', { text: agendaOf(project, t).show ? `On${pins.length ? `, ${pins.length} fixed` : ''}` : 'Off' })),
           fact('Blocked by', list(blockedBy)),
           fact('Blocking', list(blocking)),
           el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Set blockers…', onclick: () => { close(null); void blockersDialog(t); } }))),

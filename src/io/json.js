@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -35,7 +35,12 @@ export function parse(text) {
     const seen = new Set();
     const list = raw.stages
       .filter((st) => st && typeof st === 'object' && typeof st.id === 'string' && st.id && !seen.has(st.id) && seen.add(st.id))
-      .map((st) => ({ id: st.id, name: String(st.name || 'Stage'), done: !!st.done }));
+      .map((st) => ({ id: st.id, name: String(st.name || 'Stage'), done: !!st.done, ...(st.cancelled ? { cancelled: true } : {}) }));
+    // Still the three columns every plan used to start with: those were a
+    // default, not a choice, so the plan moves onto Motion's statuses. Their
+    // ids are kept in the new set, so no task changes column.
+    const oldDefault = list.length === OLD_DEFAULT_STAGES.length && list.every((st, i) => st.id === OLD_DEFAULT_STAGES[i][0] && st.name === OLD_DEFAULT_STAGES[i][1]);
+    if (oldDefault) list.splice(0, list.length, ...DEFAULT_STAGES.map((st) => ({ ...st })));
     if (list.length) {
       if (!list.some((st) => st.done)) { list[list.length - 1].done = true; repairs.push('No stage meant “finished”; the last one now does.'); }
       p.stages = list;

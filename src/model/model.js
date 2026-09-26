@@ -32,12 +32,19 @@ export const RESOURCE_TYPES = { work: 'Work', material: 'Material', cost: 'Cost'
  * decides who gets the earliest hours when two tasks want the same morning.
  * `now` is the override: it goes first, today, ahead of everything.
  */
+/**
+ * Priority, in Motion's words. The ids are what files hold, so they stay;
+ * `msp` is the value on Microsoft Project's 0–1000 scale, written out and
+ * read back by band (io/mspdi.js).
+ */
 export const URGENCIES = {
-  now: { label: 'Do it now', rank: 0, weight: 400 },
-  high: { label: 'High', rank: 1, weight: 120 },
-  normal: { label: 'Normal', rank: 2, weight: 0 },
-  low: { label: 'Low', rank: 3, weight: -60 },
+  now: { label: 'ASAP', rank: 0, weight: 400, msp: 900 },
+  high: { label: 'High', rank: 1, weight: 120, msp: 700 },
+  normal: { label: 'Medium', rank: 2, weight: 0, msp: 500 },
+  low: { label: 'Low', rank: 3, weight: -60, msp: 300 },
 };
+/** Microsoft Project's priority (0–1000) as ours. */
+export const urgencyFromMsp = (n) => (!Number.isFinite(+n) ? 'normal' : +n >= 800 ? 'now' : +n >= 600 ? 'high' : +n <= 400 ? 'low' : 'normal');
 export const urgencyOf = (task) => (URGENCIES[task?.urgency] ? task.urgency : 'normal');
 
 /**
@@ -48,11 +55,22 @@ export const urgencyOf = (task) => (URGENCIES[task?.urgency] ? task.urgency : 'n
  * apart — dropping a task in a done column completes it, and completing a task
  * puts it there.
  */
+/**
+ * A task's status, as Motion names them. Completed is done (100%); Cancelled
+ * is resolved without being done, so a cancelled task is archived — Microsoft
+ * Project's inactive task — and asks for nobody's time. The ids of the three
+ * older columns are kept, so plans made with them read the same.
+ */
 export const DEFAULT_STAGES = [
-  { id: 'stage_todo', name: 'To do', done: false },
-  { id: 'stage_doing', name: 'In progress', done: false },
-  { id: 'stage_done', name: 'Done', done: true },
+  { id: 'stage_backlog', name: 'Backlog', done: false },
+  { id: 'stage_todo', name: 'Todo', done: false },
+  { id: 'stage_doing', name: 'In Progress', done: false },
+  { id: 'stage_blocked', name: 'Blocked', done: false },
+  { id: 'stage_done', name: 'Completed', done: true },
+  { id: 'stage_cancelled', name: 'Cancelled', done: false, cancelled: true },
 ];
+/** The columns plans had before Motion's statuses: a plan still on them is moved onto the new set. */
+export const OLD_DEFAULT_STAGES = [['stage_todo', 'To do'], ['stage_doing', 'In progress'], ['stage_done', 'Done']];
 export const newStage = (name = 'New stage', done = false) => ({ id: uid('stage'), name, done });
 
 export function createProject(name = 'Untitled project', start = null) {
@@ -72,7 +90,10 @@ export function createProject(name = 'Untitled project', start = null) {
     // Events made here, on the calendar — a dentist, a call — rather than read
     // from a connected calendar. Busy time the work goes around.
     events: [],
-    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
+    // A task with no hours of its own takes its days in full — Microsoft
+    // Project's rule (work = duration × units × hours a day). Plans made
+    // before kept the half-day assumption in their own setting.
+    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 6 },
     // Which workspace this plan lives in — work, personal, school. Null is
     // unfiled, which shows up wherever you are.
     workspaceId: null,
@@ -181,7 +202,10 @@ export function insertTask(p, at = p.tasks.length, props = {}) {
   const i = Math.max(0, Math.min(at, p.tasks.length));
   const ref = p.tasks[i] || p.tasks[i - 1];
   const level = props.level || (ref ? (i < p.tasks.length ? ref.level : ref.level) : 1);
-  const t = newTask({ ...props, level });
+  // Made here, a task is auto-scheduled — Motion's default: the calendar
+  // places it unless someone switches that off. A task read from a file
+  // keeps what the file says (io/json.js and io/mspdi.js use newTask).
+  const t = newTask({ ...props, level, calendar: props.calendar ? props.calendar : { show: true, timeBlockIds: [] } });
   // A new task starts its own history, whatever it was copied from.
   delete t.activity;
   logActivity(t, { kind: 'created' });
@@ -1046,8 +1070,11 @@ export function stageOf(p, task) {
   const explicit = task.stageId && getStage(p, task.stageId);
   if (explicit) return explicit;
   if ((task.percent ?? 0) === 100) return firstDoneStage(p) || stages(p)[0];
-  return stages(p)[0];
+  if ((task.percent ?? 0) > 0) return getStage(p, 'stage_doing') || openStage(p);
+  return openStage(p);
 }
+/** Where a task nobody has moved sits: Todo when the plan has it, else the first open column. */
+export const openStage = (p) => getStage(p, 'stage_todo') || stages(p).find((st) => !st.done && !st.cancelled) || stages(p)[0];
 
 /**
  * Record when a task was finished — local date and time, 'YYYY-MM-DDTHH:MM' —
@@ -1072,8 +1099,13 @@ export function setStage(p, taskId, stageId) {
   const st = getStage(p, stageId);
   if (!t || !st) throw new Error('No such task or stage.');
   const was = getStage(p, t.stageId)?.name || null;
+  const wasCancelled = !!getStage(p, t.stageId)?.cancelled;
   t.stageId = st.id;
   if (st.done) { t.percent = 100; stampDone(t, 100); if (t.milestone) t.duration = 0; }
+  // Cancelled is resolved without being done: archived, which is what
+  // Microsoft Project calls an inactive task. Leaving it brings it back.
+  if (st.cancelled) t.archived = true;
+  else if (wasCancelled) t.archived = false;
   if (was !== st.name) logActivity(t, { kind: 'change', field: 'status', from: was || 'none', to: st.name });
 }
 
@@ -1107,7 +1139,7 @@ export function removeStage(p, id) {
   const st = getStage(p, id);
   if (!st) return;
   p.stages = list.filter((x) => x.id !== id);
-  const fallback = p.stages[0].id;
+  const fallback = openStage(p).id;
   for (const t of p.tasks) if (t.stageId === id) t.stageId = fallback;
 }
 
@@ -1227,7 +1259,7 @@ function applyTaskField(p, t, id, field, value) {
       // Completing a task moves it to the finished column, and taking it back
       // off 100% moves it out of one — otherwise the board would lie.
       if (n === 100 && !wasDone) { const done = firstDoneStage(p); if (done) t.stageId = done.id; }
-      if (n < 100 && wasDone) t.stageId = stages(p).find((st) => !st.done)?.id ?? null;
+      if (n < 100 && wasDone) t.stageId = openStage(p)?.id ?? null;
       break;
     }
     case 'predecessors': t.predecessors = parsePredecessors(p, value, id); break;
