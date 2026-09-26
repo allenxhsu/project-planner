@@ -299,6 +299,7 @@ export async function initSync({ preferStored = false } = {}) {
   // The blocks used to live in each plan. Gather them once, then keep every
   // plan in step with the shared set.
   await seedTimeBlocks();
+  await ensureAnySchedule();
   await spreadTimeBlocks();
 }
 
@@ -628,6 +629,21 @@ export async function spreadTimeBlocks() {
  * Study, Late day study, Weekend — survive the move rather than being lost to
  * whichever plan happened to be open.
  */
+/**
+ * "Any": every day, 5:30 am to 11 pm — Motion's hours for its default
+ * schedule. A task set to Any can be laid any day, the weekend included.
+ * Made once, when no schedule of that name exists; after that it is yours to
+ * change or delete like any other.
+ */
+async function ensureAnySchedule() {
+  if (!recordStore) return;
+  const list = await listTimeBlocks();
+  if (!list.length || list.some((b) => /^any(time)?$/i.test(String(b.name).trim()))) return;
+  if (await recordStore.get('tb_any')) return;          // deleted on purpose: not brought back
+  const days = [0, 1, 2, 3, 4, 5, 6];
+  await saveTimeBlocks([{ id: 'tb_any', name: 'Any', from: '05:30', to: '23:00', days, slots: days.map((day) => ({ day, from: '05:30', to: '23:00' })) }]);
+}
+
 async function seedTimeBlocks() {
   if (!recordStore) return;
   if ((await listTimeBlocks()).length) return;

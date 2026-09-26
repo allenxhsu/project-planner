@@ -20,6 +20,7 @@ import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, buffe
 import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
+import { defaultScheduleLabel } from './schedules.js';
 import { datePanel, quickDates } from './datepick.js';
 import { markdownNotes } from './mdnotes.js';
 void _unused;
@@ -473,7 +474,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       ...phases(project).map((ph) => el('option', { value: ph.id, text: ph.name, selected: t.phaseId === ph.id })));
     const ownBlocks = timeBlockIdsOf(t);
     const schedule = el('select', { class: 'sc-select' },
-      el('option', { value: '', text: 'Any — the plan’s default hours', selected: !ownBlocks.length }),
+      el('option', { value: '', text: defaultScheduleLabel(project), selected: !ownBlocks.length }),
       ...(ownBlocks.length > 1 ? [el('option', { value: '__keep', text: `${ownBlocks.length} schedules (as set)`, selected: true })] : []),
       ...timeBlocks(project).map((tb) => el('option', { value: tb.id, text: tb.name, selected: ownBlocks.length === 1 && ownBlocks[0] === tb.id })));
     const labels = el('input', { class: 'sc-input', type: 'text', value: (t.labels || []).join(', '), placeholder: 'None — comma-separated' });

@@ -15,6 +15,7 @@ import { stages, URGENCIES, timeBlocks, fieldsOf, phases } from '../model/model.
 import { BLOCK_CHOICES, parseTime, formatClock } from '../model/agenda.js';
 import { formatDate } from '../model/calendar.js';
 import { open, foot, button } from './dialog.js';
+import { defaultScheduleLabel } from './schedules.js';
 import { fieldInput } from './blockmenu.js';
 
 import { taskDefaults, defaultDeadline } from './taskdefaults.js';
@@ -87,7 +88,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       assignee = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Nobody' }),
         ...plan.resources.filter((r) => r.type === 'work').map((r, i) => el('option', { value: r.id, text: r.name, selected: i === 0 })));
       stage = el('select', { class: 'sc-select' }, ...stages(plan).map((st) => el('option', { value: st.id, text: st.name })));
-      schedule = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Any — the plan’s default hours' }),
+      schedule = el('select', { class: 'sc-select' }, el('option', { value: '', text: defaultScheduleLabel(plan) }),
         ...timeBlocks(plan).map((b) => el('option', { value: b.id, text: b.name })));
       phase.replaceChildren(el('option', { value: '', text: phases(plan).length ? 'No stage' : 'No stages in this project' }),
         ...phases(plan).map((ph) => el('option', { value: ph.id, text: ph.name, selected: ph.id === plan.currentPhaseId })));

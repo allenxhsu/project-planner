@@ -180,12 +180,16 @@ export function motionSchedules(settings) {
     }
     if (!slots.length) continue;
     slots.sort((x, y) => x.day - y.day || x.from.localeCompare(y.from));
+    const name = String(s.title || key).trim() || key;
     blocks.push({
-      id: `tb_motion_${key.replace(/[^\w-]/g, '_')}`, name: String(s.title || key).trim() || key,
+      // Motion's "Any" is the planner's Any: one schedule, not two of that name.
+      id: /^any$/i.test(name) ? 'tb_any' : `tb_motion_${key.replace(/[^\w-]/g, '_')}`, name,
       from: slots.map((x) => x.from).sort()[0], to: slots.map((x) => x.to).sort().at(-1),
       days: [...new Set(slots.map((x) => x.day))].sort(), slots,
     });
   }
-  const main = blocks.find((b) => b.id === 'tb_motion_work');
+  // `work` is Motion's default, whatever it has been renamed to.
+  const mainKey = Object.keys(all).includes('work') ? String(all.work?.title || 'work').trim() : null;
+  const main = mainKey ? blocks.find((b) => b.name === mainKey) : null;
   return { blocks, defaultId: main ? main.id : null };
 }

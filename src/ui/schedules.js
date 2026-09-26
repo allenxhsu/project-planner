@@ -10,7 +10,7 @@
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { timeBlocks, slotsOf, mergeSlots, timeBlockIdsOf } from '../model/model.js';
+import { timeBlocks, getTimeBlock, slotsOf, mergeSlots, timeBlockIdsOf } from '../model/model.js';
 import { parseTime, formatClock } from '../model/agenda.js';
 import { WEEKDAY_NAMES } from '../model/calendar.js';
 import { open, foot, button, confirmDialog, showMenu } from './dialog.js';
@@ -22,6 +22,12 @@ const fmt = (n) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 
 const short = (d) => WEEKDAY_NAMES[d].slice(0, 3);
 
 /** "Mon–Fri 9 AM–11:30 AM, 1 PM–5 PM · Sat 9 AM–12 PM": days with the same hours, together. */
+/** The "no schedule of its own" choice, saying which schedule that is: "Default — Work All (Mon–Fri 8:00 AM–5:00 PM)". */
+export function defaultScheduleLabel(project) {
+  const b = getTimeBlock(project, project?.agenda?.timeBlockId) || timeBlocks(project)[0];
+  return b ? `Default — ${b.name} (${describeSchedule(b)})` : 'The project’s default hours';
+}
+
 export function describeSchedule(block) {
   const byDay = new Map();
   for (const r of slotsOf(block)) {
