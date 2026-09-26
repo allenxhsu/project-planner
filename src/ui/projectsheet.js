@@ -119,6 +119,14 @@ function middleColumn(close, spaces) {
     await sync.setPlanWorkspace(p.id, e.target.value || null);
     set({});
   } }, el('option', { value: '', text: 'No workspace' }), ...spaces.map((w) => el('option', { value: w.id, text: w.name, selected: p.workspaceId === w.id })));
+  const folders = spaces.find((w) => w.id === p.workspaceId)?.folders?.filter((f) => f?.id && f.name) || [];
+  const folder = el('select', { class: 'sc-select', disabled: !p.workspaceId, title: p.workspaceId ? 'A folder of this workspace' : 'Folders belong to a workspace', onchange: async (e) => {
+    const sync = await import('../state/sync.js');
+    await sync.setPlanFolder(p.id, p.workspaceId, e.target.value || null);
+    const { refreshSidebar } = await import('./sidebar.js');
+    await refreshSidebar();
+    set({});
+  } }, el('option', { value: '', text: 'No folder' }), ...folders.map((f) => el('option', { value: f.id, text: f.name, selected: p.folderId === f.id })));
   const list = phases(p);
   const current = getPhase(p, p.currentPhaseId);
   const stagePick = el('select', { class: 'sc-select ps-stage-pick', style: current ? { '--st': stageColour(p, current) } : {}, onchange: (e) => act.goToStage(e.target.value || null) },
@@ -156,6 +164,7 @@ function middleColumn(close, spaces) {
     el('div', { class: 'ps-group' },
       el('div', { class: 'sc-faint small', text: 'Workspace and Stage' }),
       fact('Workspace', workspace),
+      fact('Folder', folder),
       el('div', { class: 'ps-stage-row' }, stagePick,
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '→', title: 'Move on to the next stage', onclick: next }))),
     el('div', { class: 'ps-group' },

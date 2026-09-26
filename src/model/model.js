@@ -97,6 +97,10 @@ export function createProject(name = 'Untitled project', start = null) {
     // Which workspace this plan lives in — work, personal, school. Null is
     // unfiled, which shows up wherever you are.
     workspaceId: null,
+    // A folder inside that workspace (one of the workspace record's folders),
+    // and where the project sits in the sidebar among its neighbours.
+    folderId: null,
+    sortOrder: null,
     // The hue this project is drawn in on a shared calendar. Null means the
     // calendar picks one, spaced away from the projects beside it.
     colour: null,

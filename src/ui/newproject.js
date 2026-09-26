@@ -104,12 +104,12 @@ async function templates() {
   try { return (await listPlans()).filter((p) => p.template && p.ok); } catch { return []; }
 }
 
-export async function newProjectWizard() {
+export async function newProjectWizard({ workspaceId = null, folderId = null } = {}) {
   const sync = await import('../state/sync.js');
   const [shelf, spaces, people] = await Promise.all([templates(), sync.listWorkspaces().catch(() => []), sync.listPeople().catch(() => [])]);
 
   const s = {
-    step: null, base: null, from: '', name: '', workspaceId: sync.activeWorkspace() || '', start: fromDay(toDay(today())),
+    step: null, base: null, from: '', name: '', workspaceId: workspaceId || sync.activeWorkspace() || '', start: fromDay(toDay(today())),
     onCalendar: true, phases: [], fields: [],
   };
 
@@ -156,6 +156,8 @@ export async function newProjectWizard() {
         name: s.name, workspaceId: s.workspaceId || null, start: s.start, onCalendar: s.onCalendar,
         phases: s.phases, fields: s.fields.filter((f) => f.name.trim()),
       });
+      // Made from a folder's ＋: it goes in that folder, if it stayed in that workspace.
+      if (folderId && (s.workspaceId || null) === workspaceId) project.folderId = folderId;
       close(project);
     };
 

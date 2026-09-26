@@ -16,6 +16,7 @@ import { formatClock } from '../model/agenda.js';
 import { toDay, today, formatDate, WEEKDAY_NAMES, weekday } from '../model/calendar.js';
 import { showMenu, promptText } from './dialog.js';
 import { currentLayout, lateness } from './calendar.js';
+import { icon as ic, projectColour } from './icons.js';
 
 const PLACES = [
   { view: 'today', icon: '☀', label: 'Agenda' },
@@ -43,7 +44,12 @@ const state = {
   favorites: saved.favorites !== false,
   workspaces: saved.workspaces !== false,
   expanded: new Set(saved.expanded || []),
+  width: Number.isFinite(saved.width) ? saved.width : 224,
 };
+/** How wide the sidebar may be dragged. */
+const SIDE_MIN = 180;
+const SIDE_MAX = 400;
+const applyWidth = () => document.getElementById('app')?.style.setProperty('--side-w', `${state.width}px`);
 const remember = () => {
   try { localStorage.setItem(KEY, JSON.stringify({ ...state, expanded: [...state.expanded] })); } catch { /* private mode */ }
 };
@@ -68,6 +74,29 @@ let root = null;
 const parts = {};
 
 /** Build the parts that do not change; `renderSidebar` fills the rest. */
+/** A handle on the sidebar's right edge: drag to resize, double-click for the default width. */
+function resizeHandle() {
+  const handle = el('div', { class: 'side-resize', title: 'Drag to resize · double-click to reset' });
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('is-on');
+    document.body.classList.add('is-resizing');
+    const left = root.getBoundingClientRect().left;
+    const move = (ev) => { state.width = Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, ev.clientX - left))); applyWidth(); };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.classList.remove('is-on');
+      document.body.classList.remove('is-resizing');
+      remember();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up, { once: true });
+    handle.addEventListener('pointercancel', up, { once: true });
+  });
+  handle.addEventListener('dblclick', () => { state.width = 224; applyWidth(); remember(); });
+  return handle;
+}
 export function initSidebar(node, { newMenu, findResults, settings }) {
   root = node;
   hooks = { newMenu, findResults, settings };
@@ -107,7 +136,9 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
       section('favorites', 'Favorites', parts.favorites),
       section('workspaces', 'Workspaces', parts.workspaces,
         el('button', { class: 'side-icon side-add', text: '＋', title: 'New workspace', onclick: newWorkspace }))),
-    el('div', { class: 'side-foot sc-faint small', text: 'Right-click the calendar to make an event or a task' }));
+    el('div', { class: 'side-foot sc-faint small', text: 'Right-click the calendar to make an event or a task' }),
+    resizeHandle());
+  applyWidth();
   // The "now" row moves on as the day does.
   setInterval(renderNow, 60 * 1000);
   void refreshSidebar();
@@ -121,16 +152,19 @@ async function newWorkspace() {
   await refreshSidebar();
 }
 
-const item = ({ icon, label, active = false, badge = null, aside = null, onclick, title = '', cls = '', menu = null, open = null }) => el('div', {
+const item = ({ icon, label, active = false, badge = null, aside = null, onclick, title = '', cls = '', menu = null, open = null, plus = null }) => el('div', {
   class: `side-item${active ? ' is-on' : ''}${cls ? ` ${cls}` : ''}`, title, onclick,
   ondblclick: open ? (e) => { e.preventDefault(); open(); } : null,
   oncontextmenu: menu ? (e) => { e.preventDefault(); menu(e.clientX, e.clientY); } : null,
 },
-  el('span', { class: 'side-item-icon', text: icon }),
+  typeof icon === 'string' ? el('span', { class: 'side-item-icon', text: icon }) : el('span', { class: 'side-item-icon' }, icon),
   el('span', { class: 'side-item-label', text: label }),
   aside ? el('span', { class: 'side-item-aside', text: aside }) : null,
   badge ? el('span', { class: 'side-badge', text: String(badge) }) : null,
-  open ? el('button', { class: 'side-open', text: '↗', title: 'Open the project window', onclick: (e) => { e.stopPropagation(); open(); } }) : null);
+  // A project's own buttons, shown on hover as in Motion: its menu, and a new task in it.
+  open && menu ? el('span', { class: 'side-hover' },
+    el('button', { class: 'side-mini', text: '⋯', title: 'Project menu', onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); menu(r.left, r.bottom + 4); } }),
+    plus ? el('button', { class: 'side-mini', text: '＋', title: 'A new task in this project', onclick: (e) => { e.stopPropagation(); plus(); } }) : null) : null);
 
 /** A project, clicked: it becomes the plan the views show; the view stays as it is. */
 async function selectPlanFromSidebar(id) {
@@ -139,6 +173,23 @@ async function selectPlanFromSidebar(id) {
     if (!(await openPlan(id))) return;
   }
   renderSidebar();
+}
+
+/** A project's ＋: the project becomes the open plan, and the new-task panel opens on it. */
+async function newTaskIn(id) {
+  await selectPlanFromSidebar(id);
+  const { newTaskPanel } = await import('./taskpanel.js');
+  await newTaskPanel();
+}
+
+/** A new folder in a workspace, opened so projects can be dragged into it. */
+async function newFolder(w) {
+  const name = await promptText('New folder', `A folder in ${w.name}. Drag projects onto it to file them.`, '');
+  if (!name?.trim()) return;
+  const sync = await import('../state/sync.js');
+  const folder = await sync.createFolder(w.id, name);
+  if (folder) { state.expanded.add(w.id); state.expanded.add(`folder:${folder.id}`); remember(); }
+  await refreshSidebar();
 }
 
 /** A project's window (its ↗ button, a double-click, or Open project), over a view of it. */
@@ -152,11 +203,21 @@ async function openPlanFromSidebar(id) {
 const ORDER_KEY = 'project-planner:sidebar-order';
 const readOrder = () => { try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'); } catch { return []; } };
 const writeOrder = (ids) => { try { localStorage.setItem(ORDER_KEY, JSON.stringify(ids)); } catch { /* private mode */ } };
-/** Projects in the order they were put in by hand, then by name. */
+/**
+ * Projects in the order they were put in by hand (dragged, or moved up and
+ * down — kept in the plan, so every device agrees), then by name.
+ */
 function ordered(plans) {
-  const order = readOrder();
-  const at = (id) => { const i = order.indexOf(id); return i < 0 ? Infinity : i; };
-  return [...plans].sort((a, b) => at(a.id) - at(b.id) || a.name.localeCompare(b.name));
+  const order = readOrder();          // this device's order from before it was kept in the plans
+  const local = (id) => { const i = order.indexOf(id); return i < 0 ? Infinity : i; };
+  const at = (p) => (Number.isFinite(p.sortOrder) ? p.sortOrder : Infinity);
+  return [...plans].sort((a, b) => at(a) - at(b) || local(a.id) - local(b.id) || a.name.localeCompare(b.name));
+}
+/** Write a place's order (and move a plan into it), then redraw. */
+async function arrange(ids, workspaceId, folderId) {
+  const sync = await import('../state/sync.js');
+  await sync.arrangePlans(ids, workspaceId, folderId);
+  await refreshSidebar();
 }
 function move(p, siblings, by) {
   const list = ordered(siblings).map((x) => x.id);
@@ -164,9 +225,50 @@ function move(p, siblings, by) {
   const j = i + by;
   if (i < 0 || j < 0 || j >= list.length) return;
   [list[i], list[j]] = [list[j], list[i]];
-  const rest = readOrder().filter((id) => !list.includes(id));
-  writeOrder([...list, ...rest]);
-  renderSidebar();
+  void arrange(list, p.workspaceId, p.folderId);
+}
+
+// ------------------------------------------------ dragging projects and folders
+//
+// A project dragged onto another goes above or below it, into that one's
+// workspace and folder; onto a folder, into the folder; onto a workspace, into
+// the workspace outside any folder. A folder dragged onto another folder of
+// the same workspace goes above or below it.
+
+let drag = null;                 // { kind: 'plan' | 'folder', id, workspaceId }
+const DROP = ['is-drop-before', 'is-drop-after', 'is-drop-into'];
+const clearDrop = () => { for (const n of root?.querySelectorAll('.is-drop-before, .is-drop-after, .is-drop-into') || []) n.classList.remove(...DROP); };
+const half = (e) => { const r = e.currentTarget.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 ? 'before' : 'after'; };
+
+function draggable(node, what) {
+  node.draggable = true;
+  node.addEventListener('dragstart', (e) => {
+    drag = what;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', what.id);
+    node.classList.add('is-dragging');
+  });
+  node.addEventListener('dragend', () => { drag = null; node.classList.remove('is-dragging'); clearDrop(); });
+}
+/** `where(e, what)` says 'before', 'after', 'into' or null (not here); `drop(where, what)` does it. */
+function dropTarget(node, where, drop) {
+  node.addEventListener('dragover', (e) => {
+    const w = drag && where(e, drag);
+    if (!w) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!node.classList.contains(`is-drop-${w}`)) { clearDrop(); node.classList.add(`is-drop-${w}`); }
+  });
+  node.addEventListener('dragleave', (e) => { if (!node.contains(e.relatedTarget)) node.classList.remove(...DROP); });
+  node.addEventListener('drop', (e) => {
+    const what = drag;
+    const w = what && where(e, what);
+    if (!w) return;
+    e.preventDefault();
+    clearDrop();
+    drag = null;
+    void drop(w, what);
+  });
 }
 
 const HUE_GRID = [0, 30, 55, 90, 150, 185, 205, 240, 280, 320, 10, 45, 75, 120, 170, 195, 220, 260, 300, 340];
@@ -199,8 +301,17 @@ function planMenu(p, siblings = []) {
       { icon: '⊘', label: 'Cancel project', run: () => { void status('Cancelled'); } },
       { icon: '⧉', label: 'Copy link', run: () => { const url = `${location.origin}${location.pathname}#plan=${encodeURIComponent(p.id)}`; navigator.clipboard?.writeText(url).then(() => act.hint('Link copied.'), () => act.hint(url)); } },
       { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Remove from Favorites' : 'Add to Favorites', run: async () => { await sync.setPlanPinned(p.id, !p.pinned); await refreshSidebar(); } },
+      { icon: '✦', label: 'Save as template', run: async () => {
+        const back = store.project.id;
+        const copy = await sync.duplicatePlan(p.id, { asTemplate: true, name: `${p.name} (template)` });
+        if (copy) await sync.openPlan(back);
+        act.hint(copy ? `Saved “${p.name}” as a template: New project… offers it.` : 'The template could not be made.');
+      } },
       { icon: '↪', label: 'Move to', submenu: [
-        ...spaces.map((w) => ({ label: `${(p.workspaceId || '') === w.id ? '✓ ' : ''}${w.name}`, run: async () => { await sync.setPlanWorkspace(p.id, w.id); await refreshSidebar(); set({}); } })),
+        ...spaces.flatMap((w) => [
+          { label: `${(p.workspaceId || '') === w.id && !p.folderId ? '✓ ' : ''}${w.name}`, run: async () => { await sync.setPlanWorkspace(p.id, w.id); await refreshSidebar(); set({}); } },
+          ...(Array.isArray(w.folders) ? w.folders : []).map((f) => ({ label: `${p.folderId === f.id ? '✓ ' : ''}   ▭ ${f.name}`, run: async () => { await sync.setPlanFolder(p.id, w.id, f.id); await refreshSidebar(); set({}); } })),
+        ]),
         { label: `${p.workspaceId ? '' : '✓ '}No workspace`, run: async () => { await sync.setPlanWorkspace(p.id, null); await refreshSidebar(); set({}); } },
       ] },
       '-',
@@ -225,6 +336,7 @@ function planMenu(p, siblings = []) {
           const { closeMenu } = await import('./dialog.js');
           closeMenu();
           await sync.patchPlan(p.id, (project) => { project.colour = h; }, 'Project colour');
+          await refreshSidebar();
           set({});
         },
       })));
@@ -300,23 +412,61 @@ export function renderSidebar() {
   const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));
   if (!pinned.length) parts.favorites.append(el('div', { class: 'side-empty', text: 'Right-click a project below to add it here.' }));
   for (const p of pinned) {
-    parts.favorites.append(item({ icon: '◈', label: p.name, active: p.id === project.id, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, pinned) }));
+    parts.favorites.append(item({ icon: ic('project', projectColour(p.colour)), label: p.name, active: p.id === project.id, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, pinned) }));
   }
 
   clear(parts.workspaces);
   const live = cache.plans.filter((p) => !p.archived);
-  const groups = [...cache.spaces.map((w) => ({ id: w.id, name: w.name })), { id: '', name: 'No workspace' }];
+  const groups = [...cache.spaces.map((w) => ({ id: w.id, name: w.name, folders: Array.isArray(w.folders) ? w.folders.filter((f) => f?.id && f.name) : [] })), { id: '', name: 'No workspace', folders: [] }];
+  const hoverButtons = (...buttons) => el('span', { class: 'side-hover' }, ...buttons);
+  const iconButton = (text, title, run) => el('button', { class: 'side-mini', text, title, onclick: (e) => { e.stopPropagation(); run(e); } });
+  const toggle = (key) => { if (state.expanded.has(key)) state.expanded.delete(key); else state.expanded.add(key); remember(); renderSidebar(); };
+
+  /** A project row, draggable, with the places it can be dropped around it. */
+  const planRow = (p, siblings, wsId, folderId, cls) => {
+    const row = item({ icon: ic('project', projectColour(p.colour)), label: p.name, cls, active: p.id === project.id,
+      title: `${p.tasks} tasks — double-click to open; drag to move`, onclick: () => { void selectPlanFromSidebar(p.id); },
+      open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, siblings) });
+    row.prepend(el('span', { class: 'side-grip', text: '⠿' }));
+    draggable(row, { kind: 'plan', id: p.id, workspaceId: wsId });
+    dropTarget(row, (e, what) => (what.kind === 'plan' && what.id !== p.id ? half(e) : null), (side, what) => {
+      const ids = ordered(siblings).map((x) => x.id).filter((id) => id !== what.id);
+      let i = ids.indexOf(p.id);
+      if (side === 'after') i++;
+      ids.splice(i, 0, what.id);
+      return arrange(ids, wsId || null, folderId);
+    });
+    return row;
+  };
+
   for (const w of groups) {
-    const plans = ordered(live.filter((p) => (p.workspaceId || '') === w.id));
-    if (!w.id && !plans.length) continue;
+    const plansHere = live.filter((p) => (p.workspaceId || '') === w.id);
+    if (!w.id && !plansHere.length) continue;
+    const folderIds = new Set(w.folders.map((f) => f.id));
+    const loose = ordered(plansHere.filter((p) => !p.folderId || !folderIds.has(p.folderId)));
     const key = w.id || 'none';
     const open = state.expanded.has(key);
     const active = w.id && cache.active === w.id;
-    const row = el('div', { class: `side-item side-ws${active ? ' is-on' : ''}`, title: w.id ? (active ? 'Showing only this workspace — click to show all' : 'Show only this workspace in lists') : 'Projects not filed under a workspace' },
-      el('button', { class: 'side-twist', text: open ? '▾' : '▸', onclick: (e) => { e.stopPropagation(); if (open) state.expanded.delete(key); else state.expanded.add(key); remember(); renderSidebar(); } }),
-      el('span', { class: 'side-item-icon', text: '◫' }),
+    const wsMenu = (x, y) => showMenu(x, y, [
+      { icon: '▢', label: 'New project…', run: () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: w.id || null })); } },
+      w.id ? { icon: '▭', label: 'New folder…', run: () => { void newFolder(w); } } : null,
+      w.id ? '-' : null,
+      w.id ? { icon: '✎', label: 'Rename workspace…', run: async () => {
+        const name = await promptText('Rename the workspace', '', w.name);
+        if (!name?.trim()) return;
+        const sync = await import('../state/sync.js');
+        await sync.renameWorkspace(w.id, name);
+        await refreshSidebar();
+      } } : null,
+    ]);
+    const row = el('div', { class: `side-item side-ws${active ? ' is-on' : ''}`, title: w.id ? (active ? 'Showing only this workspace — click to show all' : 'Show only this workspace in lists') : 'Projects not filed under a workspace',
+      oncontextmenu: (e) => { e.preventDefault(); wsMenu(e.clientX, e.clientY); } },
+      el('button', { class: 'side-twist', text: open ? '▾' : '▸', onclick: (e) => { e.stopPropagation(); toggle(key); } }),
+      el('span', { class: 'side-item-icon' }, ic('workspace')),
       el('span', { class: 'side-item-label', text: w.name }),
-      el('span', { class: 'side-count', text: String(plans.length) }));
+      el('span', { class: 'side-count', text: String(plansHere.length) }),
+      hoverButtons(iconButton('⋯', 'Workspace menu', (e) => { const r = e.currentTarget.getBoundingClientRect(); wsMenu(r.left, r.bottom + 4); }),
+        iconButton('＋', w.id ? 'New project or folder' : 'New project', (e) => { const r = e.currentTarget.getBoundingClientRect(); wsMenu(r.left, r.bottom + 4); })));
     if (w.id) {
       row.onclick = async () => {
         const sync = await import('../state/sync.js');
@@ -326,15 +476,67 @@ export function renderSidebar() {
         await refreshSidebar();
         set({});
       };
-    } else row.onclick = () => { if (open) state.expanded.delete(key); else state.expanded.add(key); remember(); renderSidebar(); };
+    } else row.onclick = () => toggle(key);
+    // A project dropped on the workspace goes in it, outside any folder, at the end.
+    dropTarget(row, (e, what) => (what.kind === 'plan' ? 'into' : null), (_, what) =>
+      arrange([...loose.map((x) => x.id).filter((id) => id !== what.id), what.id], w.id || null, null));
     parts.workspaces.append(row);
-    if (open) {
-      for (const p of plans) {
-        parts.workspaces.append(item({ icon: p.pinned ? '◈' : '▢', label: p.name, cls: 'side-child', active: p.id === project.id,
-          title: `${p.tasks} tasks — double-click or ↗ to open`, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, plans) }));
+    if (!open) continue;
+
+    for (const f of w.folders) {
+      const inside = ordered(plansHere.filter((p) => p.folderId === f.id));
+      const fKey = `folder:${f.id}`;
+      const fOpen = state.expanded.has(fKey);
+      const fMenu = (x, y) => showMenu(x, y, [
+        { icon: '▢', label: 'New project in this folder…', run: () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: w.id, folderId: f.id })); } },
+        '-',
+        { icon: '✎', label: 'Rename folder…', run: async () => {
+          const name = await promptText('Rename the folder', '', f.name);
+          if (!name?.trim()) return;
+          const sync = await import('../state/sync.js');
+          await sync.renameFolder(w.id, f.id, name);
+          await refreshSidebar();
+        } },
+        { icon: '🗑', label: 'Delete folder', danger: true, run: async () => {
+          const { confirmDialog } = await import('./dialog.js');
+          if (!(await confirmDialog(`Delete the folder “${f.name}”?`, `Its ${inside.length} project${inside.length === 1 ? '' : 's'} stay in ${w.name}, outside any folder. No project is deleted.`, 'Delete folder'))) return;
+          const sync = await import('../state/sync.js');
+          await sync.deleteFolder(w.id, f.id);
+          await refreshSidebar();
+        } },
+      ]);
+      const fRow = el('div', { class: 'side-item side-folder side-child', title: 'Click to open or close; drag projects onto it to file them',
+        onclick: () => toggle(fKey), oncontextmenu: (e) => { e.preventDefault(); fMenu(e.clientX, e.clientY); } },
+        el('span', { class: 'side-grip', text: '⠿' }),
+        el('span', { class: 'side-twist', text: fOpen ? '▾' : '▸' }),
+        el('span', { class: 'side-item-icon' }, ic('folder')),
+        el('span', { class: 'side-item-label', text: f.name }),
+        el('span', { class: 'side-count', text: String(inside.length) }),
+        hoverButtons(iconButton('⋯', 'Folder menu', (e) => { const r = e.currentTarget.getBoundingClientRect(); fMenu(r.left, r.bottom + 4); }),
+          iconButton('＋', 'New project in this folder', () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: w.id, folderId: f.id })); })));
+      draggable(fRow, { kind: 'folder', id: f.id, workspaceId: w.id });
+      dropTarget(fRow, (e, what) => (what.kind === 'plan' ? 'into' : what.kind === 'folder' && what.workspaceId === w.id && what.id !== f.id ? half(e) : null), async (side, what) => {
+        if (what.kind === 'plan') {
+          await arrange([...inside.map((x) => x.id).filter((id) => id !== what.id), what.id], w.id, f.id);
+          if (!state.expanded.has(fKey)) toggle(fKey);
+          return;
+        }
+        const ids = w.folders.map((x) => x.id).filter((id) => id !== what.id);
+        let i = ids.indexOf(f.id);
+        if (side === 'after') i++;
+        ids.splice(i, 0, what.id);
+        const sync = await import('../state/sync.js');
+        await sync.arrangeFolders(w.id, ids);
+        await refreshSidebar();
+      });
+      parts.workspaces.append(fRow);
+      if (fOpen) {
+        for (const p of inside) parts.workspaces.append(planRow(p, inside, w.id, f.id, 'side-child side-in-folder'));
+        if (!inside.length) parts.workspaces.append(el('div', { class: 'side-empty side-in-folder', text: 'Empty — drag a project here' }));
       }
-      if (!plans.length) parts.workspaces.append(el('div', { class: 'side-empty side-child', text: 'No projects yet' }));
     }
+    for (const p of loose) parts.workspaces.append(planRow(p, loose, w.id || null, null, 'side-child'));
+    if (!plansHere.length && !w.folders.length) parts.workspaces.append(el('div', { class: 'side-empty side-child', text: 'No projects yet' }));
   }
   renderNow();
 }

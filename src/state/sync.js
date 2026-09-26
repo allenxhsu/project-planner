@@ -693,9 +693,73 @@ export async function deleteWorkspace(id) {
 export const setPlanPinned = (id, on) =>
   patchPlan(id, (project) => { project.pinned = !!on; }, on ? 'Pin to the top' : 'Unpin');
 
-/** File a plan under a workspace, or take it out of one with null. */
+/** File a plan under a workspace, or take it out of one with null. It leaves any folder it was in. */
 export const setPlanWorkspace = (id, workspaceId) =>
-  patchPlan(id, (project) => { project.workspaceId = workspaceId || null; }, 'Move to a workspace');
+  patchPlan(id, (project) => { project.workspaceId = workspaceId || null; project.folderId = null; }, 'Move to a workspace');
+
+/** Put a plan in a workspace and a folder of it (null for none). */
+export const setPlanFolder = (id, workspaceId, folderId) =>
+  patchPlan(id, (project) => { project.workspaceId = workspaceId || null; project.folderId = (workspaceId && folderId) || null; }, 'Move to a folder');
+
+/**
+ * The sidebar order of the plans in one place (a workspace, or a folder of
+ * one), top to bottom, written into the plans so every device shows it; a
+ * plan dragged in from elsewhere is moved there too. Only plans whose place
+ * or position changed are written.
+ */
+export async function arrangePlans(ids, workspaceId, folderId = null) {
+  const summaries = new Map((await listPlans()).map((s) => [s.id, s]));
+  for (const [i, id] of ids.entries()) {
+    const s = summaries.get(id);
+    if (!s) continue;
+    const order = (i + 1) * 10;
+    const ws = workspaceId || null;
+    const folder = (ws && folderId) || null;
+    if (s.sortOrder === order && (s.workspaceId || null) === ws && (s.folderId || null) === folder) continue;
+    await patchPlan(id, (project) => { project.sortOrder = order; project.workspaceId = ws; project.folderId = folder; }, 'Arrange projects');
+  }
+}
+
+// ----------------------------------------------------------------- folders
+//
+// A workspace's folders are part of its record, in the order they are shown,
+// so they travel with it. A plan says which folder it is in.
+
+async function patchWorkspace(id, change) {
+  if (!recordStore) return null;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== WORKSPACE_TYPE) return null;
+  const next = { ...record, folders: Array.isArray(record.folders) ? record.folders.map((f) => ({ ...f })) : [] };
+  change(next);
+  await recordStore.put([{ ...next, updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return next;
+}
+
+export const foldersOf = (workspace) => (Array.isArray(workspace?.folders) ? workspace.folders.filter((f) => f && f.id && f.name) : []);
+
+export async function createFolder(workspaceId, name) {
+  const clean = String(name || '').trim();
+  if (!clean) return null;
+  const folder = { id: `fd_${Math.random().toString(36).slice(2, 12)}`, name: clean };
+  return (await patchWorkspace(workspaceId, (w) => { w.folders.push(folder); })) ? folder : null;
+}
+
+export const renameFolder = (workspaceId, folderId, name) => {
+  const clean = String(name || '').trim();
+  if (!clean) return Promise.resolve(null);
+  return patchWorkspace(workspaceId, (w) => { const f = w.folders.find((x) => x.id === folderId); if (f) f.name = clean; });
+};
+
+/** Folders of a workspace in a new order (ids top to bottom). */
+export const arrangeFolders = (workspaceId, ids) =>
+  patchWorkspace(workspaceId, (w) => { w.folders.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id)); });
+
+/** Remove a folder. Its plans stay in the workspace, outside any folder. */
+export async function deleteFolder(workspaceId, folderId) {
+  for (const s of await listPlans()) if (s.folderId === folderId) await setPlanFolder(s.id, workspaceId, null);
+  return patchWorkspace(workspaceId, (w) => { w.folders = w.folders.filter((f) => f.id !== folderId); });
+}
 
 /** Whether a plan belongs in the workspace on screen. '' shows everything. */
 export function inActiveWorkspace(project) {
@@ -945,6 +1009,9 @@ export function planSummary(record) {
     template: project.template === true,
     pinned: project.pinned === true,
     workspaceId: project.workspaceId || null,
+    colour: Number.isFinite(project.colour) ? project.colour : null,
+    folderId: project.folderId || null,
+    sortOrder: Number.isFinite(project.sortOrder) ? project.sortOrder : null,
     archived: project.archived === true,
     archivedAt: project.archivedAt || null,
     onCalendar: project.tasks.filter((t) => t.calendar?.show).length,

@@ -72,6 +72,8 @@ export function parse(text) {
   p.colour = raw.colour === null || raw.colour === undefined || !Number.isFinite(+raw.colour)
     ? null : ((Math.round(+raw.colour) % 360) + 360) % 360;
   p.workspaceId = typeof raw.workspaceId === 'string' && raw.workspaceId ? raw.workspaceId : null;
+  p.folderId = p.workspaceId && typeof raw.folderId === 'string' && raw.folderId ? raw.folderId : null;
+  p.sortOrder = Number.isFinite(raw.sortOrder) ? raw.sortOrder : null;
   p.pinned = raw.pinned === true;
   p.template = raw.template === true;
   p.archived = raw.archived === true;
