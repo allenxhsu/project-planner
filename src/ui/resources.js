@@ -155,7 +155,13 @@ export function usageShift(steps) {
 }
 export function usageToday() { usageAnchor = null; set({}); }
 
-export function renderResourceUsage(root) {
+/**
+ * Resource Usage. Under the open project (Microsoft Project view) it is that
+ * project's people and work, with the other projects one choice away; as the
+ * Workload view of Projects & Tasks (`{ all: true }`) it is everyone, across
+ * every project.
+ */
+export function renderResourceUsage(root, { all = false } = {}) {
   const { project, schedule, ui } = store;
   clear(root);
   const pane = el('div', { class: 'sheet-pane usage-pane' });
@@ -165,7 +171,8 @@ export function renderResourceUsage(root) {
   // The open plan comes from the store — it is newer than its record — and
   // every other plan from the shelf, as the calendar does it.
   const entries = [{ project, schedule }, ...usagePlans.filter((e) => e.project.id !== project.id)];
-  const scope = ui.usageScope === 'plan' ? entries.slice(0, 1) : entries;
+  const wide = all || ui.usageScope === 'all';
+  const scope = wide ? entries : entries.slice(0, 1);
 
   const grain = usageGrain();
   const span = USAGE_SPANS[grain];
@@ -223,9 +230,9 @@ export function renderResourceUsage(root) {
     el('span', { class: 'sc-label', text: 'Usage' }),
     el('select', { class: 'sc-select', onchange: (e) => set({ usageGrain: e.target.value }) },
       ...Object.entries(USAGE_SPANS).map(([id, g]) => el('option', { value: id, text: g.label, selected: grain === id }))),
-    el('select', { class: 'sc-select', onchange: (e) => set({ usageScope: e.target.value }) },
-      el('option', { value: 'all', text: `All projects (${entries.length})`, selected: ui.usageScope !== 'plan' }),
-      el('option', { value: 'plan', text: 'This project only', selected: ui.usageScope === 'plan' })),
+    all ? null : el('select', { class: 'sc-select', onchange: (e) => set({ usageScope: e.target.value }) },
+      el('option', { value: 'plan', text: `This project — ${project.name}`, selected: !wide }),
+      el('option', { value: 'all', text: `All projects (${entries.length})`, selected: wide })),
     el('button', { class: 'sc-button sc-button--sm', text: '‹', title: 'Earlier', onclick: () => usageShift(-1) }),
     el('button', { class: 'sc-button sc-button--sm', text: 'Today', onclick: usageToday }),
     el('button', { class: 'sc-button sc-button--sm', text: '›', title: 'Later', onclick: () => usageShift(1) }),

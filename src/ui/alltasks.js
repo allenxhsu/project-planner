@@ -1135,7 +1135,7 @@ export function renderAllTasks(root, { scope: s = 'all' } = {}) {
     // Workload is Resource Usage: every person's hours by day, over every plan.
     const host = el('div', { class: 'tl-workload' });
     pane.append(host);
-    renderResourceUsage(host);
+    renderResourceUsage(host, { all: true });
     return;
   }
   if (loading && !loaded) { pane.append(el('p', { class: 'empty', text: 'Reading every plan on the shelf…' })); return; }

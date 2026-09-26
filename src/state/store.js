@@ -52,7 +52,7 @@ export const store = {
     calendarColour: 'auto', // calendar: colour a block by 'person', by 'plan', or 'auto'
     projectsLayout: 'cards', // projects: 'cards' or 'list'
     usageGrain: 'week',     // resource usage: 'day' or 'week' columns
-    usageScope: 'all',      // resource usage: every project, or the open one
+    usageScope: 'plan',     // resource usage: the open project, or every one
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     settingsPage: 'calendars',
