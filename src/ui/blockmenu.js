@@ -16,7 +16,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused } from '../model/model.js';
+import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue } from '../model/model.js';
 import { formatClock, parseTime, agendaOf, hoursLeft } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText } from './dialog.js';
@@ -138,6 +138,37 @@ const timeInput = (min) => el('input', { class: 'sc-input sheet-time', type: 'ti
 const dateInput = (iso) => el('input', { class: 'sc-input sheet-date', type: 'date', value: iso });
 
 /**
+ * An input for one custom field, of the kind the field is: a box for words,
+ * numbers and links, a date, a choice or a set of ticks for options and
+ * people. `get` reads it back as the value the field keeps.
+ */
+function fieldInput(project, field, value) {
+  const people = project.resources.map((r) => ({ value: r.id, label: r.name }));
+  const choices = field.type === 'select' || field.type === 'multi' ? field.options.map((o) => ({ value: o, label: o })) : people;
+  if (field.type === 'select' || field.type === 'person') {
+    const node = el('select', { class: 'sc-select' }, el('option', { value: '', text: '—' }),
+      ...choices.map((c) => el('option', { value: c.value, text: c.label, selected: value === c.value })));
+    return { node, get: () => node.value || null };
+  }
+  if (field.type === 'multi' || field.type === 'people') {
+    const on = new Set(Array.isArray(value) ? value : []);
+    const boxes = choices.map((c) => el('input', { type: 'checkbox', class: 'sc-check', value: c.value, checked: on.has(c.value) }));
+    const node = el('span', { class: 'fact-ticks' }, ...(choices.length ? choices.map((c, k) => el('label', { class: 'fact-tick' }, boxes[k], el('span', { text: c.label })))
+      : [el('span', { class: 'sc-faint', text: field.type === 'people' ? 'Nobody on the plan' : 'No options' })]));
+    return { node, get: () => boxes.filter((b) => b.checked).map((b) => b.value) };
+  }
+  if (field.type === 'date') {
+    const node = dateInput(value || '');
+    return { node, get: () => node.value || null };
+  }
+  const node = el('input', { class: 'sc-input', type: field.type === 'number' ? 'number' : field.type === 'url' ? 'url' : 'text', value: value ?? '', placeholder: field.type === 'url' ? 'https://' : '' });
+  const wrap = field.type === 'url' && value
+    ? el('span', { class: 'fact-url' }, node, el('a', { href: value, target: '_blank', rel: 'noopener', text: '↗', title: 'Open the link' }))
+    : node;
+  return { node: wrap, get: () => node.value };
+}
+
+/**
  * A task, opened — from a block on the calendar, or from anywhere else.
  *
  * On the left, what the task is: its name, and when it is a calendar block,
@@ -168,7 +199,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
     const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
+    const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
     const save = () => close({
+      custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
@@ -223,6 +256,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Duration', el('span', { class: 'sc-mono', text: `${info?.duration ?? 0}d open · ${Math.round(hoursLeft(project, info, t) * 10) / 10}h left · ${info?.percent ?? 0}%` })),
           fact('Start date', start),
           fact('Deadline', deadline),
+          ...custom.map((c) => fact(c.field.name, c.node)),
           fact('On the calendar', el('span', { text: agendaOf(project, t).show ? `Yes${pins.length ? `, ${pins.length} fixed` : ''}` : 'No' })),
           fact('Blocked by', list(blockedBy)),
           fact('Blocking', list(blocking)),
@@ -243,6 +277,12 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if (saved.start !== hadStart) act.editTask(t.id, 'start', saved.start);
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
+  for (const c of saved.custom) {
+    const was = t.fields?.[c.id] ?? null;
+    const field = getField(store.project, c.id);
+    const now = field ? fieldValue(store.project, field, c.value) : null;
+    if (JSON.stringify(was) !== JSON.stringify(now)) act.setTaskFieldValue(t.id, c.id, now);
+  }
   if (b) {
     // The day or the hours changed: that is a decision about when, so it pins.
     const moved = saved.day !== b.dateIso || saved.from !== b.start || saved.to !== b.end;

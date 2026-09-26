@@ -10,6 +10,7 @@ import {
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
+  cleanField, fieldsOf, getField, removeField, setFieldValue,
   setPin, removePin, clearPins, phaseOf,
 } from '../model/model.js';
 
@@ -399,9 +400,25 @@ export function unpinAll(taskId) { return attempt('Unpin every block', (p) => cl
 
 export function newPhase(name) { return commit('New phase', (p) => addPhase(p, name ? { name } : {})); }
 export function editPhase(id, name) { return attempt('Rename the phase', (p) => setPhaseField(p, id, 'name', name)); }
+export function setPhaseDeadline(id, iso) { return attempt('Phase deadline', (p) => setPhaseField(p, id, 'deadline', iso || null)); }
 export function deletePhase(id) { return attempt('Delete the phase', (p) => removePhase(p, id)); }
 export function movePhaseBy(id, dir) { return attempt('Reorder the phases', (p) => { if (!movePhase(p, id, dir)) throw new Error('It is already at the end.'); }); }
 /** Put a task in a phase. Everything under it inherits, unless it says otherwise. */
+/** Replace the plan's custom fields; values for a field taken out go with it. */
+export function setCustomFields(list) {
+  return attempt('Custom fields', (p) => {
+    const next = list.map(cleanField).filter(Boolean);
+    const ids = new Set(next.map((f) => f.id));
+    for (const f of fieldsOf(p)) if (!ids.has(f.id)) removeField(p, f.id);
+    p.fields = next;
+    // A value for an option that is no longer offered means nothing now.
+    for (const t of p.tasks) for (const f of next) if (t.fields && f.id in t.fields) setFieldValue(p, t.id, f.id, t.fields[f.id]);
+  });
+}
+export function setTaskFieldValue(taskId, fieldId, value) {
+  return attempt(`Edit ${getField(store.project, fieldId)?.name || 'field'}`, (p) => setFieldValue(p, taskId, fieldId, value));
+}
+
 export function setTaskPhase(taskId, phaseId) {
   return attempt('Phase', (p) => {
     const t = getTask(p, taskId);

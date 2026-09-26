@@ -65,6 +65,9 @@ export function createProject(name = 'Untitled project', start = null) {
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
     // The phases this plan runs through, named by hand. Empty: no gating.
     phases: [],
+    // Custom fields: columns a plan adds for itself — a client, a budget
+    // code, a link to the brief. Each task keeps its values in `fields`.
+    fields: [],
     timeBlocks: DEFAULT_TIME_BLOCKS.map((b) => ({ ...b, days: [...b.days] })), currentPhaseId: null, feeds: [],
     agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 50, dailyCap: 6 },
     // Which workspace this plan lives in — work, personal, school. Null is
@@ -536,8 +539,9 @@ export const getPhase = (p, id) => phases(p).find((ph) => ph.id === id) || null;
 
 export function addPhase(p, props = {}) {
   if (!Array.isArray(p.phases)) p.phases = [];
-  const phase = { id: uid('ph'), name: 'New phase', ...props };
+  const phase = { id: uid('ph'), name: 'New phase', deadline: null, ...props };
   phase.name = String(phase.name).trim() || 'New phase';
+  phase.deadline = isoValid(phase.deadline) ? phase.deadline : null;
   p.phases.push(phase);
   return phase;
 }
@@ -545,6 +549,11 @@ export function addPhase(p, props = {}) {
 export function setPhaseField(p, id, field, value) {
   const ph = getPhase(p, id);
   if (!ph) throw new Error('No such phase.');
+  if (field === 'deadline') {
+    if (value && !isoValid(value)) throw new Error('That is not a date.');
+    ph.deadline = value || null;
+    return;
+  }
   if (field !== 'name') throw new Error(`“${field}” is not part of a phase.`);
   const name = String(value).trim();
   if (!name) throw new Error('A phase needs a name.');
@@ -565,6 +574,87 @@ export function movePhase(p, id, dir) {
   if (i < 0 || j < 0 || j >= list.length) return false;
   [list[i], list[j]] = [list[j], list[i]];
   return true;
+}
+
+/**
+ * Custom fields — what a plan wants to record about its tasks that the plan
+ * itself has no column for. The kinds are the ones people reach for: words,
+ * a number, a link, a date, one or several of a list, one or several people.
+ * A person is a resource of the plan, so a value points at someone who is
+ * actually on it.
+ */
+export const FIELD_TYPES = {
+  text: 'Text', number: 'Number', url: 'URL', date: 'Date',
+  select: 'Select', multi: 'Multi select', person: 'Person', people: 'Multi person',
+};
+export const fieldsOf = (p) => (Array.isArray(p.fields) ? p.fields : []);
+export const getField = (p, id) => fieldsOf(p).find((f) => f.id === id) || null;
+const hasOptions = (type) => type === 'select' || type === 'multi';
+
+/** A field definition made safe: a name, a known kind, and options when the kind has them. */
+export function cleanField(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = String(raw.name || '').trim();
+  if (!name) return null;
+  const type = FIELD_TYPES[raw.type] ? raw.type : 'text';
+  const options = hasOptions(type)
+    ? [...new Set((Array.isArray(raw.options) ? raw.options : []).map((o) => String(o).trim()).filter(Boolean))]
+    : [];
+  return { id: typeof raw.id === 'string' && raw.id ? raw.id : uid('f'), name, type, options };
+}
+
+export function addField(p, props = {}) {
+  const field = cleanField({ name: 'New field', ...props, id: undefined });
+  if (!field) throw new Error('A field needs a name.');
+  if (!Array.isArray(p.fields)) p.fields = [];
+  p.fields.push(field);
+  return field;
+}
+
+/** Remove a field, and every task's value for it. */
+export function removeField(p, id) {
+  p.fields = fieldsOf(p).filter((f) => f.id !== id);
+  for (const t of p.tasks) if (t.fields && id in t.fields) delete t.fields[id];
+}
+
+/**
+ * A value made to fit its field, or null for "nothing". A number that is not
+ * one, an option the field does not offer, a person not on the plan — all
+ * become nothing rather than a value that means something else.
+ */
+export function fieldValue(p, field, value) {
+  if (value === null || value === undefined || value === '') return null;
+  const people = new Set(p.resources.map((r) => r.id));
+  switch (field.type) {
+    case 'number': { const n = Number(value); return Number.isFinite(n) ? n : null; }
+    case 'date': return isoValid(value) ? value : null;
+    case 'url': { const u = String(value).trim(); return u ? (/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https://${u}`) : null; }
+    case 'select': return field.options.includes(String(value)) ? String(value) : null;
+    case 'multi': { const v = (Array.isArray(value) ? value : [value]).map(String).filter((o) => field.options.includes(o)); return v.length ? [...new Set(v)] : null; }
+    case 'person': return people.has(String(value)) ? String(value) : null;
+    case 'people': { const v = (Array.isArray(value) ? value : [value]).map(String).filter((id) => people.has(id)); return v.length ? [...new Set(v)] : null; }
+    default: { const v = String(value).trim(); return v || null; }
+  }
+}
+
+export function setFieldValue(p, taskId, fieldId, value) {
+  const t = getTask(p, taskId);
+  const field = getField(p, fieldId);
+  if (!t || !field) throw new Error('No such task or field.');
+  const v = fieldValue(p, field, value);
+  const fields = { ...(t.fields || {}) };
+  if (v === null) delete fields[fieldId]; else fields[fieldId] = v;
+  if (Object.keys(fields).length) t.fields = fields; else delete t.fields;
+}
+
+/** A value as words: options and dates as they are, people by name. */
+export function formatFieldValue(p, field, value) {
+  if (value === null || value === undefined) return '';
+  const who = (id) => p.resources.find((r) => r.id === id)?.name || '(gone)';
+  if (field.type === 'person') return who(value);
+  if (field.type === 'people') return value.map(who).join(', ');
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
 }
 
 /**
@@ -816,13 +906,24 @@ export function stageOf(p, task) {
   return stages(p)[0];
 }
 
+/**
+ * Record when a task was finished — the day it reached 100%, in local time —
+ * or forget it when it goes back below. It is what "done today" is read from;
+ * a task finished before this was kept simply has no day.
+ */
+export function stampDone(t, percent, day = localToday()) {
+  if (percent === 100) { if (!t.doneAt) t.doneAt = day; }
+  else delete t.doneAt;
+}
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
 /** Put a task in a stage. A done stage completes it; that is what done means. */
 export function setStage(p, taskId, stageId) {
   const t = getTask(p, taskId);
   const st = getStage(p, stageId);
   if (!t || !st) throw new Error('No such task or stage.');
   t.stageId = st.id;
-  if (st.done) { t.percent = 100; if (t.milestone) t.duration = 0; }
+  if (st.done) { t.percent = 100; stampDone(t, 100); if (t.milestone) t.duration = 0; }
 }
 
 export function addStage(p, name = 'New stage') {
@@ -845,7 +946,7 @@ export function setStageDone(p, id, done) {
   if (!st) throw new Error('No such stage.');
   if (!done && stages(p).filter((x) => x.done).length === 1 && st.done) throw new Error('A board needs one column that means finished.');
   st.done = !!done;
-  if (st.done) for (const t of p.tasks) if (t.stageId === st.id) t.percent = 100;
+  if (st.done) for (const t of p.tasks) if (t.stageId === st.id) { t.percent = 100; stampDone(t, 100); }
 }
 
 /** Remove a stage; its tasks fall back to the first one. */
@@ -910,6 +1011,7 @@ export function setTaskField(p, id, field, value) {
       if (Number.isNaN(n) || n < 0 || n > 100) throw new Error('Percent complete is a number from 0 to 100.');
       const wasDone = getStage(p, t.stageId)?.done ?? false;
       t.percent = n;
+      stampDone(t, n);
       // Completing a task moves it to the finished column, and taking it back
       // off 100% moves it out of one — otherwise the board would lie.
       if (n === 100 && !wasDone) { const done = firstDoneStage(p); if (done) t.stageId = done.id; }

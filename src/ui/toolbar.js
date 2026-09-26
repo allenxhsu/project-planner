@@ -4,6 +4,7 @@ import { el, clear, downloadText, downloadBlob, slugify } from '../util.js';
 import { store, set, undo, redo, canUndo, canRedo, loadProject, markSaved, VIEWS } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { createProject } from '../model/model.js';
+import { newProjectWizard, editFieldsDialog } from './newproject.js';
 import { sampleProject } from '../model/sample.js';
 import { serialize, parse, FILE_EXT } from '../io/json.js';
 import { exportMspdi, importMspdi } from '../io/mspdi.js';
@@ -298,7 +299,7 @@ const run = (id) => COMMANDS[id];
 
 const MENUS = {
   File: () => [
-    { label: 'New plan', run: run('file.new') }, { label: 'Open…', key: '⌘O', run: run('file.open') }, { label: 'Open the sample plan', run: run('file.sample') }, '-',
+    { label: 'New project…', run: () => { void newProjectWizard(); } }, { label: 'New empty plan', run: run('file.new') }, { label: 'Open…', key: '⌘O', run: run('file.open') }, { label: 'Open the sample plan', run: run('file.sample') }, '-',
     { label: 'Save to the cloud', key: '⌘S', run: run('file.save') },
     { label: 'Save As… (a file on this computer)', key: '⇧⌘S', run: run('file.saveAs') }, '-',
     { label: 'Open Microsoft Project file (.mpp, .mpx, XML)…', run: run('file.open') },
@@ -344,6 +345,7 @@ const MENUS = {
   ],
   Project: () => [
     { label: 'Project information & working time…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') }, '-',
+    { label: 'Custom fields…', run: () => { void editFieldsDialog(); } }, '-',
     { label: store.project.archived ? 'Bring back from the archive' : 'Archive this project', run: run('project.archive') },
   ],
   Export: () => [
@@ -354,6 +356,20 @@ const MENUS = {
 
 // ---------------------------------------------------------------- header
 
+/** + New: the things a person starts, wherever they are. */
+function newMenu(x, y) {
+  showMenu(x, y, [
+    { icon: '☐', label: 'New task', key: 'Ins', run: () => {
+      // A task needs a plan to be in and a place in its outline; the task list is that place.
+      if (!['gantt', 'sheet', 'priority', 'calendar', 'alltasks', 'today'].includes(store.ui.view)) set({ view: 'gantt' });
+      act.newTaskBelow();
+    } },
+    { icon: '▢', label: 'New project…', run: () => { void newProjectWizard(); } },
+    { icon: '◷', label: 'New schedule…', run: () => { void import('./schedules.js').then((m) => m.editSchedule(null)); } },
+    { icon: '◆', label: 'New milestone', run: () => { if (!['gantt', 'sheet'].includes(store.ui.view)) set({ view: 'gantt' }); act.newMilestone(); } },
+  ]);
+}
+
 export function initHeader(root) {
   const menubar = el('nav', { class: 'menubar' }, ...Object.keys(MENUS).map((name) => el('button', {
     class: 'sc-button sc-button--ghost sc-button--sm', text: name,
@@ -362,6 +378,7 @@ export function initHeader(root) {
   const find = el('input', { class: 'sc-input find', placeholder: 'Find task', id: 'find', oninput: (e) => findResults(e.target), onkeydown: (e) => { if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); } e.stopPropagation(); } });
   root.append(
     el('span', { class: 'sc-brand-mark', text: 'PJ' }), el('h1', { class: 'sc-header-title', text: 'Project Planner' }),
+    el('button', { class: 'sc-button sc-button--primary sc-button--sm new-pick', text: '+ New', title: 'A new task, project or schedule', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); newMenu(r.left, r.bottom + 4); } }),
     el('button', { class: 'sc-button sc-button--ghost sc-button--sm workspace-pick', id: 'workspace-pick', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); void workspaceMenu(r.left, r.bottom + 4); } }, 'All workspaces'),
     menubar, el('span', { class: 'sc-spacer' }),
     el('span', { class: 'sc-mono sc-muted', id: 'file-name' }),
@@ -479,7 +496,7 @@ export function renderToolbar(root) {
   const sel = ui.selection.length;
   if (planView) {
     root.append(
-      b('+ Project', 'Start a new plan', () => { COMMANDS['file.new'](); }, { primary: true }),
+      b('+ Project', 'Start a project — from scratch or from a template', () => { void newProjectWizard(); }, { primary: true }),
       b('↻ Refresh', 'Sync, then re-read the shelf', COMMANDS['view.refreshPlans']),
       b('Sync…', 'Where plans are kept online', settingsDialog));
   } else if (ui.view === 'calendar') {

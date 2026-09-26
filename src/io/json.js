@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -111,6 +111,7 @@ export function parse(text) {
       // Checked against the plan's phases once those are read, below.
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
+      ...(isoValid(t.doneAt) && Math.round(+t.percent) === 100 ? { doneAt: t.doneAt } : {}),
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,
@@ -182,10 +183,27 @@ export function parse(text) {
   // silently gating the calendar on something that is not a phase.
   p.phases = (Array.isArray(raw.phases) ? raw.phases : [])
     .filter((ph) => ph && typeof ph === 'object' && String(ph.name || '').trim())
-    .map((ph) => ({ id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim() }));
+    .map((ph) => ({ id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim(), deadline: isoValid(ph.deadline) ? ph.deadline : null }));
   const phaseIds = new Set(p.phases.map((ph) => ph.id));
   for (const t of p.tasks) if (t.phaseId && !phaseIds.has(t.phaseId)) t.phaseId = null;
   p.currentPhaseId = typeof raw.currentPhaseId === 'string' && phaseIds.has(raw.currentPhaseId) ? raw.currentPhaseId : null;
+
+  // Custom fields, then each task's values checked against them: a value for
+  // a field that is gone, or that no longer fits it, is dropped.
+  const seenFields = new Set();
+  p.fields = (Array.isArray(raw.fields) ? raw.fields : []).map(cleanField)
+    .filter((f) => f && !seenFields.has(f.id) && seenFields.add(f.id));
+  const rawTasks = new Map(raw.tasks.filter((t) => t && typeof t === 'object').map((t) => [String(t.id || ''), t]));
+  for (const t of p.tasks) {
+    const values = rawTasks.get(t.id)?.fields;
+    if (!values || typeof values !== 'object') continue;
+    const kept = {};
+    for (const f of p.fields) {
+      const v = fieldValue(p, f, values[f.id]);
+      if (v !== null) kept[f.id] = v;
+    }
+    if (Object.keys(kept).length) t.fields = kept;
+  }
 
   repairs.push(...normalizeLevels(p));
   return { project: p, repairs };

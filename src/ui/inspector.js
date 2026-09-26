@@ -305,6 +305,7 @@ function renderProject(root) {
     phaseBox.append(el('div', { class: 'tb-card sc-card' },
       el('div', { class: 'tb-row phase-row' },
         text(ph.name, (v) => act.editPhase(ph.id, v)),
+        el('input', { class: 'sc-input phase-due', type: 'date', value: ph.deadline || '', title: 'When this phase is due', onchange: (e) => act.setPhaseDeadline(ph.id, e.target.value) }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↑', title: 'Earlier', disabled: i === 0, onclick: () => act.movePhaseBy(ph.id, -1) }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↓', title: 'Later', disabled: i === phaseList.length - 1, onclick: () => act.movePhaseBy(ph.id, 1) }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this phase', onclick: () => act.deletePhase(ph.id) }))));

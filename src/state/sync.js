@@ -20,6 +20,7 @@ import { uid } from '../util.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
+import { freshCopy } from '../model/setup.js';
 import { parseTime } from '../model/agenda.js';
 import { readProfile } from '../io/profile.js';
 
@@ -976,6 +977,22 @@ export async function deletePlan(id) {
   if (syncConfigured()) void syncNow();
 }
 
+/** A plan on the shelf, read without opening it. Null when it cannot be read. */
+export async function readPlan(id) {
+  const record = recordStore && await recordStore.get(id);
+  if (!record || record.deletedAt) return null;
+  try { return parse(record.body).project; } catch { return null; }
+}
+
+/** Open a plan made here — by the new-project wizard — and put it on the shelf. */
+export async function startPlan(project) {
+  loadProject(project, null);
+  markSaved(null);
+  await openDocument();
+  if (syncConfigured()) void syncNow();
+  return project;
+}
+
 /**
  * Copy a plan. `asTemplate` keeps the shape and drops the history: nobody's
  * progress, nobody's logged hours, and no dates pinned to a project that has
@@ -992,20 +1009,10 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
   project.id = uid('plan');
   project.name = name || `${project.name}${asTemplate ? ' (template)' : ' (copy)'}`;
   if (asTemplate) {
-    project.start = today();
-    project.statusDate = null;
-    project.timesheets = [];
+    freshCopy(project, today());
     // A template is a pattern, not this week's work. Left on the shared
     // calendar it books hours twice: once for the plan and once for its copy.
     project.template = true;
-    for (const t of project.tasks) {
-      t.percent = 0;
-      t.stageId = null;
-      t.deadline = null;
-      if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
-      // A date pinned to last quarter would drag the whole copy back with it.
-      if (t.constraint?.date) t.constraint = { type: 'ASAP', date: null };
-    }
   }
   loadProject(project, null);
   markSaved(null);

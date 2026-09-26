@@ -12,6 +12,7 @@ import { sampleProject } from '../model/sample.js';
 import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, setPlanPinned, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
+import { newProjectWizard } from './newproject.js';
 
 /** The last list read from the shelf. Rendering is synchronous; reading is not. */
 let plans = [];
@@ -181,7 +182,7 @@ export function renderProjects(root) {
     el('div', { class: 'people-head-actions' },
       el('button', { class: `sc-button sc-button--sm${store.ui.projectsLayout !== 'list' ? ' is-on' : ''}`, text: 'Cards', title: 'One card per project', onclick: () => set({ projectsLayout: 'cards' }) }),
       el('button', { class: `sc-button sc-button--sm${store.ui.projectsLayout === 'list' ? ' is-on' : ''}`, text: 'List', title: 'One row per project', onclick: () => set({ projectsLayout: 'list' }) }),
-      el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: '+ Project', onclick: () => { const np = createProject(); np.workspaceId = activeWorkspace() || null; loadProject(np); set({ view: 'gantt' }); void reloadPlans(); } }))));
+      el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: '+ Project', title: 'Start a project — from scratch or from a template', onclick: () => { void newProjectWizard(); } }))));
 
   const live = here.filter((p) => !p.archived);
   const archived = here.filter((p) => p.archived);
@@ -191,7 +192,7 @@ export function renderProjects(root) {
   if (!asList) grid.append(el('button', {
     class: 'plan-card plan-new sc-card sc-brackets',
     // A plan started while a workspace is in front belongs to that workspace.
-    onclick: () => { const p = createProject(); p.workspaceId = activeWorkspace() || null; loadProject(p); set({ view: 'gantt' }); void reloadPlans(); },
+    onclick: () => { void newProjectWizard(); },
   }, el('div', { class: 'plan-new-mark', text: '+' }), el('div', { text: 'New project' })));
   if (!live.length && !loading && !asList) {
     grid.append(el('button', { class: 'plan-card plan-new sc-card sc-brackets', onclick: () => { loadProject(sampleProject()); set({ view: 'gantt' }); void reloadPlans(); } },

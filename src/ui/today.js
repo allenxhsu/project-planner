@@ -90,6 +90,16 @@ export function renderToday(root) {
   past.sort((a, b) => a.task.deadline.localeCompare(b.task.deadline));
   const late = (all.late || []).filter((l) => l.deadline >= day);
 
+  // Completed on this day: every task, anywhere, finished that day.
+  const finished = [];
+  for (const e of entries) {
+    e.project.tasks.forEach((task, i) => {
+      const info = e.schedule.tasks[task.id];
+      if (!info || isSummary(e.project, i) || task.doneAt !== iso || info.percent !== 100) return;
+      finished.push({ e, task, info });
+    });
+  }
+
   const pane = el('div', { class: 'today-pane' });
   const main = el('div', { class: 'today-main' });
   const title = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : offset === -1 ? 'Yesterday' : WEEKDAY_NAMES[weekday(day)];
@@ -114,6 +124,10 @@ export function renderToday(root) {
     return taskRow({ planId: r.planId, planName: hit.e.project.name, task: hit.task, info: hit.info,
       extra: `${formatClock(r.first)} · ${hoursText(r.minutes)}`, showPlan: many });
   }).filter(Boolean), 'Nothing is laid on this day. Put tasks on the calendar and their hours land here.');
+
+  section(`Completed ${title === 'Today' ? 'today' : title === 'Tomorrow' || title === 'Yesterday' ? title.toLowerCase() : `on ${title}`}`,
+    finished.map(({ e, task, info }) => taskRow({ planId: e.project.id, planName: e.project.name, task, info, showPlan: many })),
+    'Nothing finished yet. Tick a task and it lands here.');
 
   if (late.length) {
     main.append(el('h2', { class: 'today-section is-warning', text: 'Will be late' }));

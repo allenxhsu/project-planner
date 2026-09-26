@@ -133,3 +133,14 @@ export function showMenu(x, y, items) {
 }
 document.addEventListener('pointerdown', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+/** A panel — a date picker, say — opened where a menu would be, and closed the way a menu is. */
+export function showPanel(x, y, build) {
+  closeMenu();
+  const menu = el('div', { class: 'sc-menu pop-menu pop-panel' }, build(closeMenu));
+  document.body.append(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - r.width - 4))}px`;
+  menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - r.height - 4))}px`;
+  openMenu = menu;
+}

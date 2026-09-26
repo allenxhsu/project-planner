@@ -536,3 +536,55 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .blocker-row .sc-faint { margin-left: auto; }
 .menu-note { padding: 8px 12px; color: var(--sc-text-3); font-size: 12px; }
 .pop-menu sc-theme-picker { display: block; padding: 4px 12px 10px; }
+
+/* ---- new project: gallery, then four steps */
+.sc-dialog:has(.np-body) { width: min(860px, 94vw); }
+.np-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
+.np-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; text-align: left; cursor: pointer; font: inherit; color: var(--sc-text-1); min-height: 112px; }
+.np-card:hover { border-color: var(--sc-accent); }
+.np-card-mark { font-size: 20px; color: var(--sc-accent); line-height: 1; margin-bottom: 6px; }
+.np-card-title { font-weight: 600; }
+.np-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; min-height: 340px; }
+.np-rail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--sc-line); padding-right: 12px; }
+.np-rail li { display: flex; align-items: center; gap: 8px; padding: 7px 8px; cursor: pointer; color: var(--sc-text-3); font-size: 13px; }
+.np-rail li:hover { color: var(--sc-text-1); }
+.np-rail li.is-on { color: var(--sc-text-1); font-weight: 600; background: color-mix(in srgb, var(--sc-accent) 12%, transparent); }
+.np-rail li.is-past { color: var(--sc-text-2); }
+.np-rail-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid currentColor; font-size: 11px; flex: none; }
+.np-rail li.is-on .np-rail-num { background: var(--sc-accent); border-color: var(--sc-accent); color: var(--sc-bg); }
+.np-step-title { margin: 0 0 10px; font-size: 15px; }
+.np-step { display: flex; flex-direction: column; gap: 12px; }
+.np-step .sc-field { display: flex; flex-direction: column; gap: 4px; }
+.np-name { font-size: 16px; }
+.np-check { display: flex; align-items: center; gap: 8px; }
+.np-date { justify-content: flex-start; }
+.np-date.is-empty { color: var(--sc-text-3); }
+.np-phases { display: flex; flex-direction: column; gap: 6px; }
+.np-phase { display: grid; grid-template-columns: 22px minmax(0, 1fr) 150px 100px 60px 28px 28px; align-items: center; gap: 8px; }
+.np-phase-num { color: var(--sc-text-3); text-align: right; }
+.np-len-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.np-len { width: 64px; }
+.np-count { text-align: right; }
+.np-phase-add { display: flex; gap: 8px; margin-top: 4px; }
+.np-people { display: flex; flex-direction: column; gap: 8px; }
+.np-person-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: start; padding: 8px 0; border-bottom: 1px solid var(--sc-line); }
+.np-person-phase { display: flex; flex-direction: column; gap: 2px; }
+.np-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.np-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; background: color-mix(in srgb, var(--sc-accent) 16%, transparent); font-size: 12.5px; }
+.np-chip-x { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; font: inherit; padding: 0 4px; }
+.np-chip-x:hover { color: var(--sc-danger); }
+.np-fields { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.np-field { display: grid; grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1.2fr) auto; gap: 8px; align-items: center; width: 100%; }
+.phase-due { width: 140px; }
+.fact-ticks { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.fact-tick { display: inline-flex; align-items: center; gap: 4px; }
+.fact-url { display: flex; align-items: center; gap: 6px; }
+.fact-url a { color: var(--sc-accent); text-decoration: none; }
+.new-pick { margin-right: 4px; }
+@media (max-width: 640px) {
+  .np-layout { grid-template-columns: 1fr; }
+  .np-rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--sc-line); padding: 0 0 8px; }
+  .np-rail li span:last-child { white-space: nowrap; }
+  .np-phase { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .np-person-row, .np-field { grid-template-columns: 1fr; }
+}
