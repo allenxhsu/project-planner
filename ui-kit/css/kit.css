@@ -4,9 +4,11 @@
  * No-build apps:  <link rel="stylesheet" href="../ui-kit/css/kit.css">
  * Bundled apps:   import 'ui-kit/css/kit.css';
  *
- * Nothing changes on a page until <html> carries `data-sc` (js/theme.js sets it).
+ * Nothing changes on a page until <html> carries `data-sc` (js/theme.js sets it):
+ * data-sc="" is the HUD skin, data-sc="mac" the macOS skin (css/mac.css).
  */
 @import url('./fonts.css');
 @import url('./tokens.css');
 @import url('./base.css');
 @import url('./components.css');
+@import url('./mac.css');

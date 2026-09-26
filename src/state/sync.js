@@ -13,7 +13,7 @@
 import {
   SyncEngine, HttpTransport, SyncedDocument, LocalStore, IndexedDbStore,
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
-  portalApp, portalSession, portalRemote,
+  portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus,
 } from '../../sync-kit/js/index.js';
 import { store, set, loadProject, markSaved, subscribe, revision, tryCommit, setAutosaveSink, readAutosave, clearLocalAutosave, AUTOSAVE_STORAGE_KEY } from './store.js';
 import { uid } from '../util.js';
@@ -180,11 +180,10 @@ export async function storeCounts() {
 //
 // "It is in the cloud" is not the same as "it is on this machine", and a
 // browser's storage is not something a browser promises to keep: under
-// pressure it evicts whole origins. `navigator.storage.persist()` asks it not
-// to, and a browser that has seen the app installed, or added to a Home
-// Screen, generally agrees.
-//
-// sync-kit has no persistence module yet, so this is the direct call.
+// pressure it evicts whole origins. sync-kit's requestPersistentStorage() asks
+// it not to, and a browser that has seen the app installed, or added to a
+// Home Screen, generally agrees. The engine also reads the answer on every
+// sync, so the status event carries it.
 
 const AUTOSAVE_META = 'autosave';
 let persisted = { state: 'unknown', asked: false };
@@ -192,18 +191,19 @@ let persisted = { state: 'unknown', asked: false };
 /** What the browser says about keeping this origin's data. */
 export const persistence = () => ({ ...persisted });
 
+const stateOf = (status) => (status === null ? 'unsupported' : status.persisted ? 'persisted' : 'at-risk');
+
 /**
  * Ask to be kept, and remember the answer. Never awaited by anything that
  * matters: a browser that takes its time, or has no opinion, must not hold up
  * a plan appearing on screen.
  */
 export async function requestPersistence() {
-  const api = globalThis.navigator?.storage;
-  if (!api?.persist) { persisted = { state: 'unsupported', asked: true }; announce(); return persisted; }
   try {
-    const already = api.persisted ? await api.persisted() : false;
-    const granted = already || await api.persist();
-    persisted = { state: granted ? 'persisted' : 'at-risk', asked: true };
+    // Already granted is not worth asking again, which in Firefox is a prompt.
+    const now = await storageStatus();
+    const status = now?.persisted ? now : (now === null ? null : await requestPersistentStorage());
+    persisted = { state: stateOf(status), asked: true };
   } catch {
     persisted = { state: 'unknown', asked: true };
   }

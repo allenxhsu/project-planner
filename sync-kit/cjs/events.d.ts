@@ -11,6 +11,7 @@
  * missing guard would be a crash rather than a missing spinner.
  */
 import type { SyncPhase } from './engine.js';
+import type { StorageStatus } from './persistence.js';
 export declare const SYNC_EVENTS: {
     /** We fire this. `detail` is `SyncStatusDetail`. */
     readonly status: 'sync-kit:status';
@@ -40,6 +41,11 @@ export interface SyncStatusDetail {
      * token, because this ends up in the DOM.
      */
     label?: string;
+    /**
+     * Whether the browser has promised to keep the store. Absent when nothing
+     * knows; `persisted: false` is what the widget shows as "at risk".
+     */
+    storage?: StorageStatus;
 }
 export declare function publishStatus(detail: SyncStatusDetail): void;
 /** Asks whoever is listening to sync. Returns false when nothing could hear. */

@@ -168,6 +168,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SyncEngine = exports.SYNC_CURSOR_KEYS = void 0;
 const store_js_1 = require("./store.js");
 const events_js_1 = require("./events.js");
+const persistence_js_1 = require("./persistence.js");
 const CURSOR_PULL = 'sync.cursor.pull';
 const CURSOR_PUSH = 'sync.cursor.push';
 /**
@@ -196,12 +197,17 @@ class SyncEngine {
     store;
     transport;
     deviceId;
+    options;
     running = false;
     current;
-    constructor(store, transport, deviceId) {
+    constructor(store, transport, deviceId, options = {}) {
         this.store = store;
         this.transport = transport;
         this.deviceId = deviceId;
+        this.options = options;
+        if (options.mirror && typeof store.changes !== 'function') {
+            throw new Error('SyncEngine mirror mode needs a store that implements changes()');
+        }
         // Assembled here rather than in a field initialiser: a field initialiser
         // runs before the constructor body under ES2022 class fields, so the
         // transport would not be there to ask for its label yet.
@@ -244,12 +250,16 @@ class SyncEngine {
         try {
             const applied = await this.pull();
             const pushed = await this.push();
+            // Read after the sync rather than before: a first sync is the moment a
+            // store goes from empty to worth keeping, and the answer can change.
+            const storage = await (0, persistence_js_1.storageStatus)();
             this.publish({
                 phase: 'idle',
                 lastSyncAt: Date.now(),
                 lastError: null,
                 pulled: applied.length,
                 pushed,
+                ...(storage ? { storage } : {}),
             });
             return { pulled: applied.length, pushed, applied };
         }
@@ -289,6 +299,16 @@ class SyncEngine {
     }
     async push() {
         const since = (await this.store.meta(CURSOR_PUSH)) ?? 0;
+        // A store that numbers its own writes hands over the cursor to bank; the
+        // engine never looks inside it. Banked only after the push succeeded, so
+        // a failed push is retried from the same place next time.
+        if (this.store.changes) {
+            const { records, cursor } = await this.store.changes(since);
+            const mine = this.options.mirror ? records : records.filter((r) => r.origin === this.deviceId);
+            const accepted = mine.length === 0 ? 0 : (await this.transport.push({ records: mine, deviceId: this.deviceId })).accepted;
+            await this.store.setMeta(CURSOR_PUSH, cursor);
+            return accepted;
+        }
         const outgoing = await this.store.changedSince(since);
         // Records we just merged in from the remote carry a foreign `origin`;
         // sending them straight back is pure noise.
@@ -449,7 +469,7 @@ exports.HttpTransport = HttpTransport;
 "index.js": function (exports, require, module) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
+exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
 var engine_js_1 = require("./engine.js");
 Object.defineProperty(exports, "SyncEngine", { enumerable: true, get: function () { return engine_js_1.SyncEngine; } });
 Object.defineProperty(exports, "SYNC_CURSOR_KEYS", { enumerable: true, get: function () { return engine_js_1.SYNC_CURSOR_KEYS; } });
@@ -481,6 +501,93 @@ var local_js_1 = require("./stores/local.js");
 Object.defineProperty(exports, "LocalStore", { enumerable: true, get: function () { return local_js_1.LocalStore; } });
 var idb_js_1 = require("./stores/idb.js");
 Object.defineProperty(exports, "IndexedDbStore", { enumerable: true, get: function () { return idb_js_1.IndexedDbStore; } });
+var file_js_1 = require("./stores/file.js");
+Object.defineProperty(exports, "FileStore", { enumerable: true, get: function () { return file_js_1.FileStore; } });
+var persistence_js_1 = require("./persistence.js");
+Object.defineProperty(exports, "requestPersistentStorage", { enumerable: true, get: function () { return persistence_js_1.requestPersistentStorage; } });
+Object.defineProperty(exports, "storageStatus", { enumerable: true, get: function () { return persistence_js_1.storageStatus; } });
+
+},
+"persistence.js": function (exports, require, module) {
+"use strict";
+/**
+ * Whether the browser has promised to keep what the store holds.
+ *
+ * A browser tab is the one client whose copy of the workspace can vanish
+ * without anyone deleting it. Storage is "best effort" by default: under disk
+ * pressure the browser evicts an origin's IndexedDB and localStorage wholesale,
+ * and Safari drops the lot after seven days without a visit. The remedy is to
+ * ask — `navigator.storage.persist()` — and then to say, somewhere the person
+ * can see it, whether the answer was yes.
+ *
+ * Who says yes, as of this writing:
+ *
+ * - **Chrome and Edge** decide without a prompt, on engagement: a site that is
+ *   installed, bookmarked, granted notifications, or simply used often is
+ *   granted; a site opened once is not, and asking again later can succeed.
+ * - **Firefox** asks the person, once.
+ * - **Safari** grants it to an installed web app — one added to the Home
+ *   Screen or the Dock — which is also exempt from the seven-day eviction.
+ *   A plain tab is not.
+ *
+ * `usage` and `quota` come from `estimate()` and are what a settings page
+ * shows beside the answer. Everything here is guarded, because the same
+ * module runs under Node in the tests and the mirror, where there is no
+ * `navigator.storage` and no data to lose.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.storageStatus = storageStatus;
+exports.requestPersistentStorage = requestPersistentStorage;
+function manager() {
+    if (typeof navigator === 'undefined')
+        return null;
+    const found = navigator.storage;
+    return found && typeof found.estimate === 'function' ? found : null;
+}
+/**
+ * Reads the answer without asking the question. This is what the engine
+ * publishes on every sync, so a widget can show "at risk" the moment a
+ * browser has not granted persistence — and null where there is no browser.
+ */
+async function storageStatus() {
+    const storage = manager();
+    if (!storage)
+        return null;
+    try {
+        const [persisted, estimate] = await Promise.all([
+            typeof storage.persisted === 'function' ? storage.persisted() : Promise.resolve(false),
+            storage.estimate(),
+        ]);
+        return { persisted, usage: estimate.usage ?? null, quota: estimate.quota ?? null };
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * Asks the browser to keep this origin's data, and reports where things
+ * stand afterwards.
+ *
+ * Call it from a place that makes sense to a person — after the first sync,
+ * or from a "keep my data on this device" button — rather than at page load,
+ * because Firefox turns it into a prompt. A platform with no Storage API
+ * answers `persisted: false`, which is the honest reading: nothing has
+ * promised anything.
+ */
+async function requestPersistentStorage() {
+    const storage = manager();
+    if (!storage || typeof storage.persist !== 'function')
+        return { persisted: false, usage: null, quota: null };
+    let persisted = false;
+    try {
+        persisted = await storage.persist();
+    }
+    catch {
+        persisted = false;
+    }
+    const status = await storageStatus();
+    return { persisted, usage: status?.usage ?? null, quota: status?.quota ?? null };
+}
 
 },
 "portal.js": function (exports, require, module) {
@@ -646,6 +753,176 @@ function mergeRecord(local, remote) {
     // to a record with one, everywhere, rather than compare as `undefined`.
     return (remote.origin ?? '') > (local.origin ?? '') ? remote : local;
 }
+
+},
+"stores/file.js": function (exports, require, module) {
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FileStore = void 0;
+// Held in variables so that neither a bundler nor TypeScript tries to
+// resolve them: the client compiles with no Node types, and a page that
+// imports the kit must not be asked to find `node:sqlite`.
+const NODE_SQLITE = 'node:sqlite';
+const NODE_FS = 'node:fs';
+const NODE_PATH = 'node:path';
+class FileStore {
+    opts;
+    name = 'file';
+    db = null;
+    statements = {};
+    constructor(opts) {
+        this.opts = opts;
+    }
+    async open() {
+        if (this.db)
+            return;
+        const [sqlite, fs, path] = await Promise.all([
+            Promise.resolve(`${NODE_SQLITE}`).then(s => __importStar(require(s))),
+            Promise.resolve(`${NODE_FS}`).then(s => __importStar(require(s))),
+            Promise.resolve(`${NODE_PATH}`).then(s => __importStar(require(s))),
+        ]);
+        fs.mkdirSync(path.dirname(this.opts.path), { recursive: true });
+        const db = new sqlite.DatabaseSync(this.opts.path);
+        db.exec('PRAGMA journal_mode = WAL');
+        db.exec('PRAGMA synchronous = FULL');
+        db.exec('PRAGMA busy_timeout = 5000');
+        db.exec(`
+      CREATE TABLE IF NOT EXISTS records (
+        id         TEXT PRIMARY KEY,
+        updated_at REAL NOT NULL,
+        body       TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS records_by_updated ON records (updated_at);
+      CREATE TABLE IF NOT EXISTS meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS blobs (
+        id   TEXT PRIMARY KEY,
+        mime TEXT NOT NULL,
+        data BLOB NOT NULL
+      );
+    `);
+        this.statements = {
+            all: db.prepare('SELECT body FROM records ORDER BY updated_at, id'),
+            get: db.prepare('SELECT body FROM records WHERE id = ?'),
+            put: db.prepare(`
+        INSERT INTO records (id, updated_at, body) VALUES (?, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET updated_at = excluded.updated_at, body = excluded.body
+      `),
+            changed: db.prepare('SELECT body FROM records WHERE updated_at > ? ORDER BY updated_at, id'),
+            metaGet: db.prepare('SELECT value FROM meta WHERE key = ?'),
+            metaSet: db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'),
+            blobGet: db.prepare('SELECT mime, data FROM blobs WHERE id = ?'),
+            blobHas: db.prepare('SELECT 1 AS present FROM blobs WHERE id = ?'),
+            blobPut: db.prepare('INSERT INTO blobs (id, mime, data) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET mime = excluded.mime, data = excluded.data'),
+        };
+        this.db = db;
+    }
+    handle() {
+        if (!this.db)
+            throw new Error('FileStore used before open()');
+        return this.db;
+    }
+    stmt(name) {
+        this.handle();
+        return this.statements[name];
+    }
+    async close() {
+        this.db?.close();
+        this.db = null;
+        this.statements = {};
+    }
+    async all() {
+        return this.stmt('all')
+            .all()
+            .map((row) => JSON.parse(row.body));
+    }
+    async get(id) {
+        const row = this.stmt('get').get(id);
+        return row ? JSON.parse(row.body) : null;
+    }
+    async put(records) {
+        if (records.length === 0)
+            return;
+        const db = this.handle();
+        // One transaction, so a batch of pulled records is all there or all not:
+        // half a sync on disk after a crash would be a store that disagrees with
+        // the cursor it banked.
+        db.exec('BEGIN IMMEDIATE');
+        try {
+            for (const record of records)
+                this.stmt('put').run(record.id, record.updatedAt, JSON.stringify(record));
+            db.exec('COMMIT');
+        }
+        catch (err) {
+            db.exec('ROLLBACK');
+            throw err;
+        }
+    }
+    async changedSince(ts) {
+        return this.stmt('changed')
+            .all(ts)
+            .map((row) => JSON.parse(row.body));
+    }
+    async meta(key) {
+        const row = this.stmt('metaGet').get(key);
+        return row ? JSON.parse(row.value) : null;
+    }
+    async setMeta(key, value) {
+        this.stmt('metaSet').run(key, JSON.stringify(value ?? null));
+    }
+    async clear() {
+        this.handle().exec('DELETE FROM records; DELETE FROM meta; DELETE FROM blobs;');
+    }
+    async putBlob(id, data) {
+        const bytes = new Uint8Array(await data.arrayBuffer());
+        this.stmt('blobPut').run(id, data.type || 'application/octet-stream', bytes);
+    }
+    async getBlob(id) {
+        const row = this.stmt('blobGet').get(id);
+        if (!row)
+            return null;
+        return new Blob([row.data], { type: row.mime });
+    }
+    async hasBlob(id) {
+        return this.stmt('blobHas').get(id) !== undefined;
+    }
+}
+exports.FileStore = FileStore;
 
 },
 "stores/idb.js": function (exports, require, module) {
@@ -940,6 +1217,9 @@ exports.MemoryStore = MemoryStore;
   };
   var cache = {};
   function resolve(from, spec) {
+    // Only relative ids live in this map. FileStore reaches for node:sqlite
+    // when it is opened, and in a page the honest answer is a sentence.
+    if (spec.charAt(0) !== '.') throw new Error('sync-kit: ' + spec + ' is not available in a page');
     var parts = (from.split('/').slice(0, -1)).concat(spec.split('/'));
     var out = [];
     for (var i = 0; i < parts.length; i++) {

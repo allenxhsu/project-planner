@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
+exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
 var engine_js_1 = require("./engine.js");
 Object.defineProperty(exports, "SyncEngine", { enumerable: true, get: function () { return engine_js_1.SyncEngine; } });
 Object.defineProperty(exports, "SYNC_CURSOR_KEYS", { enumerable: true, get: function () { return engine_js_1.SYNC_CURSOR_KEYS; } });
@@ -32,3 +32,8 @@ var local_js_1 = require("./stores/local.js");
 Object.defineProperty(exports, "LocalStore", { enumerable: true, get: function () { return local_js_1.LocalStore; } });
 var idb_js_1 = require("./stores/idb.js");
 Object.defineProperty(exports, "IndexedDbStore", { enumerable: true, get: function () { return idb_js_1.IndexedDbStore; } });
+var file_js_1 = require("./stores/file.js");
+Object.defineProperty(exports, "FileStore", { enumerable: true, get: function () { return file_js_1.FileStore; } });
+var persistence_js_1 = require("./persistence.js");
+Object.defineProperty(exports, "requestPersistentStorage", { enumerable: true, get: function () { return persistence_js_1.requestPersistentStorage; } });
+Object.defineProperty(exports, "storageStatus", { enumerable: true, get: function () { return persistence_js_1.storageStatus; } });

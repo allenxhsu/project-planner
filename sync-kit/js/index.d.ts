@@ -1,5 +1,5 @@
 export { SyncEngine, SYNC_CURSOR_KEYS } from './engine.js';
-export type { SyncResult, SyncStatus, SyncPhase } from './engine.js';
+export type { SyncResult, SyncStatus, SyncPhase, SyncEngineOptions } from './engine.js';
 export { HttpTransport, SyncUnauthorized } from './http.js';
 export type { HttpTransportOptions } from './http.js';
 export { portalApp, portalSession, portalRemote, portalSignInPath } from './portal.js';
@@ -18,3 +18,7 @@ export { MemoryStore } from './stores/memory.js';
 export { LocalStore } from './stores/local.js';
 export { IndexedDbStore } from './stores/idb.js';
 export type { IndexedDbStoreOptions } from './stores/idb.js';
+export { FileStore } from './stores/file.js';
+export type { FileStoreOptions } from './stores/file.js';
+export { requestPersistentStorage, storageStatus } from './persistence.js';
+export type { StorageStatus } from './persistence.js';

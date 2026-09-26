@@ -9,3 +9,5 @@ export { SyncedDocument } from './document.js';
 export { MemoryStore } from './stores/memory.js';
 export { LocalStore } from './stores/local.js';
 export { IndexedDbStore } from './stores/idb.js';
+export { FileStore } from './stores/file.js';
+export { requestPersistentStorage, storageStatus } from './persistence.js';

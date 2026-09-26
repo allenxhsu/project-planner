@@ -1,0 +1,583 @@
+/*
+ * The macOS skin: the same markup and classes as the HUD, drawn the way a
+ * standard Mac app draws them. Selected with data-sc="mac" on <html> plus
+ * data-race="light" or "dark" (js/theme.js resolves Auto from the system).
+ *
+ * The HUD grammar is switched off here: no chamfers, brackets, scanlines or
+ * glow; system fonts in place of Orbitron; rounded corners; soft shadows.
+ * Every colour still comes from the light and dark races in tokens.css, so
+ * adapters and app code that use tokens need nothing more.
+ */
+
+html[data-sc="mac"] {
+  --sc-radius: 6px;
+  --sc-chamfer: 0px;
+  --sc-chamfer-sm: 0px;
+  --sc-bracket: 0px;
+  --sc-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  --sc-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --sc-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Mixed into tinted text so it stays legible on the current appearance. */
+  --sc-ink-mix: white;
+  --sc-shadow-1: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08);
+  --sc-shadow-2: 0 0 0 1px rgb(0 0 0 / 0.08), 0 8px 24px rgb(0 0 0 / 0.14);
+  --sc-shadow-3: 0 0 0 1px rgb(0 0 0 / 0.1), 0 18px 48px rgb(0 0 0 / 0.22);
+}
+html[data-sc="mac"][data-race="light"] {
+  color-scheme: light;
+  --sc-ink-mix: black;
+}
+html[data-sc="mac"][data-race="dark"] {
+  --sc-shadow-1: 0 0 0 1px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.3);
+  --sc-shadow-2: 0 0 0 1px rgb(0 0 0 / 0.5), 0 8px 24px rgb(0 0 0 / 0.45);
+  --sc-shadow-3: 0 0 0 1px rgb(0 0 0 / 0.6), 0 18px 48px rgb(0 0 0 / 0.6);
+}
+
+/* ------------------------------------------------------------------ */
+/* Ground, effects, focus, type                                       */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] body {
+  background: var(--sc-void);
+  font-size: 13px;
+  letter-spacing: normal;
+}
+html[data-sc="mac"] body::after {
+  content: none; /* no scanlines */
+}
+html[data-sc="mac"] :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--sc-accent-rgb) / 0.4);
+}
+html[data-sc="mac"] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--sc-text) 22%, transparent);
+  background-clip: content-box;
+  border-radius: 8px;
+}
+html[data-sc="mac"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--sc-text) 40%, transparent);
+  background-clip: content-box;
+}
+html[data-sc="mac"] h1,
+html[data-sc="mac"] h2,
+html[data-sc="mac"] h3 {
+  letter-spacing: -0.01em;
+}
+
+/* Small labels: 11px semibold, sentence case, no tracking. */
+html[data-sc="mac"] .sc-label,
+html[data-sc="mac"] .sc-section-title,
+html[data-sc="mac"] .sc-field > span,
+html[data-sc="mac"] .sc-table th,
+html[data-sc="mac"] .sc-palette-group,
+html[data-sc="mac"] .sc-alert strong,
+html[data-sc="mac"] .sc-sync-phase,
+html[data-sc="mac"] .sc-portal-home {
+  font-family: var(--sc-font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+html[data-sc="mac"] .sc-section-title::after {
+  background: var(--sc-line);
+}
+html[data-sc="mac"] .sc-display,
+html[data-sc="mac"] .sc-header-title,
+html[data-sc="mac"] .sc-brand-name,
+html[data-sc="mac"] .sc-brand-sub,
+html[data-sc="mac"] .sc-tab,
+html[data-sc="mac"] .sc-boot,
+html[data-sc="mac"] .sc-resource,
+html[data-sc="mac"] .sc-kbd,
+html[data-sc="mac"] sc-sync-status {
+  font-family: var(--sc-font-ui);
+  letter-spacing: normal;
+  text-transform: none;
+}
+html[data-sc="mac"] .sc-header-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+html[data-sc="mac"] .sc-brand-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+html[data-sc="mac"] .sc-glow-text,
+html[data-sc="mac"] .sc-boot {
+  text-shadow: none;
+}
+html[data-sc="mac"] .sc-mono {
+  letter-spacing: normal;
+}
+
+/* ------------------------------------------------------------------ */
+/* Surfaces                                                           */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-panel {
+  background: var(--sc-panel);
+  border: 1px solid var(--sc-line);
+  border-radius: 10px;
+  box-shadow: var(--sc-shadow-1);
+}
+html[data-sc="mac"] .sc-panel--raised {
+  background: var(--sc-raised);
+}
+html[data-sc="mac"] .sc-panel--glass {
+  background: color-mix(in srgb, var(--sc-panel) 80%, transparent);
+}
+html[data-sc="mac"] .sc-panel--lit {
+  border-top-color: var(--sc-line);
+  box-shadow: var(--sc-shadow-1);
+}
+html[data-sc="mac"] .sc-card {
+  background: var(--sc-raised);
+  border-radius: 10px;
+  box-shadow: var(--sc-shadow-1);
+}
+html[data-sc="mac"] .sc-card:hover,
+html[data-sc="mac"] .sc-card.is-active {
+  border-color: var(--sc-line-strong);
+  box-shadow: var(--sc-shadow-2);
+}
+html[data-sc="mac"] .sc-brackets::after {
+  content: none;
+}
+html[data-sc="mac"] .sc-chamfer {
+  clip-path: none;
+  background: var(--sc-fill);
+  border: 1px solid var(--sc-edge);
+  border-radius: var(--sc-radius);
+}
+html[data-sc="mac"] .sc-chamfer::before {
+  content: none;
+}
+html[data-sc="mac"] .sc-hexgrid {
+  background: var(--sc-bg);
+}
+html[data-sc="mac"] .sc-starfield {
+  background: var(--sc-void);
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons and form controls                                          */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-button {
+  clip-path: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--sc-line-strong);
+  border-radius: var(--sc-radius);
+  background: var(--sc-raised);
+  color: var(--sc-text);
+  font-family: var(--sc-font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.05);
+}
+html[data-sc="mac"] .sc-button::before {
+  content: none;
+}
+html[data-sc="mac"] .sc-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sc-raised) 92%, var(--sc-text));
+  color: var(--sc-text);
+  filter: none;
+}
+html[data-sc="mac"] .sc-button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--sc-raised) 85%, var(--sc-text));
+}
+html[data-sc="mac"] .sc-button--primary {
+  background: var(--sc-accent);
+  border-color: var(--sc-accent);
+  color: #fff;
+  text-shadow: none;
+}
+html[data-sc="mac"] .sc-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sc-accent) 88%, black);
+  color: #fff;
+}
+html[data-sc="mac"] .sc-button--danger {
+  color: var(--sc-danger);
+}
+html[data-sc="mac"] .sc-button--danger:hover:not(:disabled) {
+  background: var(--sc-danger);
+  border-color: var(--sc-danger);
+  color: #fff;
+  filter: none;
+}
+html[data-sc="mac"] .sc-button--ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--sc-text-2);
+}
+html[data-sc="mac"] .sc-button--ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sc-text) 8%, transparent);
+  border-color: transparent;
+  color: var(--sc-text);
+}
+html[data-sc="mac"] .sc-button--icon {
+  width: 28px;
+  padding: 0;
+  font-size: 15px;
+}
+html[data-sc="mac"] .sc-button--sm {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+html[data-sc="mac"] .sc-button--sm.sc-button--icon {
+  width: 24px;
+  padding: 0;
+}
+
+html[data-sc="mac"] .sc-input,
+html[data-sc="mac"] .sc-select,
+html[data-sc="mac"] .sc-textarea {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--sc-line-strong);
+  border-radius: var(--sc-radius);
+  background: var(--sc-raised);
+  font-size: 13px;
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.04);
+}
+html[data-sc="mac"] .sc-input:focus,
+html[data-sc="mac"] .sc-select:focus,
+html[data-sc="mac"] .sc-textarea:focus {
+  border-color: var(--sc-accent);
+  box-shadow: 0 0 0 3px rgb(var(--sc-accent-rgb) / 0.35);
+}
+html[data-sc="mac"] .sc-check {
+  clip-path: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--sc-line-strong);
+  border-radius: 3px;
+  background: var(--sc-raised);
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.05);
+}
+html[data-sc="mac"] .sc-check:checked {
+  background: var(--sc-accent);
+  border-color: var(--sc-accent);
+}
+html[data-sc="mac"] .sc-check:checked::after {
+  width: 3px;
+  height: 7px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shell                                                              */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-sidebar {
+  background: var(--sc-panel);
+  border-right: 1px solid var(--sc-line);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-brand-mark {
+  clip-path: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--sc-app);
+  color: #fff;
+  font-family: var(--sc-font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--sc-shadow-1);
+  filter: none;
+}
+html[data-sc="mac"] .sc-nav {
+  padding: 4px 8px 12px;
+}
+html[data-sc="mac"] .sc-nav-item {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--sc-radius);
+  font-size: 13px;
+  font-weight: 400;
+}
+html[data-sc="mac"] .sc-nav-item:hover {
+  background: color-mix(in srgb, var(--sc-text) 6%, transparent);
+  color: var(--sc-text);
+}
+html[data-sc="mac"] .sc-nav-item.is-active {
+  background: color-mix(in srgb, var(--sc-text) 10%, transparent);
+  color: var(--sc-text);
+  font-weight: 500;
+}
+html[data-sc="mac"] .sc-nav-item.is-active::before {
+  content: none;
+}
+html[data-sc="mac"] .sc-nav-icon {
+  clip-path: none;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--tint);
+  font-size: 15px;
+}
+html[data-sc="mac"] .sc-nav-item.is-active .sc-nav-icon,
+html[data-sc="mac"] .sc-nav-item:hover .sc-nav-icon {
+  filter: none;
+}
+html[data-sc="mac"] .sc-header {
+  background: var(--sc-panel);
+  border-bottom: 1px solid var(--sc-line);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-sidebar-foot {
+  border-top-color: var(--sc-line);
+}
+html[data-sc="mac"] .sc-content {
+  background: var(--sc-bg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Lists, tabs, badges, readouts, tables                              */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-list-item {
+  min-height: 28px;
+  margin: 0 8px;
+  padding: 4px 8px;
+  border-left: 0;
+  border-radius: var(--sc-radius);
+}
+html[data-sc="mac"] .sc-list-item:hover {
+  background: color-mix(in srgb, var(--sc-text) 6%, transparent);
+}
+html[data-sc="mac"] .sc-list-item.is-active {
+  background: color-mix(in srgb, var(--sc-text) 10%, transparent);
+}
+/* Tabs become a segmented control. */
+html[data-sc="mac"] .sc-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--sc-text) 8%, transparent);
+}
+html[data-sc="mac"] .sc-tab {
+  padding: 3px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sc-text-2);
+}
+html[data-sc="mac"] .sc-tab:hover {
+  color: var(--sc-text);
+}
+html[data-sc="mac"] .sc-tab.is-active {
+  background: var(--sc-raised);
+  color: var(--sc-text);
+  box-shadow: var(--sc-shadow-1);
+}
+html[data-sc="mac"] .sc-tab.is-active::after {
+  content: none;
+}
+html[data-sc="mac"] .sc-badge {
+  clip-path: none;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 9px;
+  font-family: var(--sc-font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sc-text-2);
+  background: color-mix(in srgb, var(--sc-text) 10%, transparent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-badge--alert {
+  color: #fff;
+  background: var(--sc-accent-2);
+}
+html[data-sc="mac"] .sc-pill {
+  clip-path: none;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 10px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--tint) 70%, var(--sc-ink-mix));
+  background: color-mix(in srgb, var(--tint) 16%, transparent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-resource {
+  font-size: 13px;
+  font-weight: 500;
+}
+html[data-sc="mac"] .sc-resource-icon,
+html[data-sc="mac"] .sc-resource--alt .sc-resource-icon {
+  clip-path: circle(50%);
+  filter: none;
+}
+html[data-sc="mac"] .sc-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--sc-text) 10%, transparent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-meter > span {
+  border-radius: 3px;
+  background: var(--sc-accent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-table {
+  font-size: 13px;
+}
+html[data-sc="mac"] .sc-table th {
+  height: 28px;
+  color: var(--sc-text-2);
+  background: transparent;
+  border-bottom: 1px solid var(--sc-line);
+}
+html[data-sc="mac"] .sc-table td {
+  height: 36px;
+}
+html[data-sc="mac"] .sc-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--sc-text) 4%, transparent);
+}
+html[data-sc="mac"] .sc-table th + th,
+html[data-sc="mac"] .sc-table td + td {
+  border-left: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Overlays and feedback                                              */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-menu {
+  padding: 5px;
+  border: 1px solid var(--sc-line);
+  border-radius: 8px;
+  background: var(--sc-raised);
+  box-shadow: var(--sc-shadow-2);
+  backdrop-filter: none;
+}
+html[data-sc="mac"] .sc-menu-item {
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+html[data-sc="mac"] .sc-menu-item:hover {
+  background: var(--sc-accent);
+  color: #fff;
+}
+html[data-sc="mac"] .sc-menu-item.is-danger:hover {
+  background: var(--sc-danger);
+  color: #fff;
+}
+html[data-sc="mac"] .sc-overlay {
+  background: rgb(0 0 0 / 0.3);
+  backdrop-filter: none;
+}
+html[data-sc="mac"] .sc-dialog,
+html[data-sc="mac"] sc-dialog[open] {
+  border: 1px solid var(--sc-line);
+  border-radius: 12px;
+  background: var(--sc-panel);
+  box-shadow: var(--sc-shadow-3);
+  animation: sc-fade var(--sc-dur-base) var(--sc-ease);
+}
+html[data-sc="mac"] .sc-dialog-head,
+html[data-sc="mac"] .sc-dialog-foot {
+  background: transparent;
+}
+html[data-sc="mac"] .sc-alert {
+  border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tint) 10%, transparent);
+}
+html[data-sc="mac"] .sc-alert strong {
+  color: color-mix(in srgb, var(--tint) 75%, var(--sc-ink-mix));
+}
+html[data-sc="mac"] .sc-kbd {
+  border-bottom-width: 1px;
+  border-radius: 4px;
+  background: var(--sc-raised);
+}
+html[data-sc="mac"] .sc-toast-item {
+  border-left-width: 1px;
+  border-radius: 10px;
+  background-color: var(--sc-raised);
+  box-shadow: var(--sc-shadow-2);
+  animation: sc-fade var(--sc-dur-base) var(--sc-ease);
+}
+html[data-sc="mac"] .sc-toast-item.is-leaving {
+  animation: sc-fade var(--sc-dur-base) var(--sc-ease) reverse forwards;
+}
+
+/* ------------------------------------------------------------------ */
+/* Web components                                                     */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] .sc-palette-input {
+  background: transparent;
+  font-size: 15px;
+}
+html[data-sc="mac"] .sc-palette-item {
+  border-left: 0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+html[data-sc="mac"] .sc-palette-item.is-active {
+  background: var(--sc-accent);
+  color: #fff;
+}
+html[data-sc="mac"] .sc-palette-item.is-active .sc-palette-label mark {
+  color: #fff;
+}
+html[data-sc="mac"] .sc-palette-item.is-active .sc-kbd {
+  color: #fff;
+  background: rgb(255 255 255 / 0.2);
+  border-color: transparent;
+}
+html[data-sc="mac"] sc-sync-status {
+  font-size: 12px;
+}
+html[data-sc="mac"] .sc-sync-dot {
+  clip-path: circle(50%);
+  box-shadow: none;
+}
+html[data-sc="mac"] sc-portal-bar {
+  background: var(--sc-panel);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-portal-app {
+  clip-path: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-family: var(--sc-font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tint) 70%, var(--sc-ink-mix));
+  background: color-mix(in srgb, var(--tint) 18%, transparent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .sc-portal-app.is-active {
+  background: var(--tint);
+  color: #fff;
+  filter: none;
+}
+html[data-sc="mac"] .sc-portal-avatar {
+  clip-path: circle(50%);
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  font-family: var(--sc-font-ui);
+}

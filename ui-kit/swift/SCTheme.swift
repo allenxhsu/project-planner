@@ -2,17 +2,22 @@
 
 import SwiftUI
 
-/// Toolkit UI theme for SwiftUI apps. Mirrors css/tokens.css one-to-one.
+/// Toolkit UI theme for SwiftUI apps. Mirrors css/tokens.css one-to-one: the HUD palettes
+/// (steel, crystal, chitin) and the two macOS appearances (light, dark).
 public enum SCRace: String, CaseIterable, Identifiable {
     case steel
     case crystal
     case chitin
+    case light
+    case dark
     public var id: String { rawValue }
     public var label: String {
         switch self {
         case .steel: return "Steel"
         case .crystal: return "Crystal"
         case .chitin: return "Chitin"
+        case .light: return "Light"
+        case .dark: return "Dark"
         }
     }
     public var palette: SCPalette {
@@ -20,6 +25,8 @@ public enum SCRace: String, CaseIterable, Identifiable {
         case .steel: return .steel
         case .crystal: return .crystal
         case .chitin: return .chitin
+        case .light: return .light
+        case .dark: return .dark
         }
     }
 }
@@ -91,6 +98,40 @@ public struct SCPalette {
         accent2: Color(red: 1.000, green: 0.478, blue: 0.102),
         accentInk: Color(red: 0.090, green: 0.012, blue: 0.125),
         glow: Color(red: 0.753, green: 0.357, blue: 1.000)
+    )
+    public static let light = SCPalette(
+        void: Color(red: 0.925, green: 0.925, blue: 0.925),
+        bg: Color(red: 1.000, green: 1.000, blue: 1.000),
+        panel: Color(red: 0.953, green: 0.953, blue: 0.961),
+        panel2: Color(red: 0.918, green: 0.918, blue: 0.925),
+        raised: Color(red: 1.000, green: 1.000, blue: 1.000),
+        sunken: Color(red: 0.965, green: 0.965, blue: 0.973),
+        line: Color(red: 0.863, green: 0.863, blue: 0.878),
+        lineStrong: Color(red: 0.776, green: 0.776, blue: 0.796),
+        text: Color(red: 0.114, green: 0.114, blue: 0.122),
+        text2: Color(red: 0.431, green: 0.431, blue: 0.451),
+        text3: Color(red: 0.682, green: 0.682, blue: 0.698),
+        accent: Color(red: 0.000, green: 0.478, blue: 1.000),
+        accent2: Color(red: 1.000, green: 0.584, blue: 0.000),
+        accentInk: Color(red: 1.000, green: 1.000, blue: 1.000),
+        glow: Color(red: 0.000, green: 0.478, blue: 1.000)
+    )
+    public static let dark = SCPalette(
+        void: Color(red: 0.102, green: 0.102, blue: 0.102),
+        bg: Color(red: 0.118, green: 0.118, blue: 0.118),
+        panel: Color(red: 0.149, green: 0.149, blue: 0.149),
+        panel2: Color(red: 0.173, green: 0.173, blue: 0.180),
+        raised: Color(red: 0.227, green: 0.227, blue: 0.235),
+        sunken: Color(red: 0.086, green: 0.086, blue: 0.086),
+        line: Color(red: 0.227, green: 0.227, blue: 0.235),
+        lineStrong: Color(red: 0.329, green: 0.329, blue: 0.337),
+        text: Color(red: 0.925, green: 0.925, blue: 0.925),
+        text2: Color(red: 0.596, green: 0.596, blue: 0.616),
+        text3: Color(red: 0.431, green: 0.431, blue: 0.451),
+        accent: Color(red: 0.039, green: 0.518, blue: 1.000),
+        accent2: Color(red: 1.000, green: 0.624, blue: 0.039),
+        accentInk: Color(red: 1.000, green: 1.000, blue: 1.000),
+        glow: Color(red: 0.039, green: 0.518, blue: 1.000)
     )
 }
 

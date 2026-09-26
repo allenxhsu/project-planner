@@ -1,5 +1,6 @@
 import type { Store, SyncRecord } from './store.js';
 import type { Transport } from './protocol.js';
+import { type StorageStatus } from './persistence.js';
 /**
  * Both cursors, for whoever has to clear them.
  *
@@ -26,6 +27,26 @@ export interface SyncStatus {
     pushed: number;
     /** Which remote this is the status of. ui-kit shows it when an app has two. */
     label: string;
+    /**
+     * Whether the browser has promised to keep the store, read on every sync.
+     * Absent outside a browser. `<sc-sync-status>` shows "at risk" while
+     * `persisted` is false; see `persistence.ts` for who grants it and when.
+     */
+    storage?: StorageStatus;
+}
+export interface SyncEngineOptions {
+    /**
+     * Push every record the store reports as changed, whatever its `origin`.
+     *
+     * The default engine sends only what this device wrote, because a record it
+     * merged in from the remote would go straight back as noise. A mirror is
+     * the case where that is wrong: it fronts a *server* whose records were all
+     * written by other devices, and forwarding them as they are is its whole
+     * job — the remote's merge rule rejects the ones it already has, which is
+     * harmless. It needs a store with `changes()`, and refuses one without, for
+     * the reason on that method.
+     */
+    mirror?: boolean;
 }
 export interface SyncResult<R extends SyncRecord = SyncRecord> {
     pulled: number;
@@ -48,9 +69,10 @@ export declare class SyncEngine<R extends SyncRecord = SyncRecord> {
     private readonly store;
     private readonly transport;
     private readonly deviceId;
+    private readonly options;
     private running;
     private current;
-    constructor(store: Store<R>, transport: Transport<R>, deviceId: string);
+    constructor(store: Store<R>, transport: Transport<R>, deviceId: string, options?: SyncEngineOptions);
     get label(): string;
     /** The last thing published on `sync-kit:status`, for a widget mounting late. */
     get status(): SyncStatus;

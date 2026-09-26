@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SyncEngine = exports.SYNC_CURSOR_KEYS = void 0;
 const store_js_1 = require("./store.js");
 const events_js_1 = require("./events.js");
+const persistence_js_1 = require("./persistence.js");
 const CURSOR_PULL = 'sync.cursor.pull';
 const CURSOR_PUSH = 'sync.cursor.push';
 /**
@@ -31,12 +32,17 @@ class SyncEngine {
     store;
     transport;
     deviceId;
+    options;
     running = false;
     current;
-    constructor(store, transport, deviceId) {
+    constructor(store, transport, deviceId, options = {}) {
         this.store = store;
         this.transport = transport;
         this.deviceId = deviceId;
+        this.options = options;
+        if (options.mirror && typeof store.changes !== 'function') {
+            throw new Error('SyncEngine mirror mode needs a store that implements changes()');
+        }
         // Assembled here rather than in a field initialiser: a field initialiser
         // runs before the constructor body under ES2022 class fields, so the
         // transport would not be there to ask for its label yet.
@@ -79,12 +85,16 @@ class SyncEngine {
         try {
             const applied = await this.pull();
             const pushed = await this.push();
+            // Read after the sync rather than before: a first sync is the moment a
+            // store goes from empty to worth keeping, and the answer can change.
+            const storage = await (0, persistence_js_1.storageStatus)();
             this.publish({
                 phase: 'idle',
                 lastSyncAt: Date.now(),
                 lastError: null,
                 pulled: applied.length,
                 pushed,
+                ...(storage ? { storage } : {}),
             });
             return { pulled: applied.length, pushed, applied };
         }
@@ -124,6 +134,16 @@ class SyncEngine {
     }
     async push() {
         const since = (await this.store.meta(CURSOR_PUSH)) ?? 0;
+        // A store that numbers its own writes hands over the cursor to bank; the
+        // engine never looks inside it. Banked only after the push succeeded, so
+        // a failed push is retried from the same place next time.
+        if (this.store.changes) {
+            const { records, cursor } = await this.store.changes(since);
+            const mine = this.options.mirror ? records : records.filter((r) => r.origin === this.deviceId);
+            const accepted = mine.length === 0 ? 0 : (await this.transport.push({ records: mine, deviceId: this.deviceId })).accepted;
+            await this.store.setMeta(CURSOR_PUSH, cursor);
+            return accepted;
+        }
         const outgoing = await this.store.changedSince(since);
         // Records we just merged in from the remote carry a foreign `origin`;
         // sending them straight back is pure noise.

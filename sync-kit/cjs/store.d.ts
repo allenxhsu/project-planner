@@ -42,6 +42,22 @@ export interface Store<R extends SyncRecord = SyncRecord> {
      * sent, so including it would re-send that record on every idle pass.
      */
     changedSince(ts: number): Promise<R[]>;
+    /**
+     * Optional. A store that numbers its own writes can answer "what changed
+     * since C" with its own cursor instead of a clock, and hand back the cursor
+     * to bank once the push succeeds. When present the engine prefers it to
+     * `changedSince` for the outgoing half of a sync; the cursor is opaque to
+     * the engine and means nothing to a clock.
+     *
+     * This exists for a store that fronts a *server* — the mirror in `server/`
+     * — where the records to send were written by other devices, with other
+     * clocks, and a high-water mark of their `updatedAt` values would park the
+     * push cursor in the future the moment one of those clocks ran fast.
+     */
+    changes?(cursor: number): Promise<{
+        records: R[];
+        cursor: number;
+    }>;
     /** Small key/value space for the sync cursors and app preferences. */
     meta<T>(key: string): Promise<T | null>;
     setMeta<T>(key: string, value: T): Promise<void>;

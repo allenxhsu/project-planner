@@ -158,6 +158,88 @@
   --sc-glow-rgb: 192 91 255;
 }
 
+[data-race="light"] {
+  --sc-void: #ececec;
+  --sc-void-rgb: 236 236 236;
+  --sc-bg: #ffffff;
+  --sc-bg-rgb: 255 255 255;
+  --sc-panel: #f3f3f5;
+  --sc-panel-rgb: 243 243 245;
+  --sc-panel-2: #eaeaec;
+  --sc-panel-2-rgb: 234 234 236;
+  --sc-raised: #ffffff;
+  --sc-raised-rgb: 255 255 255;
+  --sc-sunken: #f6f6f8;
+  --sc-sunken-rgb: 246 246 248;
+  --sc-line: #dcdce0;
+  --sc-line-rgb: 220 220 224;
+  --sc-line-strong: #c6c6cb;
+  --sc-line-strong-rgb: 198 198 203;
+  --sc-text: #1d1d1f;
+  --sc-text-rgb: 29 29 31;
+  --sc-text-2: #6e6e73;
+  --sc-text-2-rgb: 110 110 115;
+  --sc-text-3: #aeaeb2;
+  --sc-text-3-rgb: 174 174 178;
+  --sc-accent: #007aff;
+  --sc-accent-rgb: 0 122 255;
+  --sc-accent-2: #ff9500;
+  --sc-accent-2-rgb: 255 149 0;
+  --sc-accent-ink: #ffffff;
+  --sc-accent-ink-rgb: 255 255 255;
+  --sc-glow: #007aff;
+  --sc-glow-rgb: 0 122 255;
+  --sc-danger: #ff3b30;
+  --sc-danger-rgb: 255 59 48;
+  --sc-warning: #ff9500;
+  --sc-warning-rgb: 255 149 0;
+  --sc-success: #34c759;
+  --sc-success-rgb: 52 199 89;
+  --sc-info: #30b0c7;
+  --sc-info-rgb: 48 176 199;
+}
+
+[data-race="dark"] {
+  --sc-void: #1a1a1a;
+  --sc-void-rgb: 26 26 26;
+  --sc-bg: #1e1e1e;
+  --sc-bg-rgb: 30 30 30;
+  --sc-panel: #262626;
+  --sc-panel-rgb: 38 38 38;
+  --sc-panel-2: #2c2c2e;
+  --sc-panel-2-rgb: 44 44 46;
+  --sc-raised: #3a3a3c;
+  --sc-raised-rgb: 58 58 60;
+  --sc-sunken: #161616;
+  --sc-sunken-rgb: 22 22 22;
+  --sc-line: #3a3a3c;
+  --sc-line-rgb: 58 58 60;
+  --sc-line-strong: #545456;
+  --sc-line-strong-rgb: 84 84 86;
+  --sc-text: #ececec;
+  --sc-text-rgb: 236 236 236;
+  --sc-text-2: #98989d;
+  --sc-text-2-rgb: 152 152 157;
+  --sc-text-3: #6e6e73;
+  --sc-text-3-rgb: 110 110 115;
+  --sc-accent: #0a84ff;
+  --sc-accent-rgb: 10 132 255;
+  --sc-accent-2: #ff9f0a;
+  --sc-accent-2-rgb: 255 159 10;
+  --sc-accent-ink: #ffffff;
+  --sc-accent-ink-rgb: 255 255 255;
+  --sc-glow: #0a84ff;
+  --sc-glow-rgb: 10 132 255;
+  --sc-danger: #ff453a;
+  --sc-danger-rgb: 255 69 58;
+  --sc-warning: #ff9f0a;
+  --sc-warning-rgb: 255 159 10;
+  --sc-success: #30d158;
+  --sc-success-rgb: 48 209 88;
+  --sc-info: #40c8e0;
+  --sc-info-rgb: 64 200 224;
+}
+
 [data-app="heptabase"] {
   --sc-app: var(--sc-app-heptabase);
   --sc-app-rgb: var(--sc-app-heptabase-rgb);
