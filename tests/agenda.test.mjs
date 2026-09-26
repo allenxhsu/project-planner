@@ -350,3 +350,15 @@ test('ASAP cuts in front of other projects', () => {
   assert.equal(first.dateIso, MON);
   assert.ok(both.blocks.some((x) => x.taskId === early.id), 'the other project still gets its time');
 });
+
+test('a task fixed at a time shows there even when it is not auto-scheduled', () => {
+  const { p, ann } = week();
+  const t = job(p, ann, 'Fixed only', { work: 2 });
+  setTaskField(p, t.id, 'calendarShow', false);
+  setPin(p, t.id, { day: TUE, start: 14 * 60, minutes: 60 });
+  const out = lay(p);
+  const mine = out.blocks.filter((b) => b.taskId === t.id);
+  assert.equal(mine.length, 1, 'only the fixed block — the rest is not laid');
+  assert.equal(mine[0].pinned, true);
+  assert.equal(mine[0].dateIso, TUE);
+});

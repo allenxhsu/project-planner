@@ -1211,3 +1211,6 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .ps-auto-toggle:hover { opacity: 1; }
 .ps-task-more { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 4px; visibility: hidden; }
 .ps-task:hover .ps-task-more { visibility: visible; }
+.cal-lock { margin-left: auto; border: 0; background: none; color: inherit; opacity: .8; cursor: pointer; padding: 0 2px; line-height: 0; }
+.cal-lock:hover { opacity: 1; color: var(--sc-text-1); }
+.cal-lock .ic svg { width: 12px; height: 12px; }

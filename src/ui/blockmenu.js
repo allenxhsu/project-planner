@@ -198,6 +198,9 @@ const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h$
  * its next block on the calendar stands in for "this block", or today when
  * the calendar has none; fixing a time is left to the calendar itself.
  */
+/** A fixed block's lock, clicked: the task goes back to being placed by the calendar there and then. */
+export function unlockBlock(b) { return run(b, (t) => act.unpinBlock(t.id, b.pinIndex))(); }
+
 export async function taskMenu(planId, taskId, x, y) {
   const { currentLayout } = await import('./calendar.js');
   let next = null;

@@ -18,6 +18,7 @@ const PATHS = {
   network: '<rect x="1.8" y="6.2" width="4" height="3.6" rx=".8"/><rect x="10.2" y="2.4" width="4" height="3.6" rx=".8"/><rect x="10.2" y="10" width="4" height="3.6" rx=".8"/><path d="M5.8 8h2.2m0-3.8v7.6M8 4.2h2.2M8 11.8h2.2"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/>',
   search: '<circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2 13.8 13.8"/>',
+  lock: '<rect x="3.5" y="7" width="9" height="7" rx="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>',
   star: '<path d="M8 2.2l1.7 3.6 3.9.5-2.9 2.7.8 3.9L8 11l-3.5 1.9.8-3.9-2.9-2.7 3.9-.5Z"/>',
 };
 

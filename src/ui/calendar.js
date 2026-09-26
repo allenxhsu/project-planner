@@ -16,7 +16,8 @@ import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, forma
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu, showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
-import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu } from './blockmenu.js';
+import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock } from './blockmenu.js';
+import { icon } from './icons.js';
 
 /**
  * How much of the calendar is on screen.
@@ -681,9 +682,13 @@ export function renderCalendar(root) {
         el('div', { class: 'cal-block-time sc-mono' },
           b.worked ? el('span', { class: 'cal-pin', title: 'Worked — logged time', text: '✓' })
             : b.live ? el('span', { class: 'cal-pin', title: 'Running now', text: '▶' })
-            : b.pinned ? el('span', { class: 'cal-pin', title: 'Pinned', text: '⌖' }) : null,
+            : null,
           oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
-          person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
+          person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null,
+          // Fixed at this time: a lock, and clicking it lets the calendar place the task again.
+          b.pinned ? el('button', { class: 'cal-lock', title: 'This task is locked at this time — click to release it',
+            onpointerdown: (e) => e.stopPropagation(),
+            onclick: (e) => { e.stopPropagation(); void unlockBlock(b); } }, icon('lock')) : null),
         el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),
         (planCount > 1 && !who) || foreign || tight ? el('div', { class: 'cal-block-plan', text: b.planName }) : null,
         oneDay ? el('div', { class: 'cal-block-facts sc-mono sc-faint' },

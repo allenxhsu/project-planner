@@ -310,7 +310,10 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       .map((t, i) => ({ t, i, info: schedule.tasks[t.id], project }))
       // Only the phase each plan says it is in. Work from a phase that has not
       // started yet is real, but it is not this week's business.
-      .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !t.archived && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
+      // Auto-scheduled work of the phase the plan is in — and any task fixed at
+      // a time by hand, auto-scheduled or not: its blocks are where they are.
+      .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !t.archived && !isSummary(pr, i)
+        && ((agendaOf(pr, t).show && inCurrentPhase(pr, t.id)) || pinsOf(t).length > 0)))
     .map((c) => ({ ...c, deadline: c.t.deadline ? toDay(c.t.deadline) : Infinity }))
     // Earliest deadline first. For work that can be cut up and done in any
     // order — which is what blocks make of it — on one person's time, that
@@ -422,6 +425,8 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
 
   // ---- then everything else, around them.
   for (const { t, info, project, deadline } of candidates) {
+    // A task that is not auto-scheduled keeps only its fixed blocks.
+    if (!agendaOf(project, t).show || !inCurrentPhase(project, t.id)) { if (!byTask.has(t.id)) byTask.set(t.id, []); continue; }
     const a = agendaOf(project, t);
     // The longest window is what decides whether a block can fit at all.
     const windowMinutes = Math.max(0, ...a.windows.map((w) => w.to - w.from));
