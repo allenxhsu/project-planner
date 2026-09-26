@@ -10,7 +10,13 @@ export const fromDay = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 /** 0 = Sunday … 6 = Saturday. */
 export const weekday = (n) => (((n + 4) % 7) + 7) % 7;
 export const isoValid = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !Number.isNaN(toDay(s));
-export const today = () => fromDay(Math.floor(Date.now() / DAY_MS) + Math.floor(-new Date().getTimezoneOffset() / 1440));
+/**
+ * The local calendar day of a moment, 'YYYY-MM-DD' — the date on the wall
+ * where the computer is, not in Greenwich. (Adding a rounded day-offset to the
+ * UTC day was a day early everywhere west of Greenwich.)
+ */
+export const localDate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const today = () => localDate(new Date());
 
 export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

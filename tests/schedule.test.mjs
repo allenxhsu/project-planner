@@ -1110,3 +1110,11 @@ test('a schedule can hold several ranges a day, and work stays inside them', asy
   const back = parse(serialize(p)).project;
   assert.equal(slotsOf(back.timeBlocks.find((b) => b.id === split.id)).length, 10);
 });
+
+test('today is the local date, east or west of Greenwich', async () => {
+  const { today, localDate } = await import('../src/model/calendar.js');
+  const d = new Date();
+  assert.equal(today(), `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  // A Saturday morning in California is Saturday, not Friday.
+  assert.equal(localDate(new Date(2026, 8, 26, 10, 45)), '2026-09-26');
+});

@@ -1255,7 +1255,7 @@ export const isLiveWork = (project) => !project?.template && !project?.archived;
  * project is over but its record still matters.
  */
 export async function setPlanArchived(id, on) {
-  const stamp = on ? new Date().toISOString().slice(0, 10) : null;
+  const stamp = on ? today() : null;
   return patchPlan(id, (project) => {
     project.archived = !!on;
     project.archivedAt = stamp;

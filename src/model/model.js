@@ -6,7 +6,7 @@
 // Everything here is DOM-free so tests and a future CLI can use it.
 
 import { uid } from '../util.js';
-import { DEFAULT_CALENDAR, parseDuration, isoValid, toDay, fromDay, makeCalendar } from './calendar.js';
+import { DEFAULT_CALENDAR, parseDuration, isoValid, toDay, fromDay, makeCalendar, today as localToday } from './calendar.js';
 import { BLOCK_CHOICES, parseTime } from './agenda.js';
 
 export const FORMAT = 'project-planner';
@@ -78,7 +78,7 @@ export function createProject(name = 'Untitled project', start = null) {
     // The id travels with the plan and never changes: it is what sync uses to
     // know that this plan and the one on another device are the same plan.
     id: uid('plan'),
-    format: FORMAT, version: VERSION, name, start: start || fromDay(Math.floor(Date.now() / 86400000)), statusDate: null,
+    format: FORMAT, version: VERSION, name, start: start || localToday(), statusDate: null,
     currency: '$', calendar: { ...DEFAULT_CALENDAR, holidays: [] },
     stages: DEFAULT_STAGES.map((st) => ({ ...st })),
     // The phases this plan runs through, named by hand. Empty: no gating.

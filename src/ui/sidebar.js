@@ -291,7 +291,7 @@ export function planMenu(p, siblings = []) {
       await sync.patchPlan(p.id, (project) => {
         project.status = value;
         project.archived = value === 'Completed' || value === 'Cancelled';
-        project.archivedAt = project.archived ? new Date().toISOString().slice(0, 10) : null;
+        project.archivedAt = project.archived ? today() : null;
         if (value === 'Cancelled') for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
       }, value === 'Completed' ? 'Complete the project' : 'Cancel the project');
       await refreshSidebar();

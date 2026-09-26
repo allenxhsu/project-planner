@@ -10,7 +10,7 @@ import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
 import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, setPlanPinned, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
-import { formatDate } from '../model/calendar.js';
+import { formatDate, localDate } from '../model/calendar.js';
 import { showMenu, confirmDialog, promptText } from './dialog.js';
 import { newProjectWizard } from './newproject.js';
 import { refreshSidebar } from './sidebar.js';
@@ -96,7 +96,7 @@ function card(p) {
   const isOpen = p.id === store.project.id;
   const menu = (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); cardMenu(p, r.left - 170, r.bottom + 4); };
 
-  return el('article', { class: `plan-card sc-card sc-brackets sc-brackets--hover${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`, onclick: open, title: `Last saved ${formatDate(new Date(p.updatedAt).toISOString().slice(0, 10), 'long')} on ${p.origin || 'this device'}` },
+  return el('article', { class: `plan-card sc-card sc-brackets sc-brackets--hover${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`, onclick: open, title: `Last saved ${formatDate(localDate(new Date(p.updatedAt)), 'long')} on ${p.origin || 'this device'}` },
     el('div', { class: 'plan-head' },
       el('h3', { class: 'plan-name', text: p.name }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋮', title: 'Actions', onclick: menu })),

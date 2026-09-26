@@ -23,7 +23,7 @@ import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, sa
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
-import { formatDate, fromDay } from '../model/calendar.js';
+import { formatDate, fromDay, today } from '../model/calendar.js';
 import { hosted, post } from '../host.js';
 
 // ---------------------------------------------------------------- file commands
@@ -181,7 +181,7 @@ async function exportWeekIcs() {
  */
 async function exportEverything() {
   const doc = await exportStore();
-  downloadText(JSON.stringify(doc, null, 2), `project-planner-${new Date().toISOString().slice(0, 10)}.store.json`, 'application/json');
+  downloadText(JSON.stringify(doc, null, 2), `project-planner-${today()}.store.json`, 'application/json');
   act.hint(`Exported ${doc.counts.total} records (${doc.counts.live} live, ${doc.counts.deleted} deleted).`);
 }
 
