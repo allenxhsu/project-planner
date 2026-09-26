@@ -77,6 +77,27 @@ export function deviceId() {
 export const getSettings = () => ({ ...settings });
 export const syncStatus = () => (engine ? engine.status : lastStatus);
 export const syncConfigured = () => !!(portal || (settings.url && settings.enabled));
+
+/**
+ * The sync server's origin — the Portal this page came from, or the server
+ * the Mac app was paired with — for what only it can do: read calendars.
+ */
+export function serverOrigin() {
+  const base = portal ? portal.baseUrl : (settings.url && settings.enabled ? settings.url : '');
+  if (!base) return null;
+  try { return new URL(base).origin; } catch { return null; }
+}
+
+/** A request to the sync server, with the credential this page syncs with. */
+export async function serverFetch(path, init = {}) {
+  const origin = serverOrigin();
+  if (!origin) throw new Error('Calendars are read through your sync server: turn sync on (Settings ▸ Sync, or pair this Mac) first.');
+  return fetch(`${origin}${path}`, {
+    ...init,
+    credentials: portal ? 'include' : 'omit',
+    headers: { ...(init.headers || {}), ...(settings.token && !portal ? { Authorization: `Bearer ${settings.token}` } : {}) },
+  });
+}
 /** True when the Portal is providing the server, so Settings has nothing to ask for. */
 export const inPortal = () => !!portal;
 

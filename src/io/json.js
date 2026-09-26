@@ -200,10 +200,12 @@ export function parse(text) {
   // Connected calendars, and the events last read from them.
   if (Array.isArray(raw.feeds)) {
     p.feeds = raw.feeds
-      .filter((f) => f && typeof f === 'object' && typeof f.url === 'string' && /^https?:\/\//i.test(f.url))
+      .filter((f) => f && typeof f === 'object' && ((typeof f.url === 'string' && /^https?:\/\//i.test(f.url))
+        || (f.google && typeof f.google.account === 'string' && f.google.account && typeof f.google.calendarId === 'string' && f.google.calendarId)))
       .map((f) => ({
         id: typeof f.id === 'string' && f.id ? f.id : `feed_${Math.random().toString(36).slice(2, 10)}`,
-        name: String(f.name || 'My calendar'), url: f.url,
+        name: String(f.name || 'My calendar'), url: typeof f.url === 'string' ? f.url : '',
+        ...(f.google?.account && f.google?.calendarId ? { google: { account: String(f.google.account).toLowerCase(), calendarId: String(f.google.calendarId) } } : {}),
         provider: ['google', 'outlook', 'ics'].includes(f.provider) ? f.provider : 'ics',
         resourceId: resIds.has(f.resourceId) ? f.resourceId : null,
         fetchedAt: Number.isFinite(+f.fetchedAt) ? +f.fetchedAt : null,

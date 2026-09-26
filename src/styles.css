@@ -1305,3 +1305,14 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .fact-project { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .fact-project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-sheet.has-project .fact-project-open { border-color: var(--sc-accent); }
+
+/* Google calendars, by signing in (ui/gcal.js). */
+.gcal { display: flex; flex-direction: column; gap: 12px; min-width: min(560px, 90vw); max-height: 60vh; overflow-y: auto; }
+.gcal-account { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--sc-line); border-radius: 8px; }
+.gcal-account-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.gcal-cal { display: flex; align-items: center; gap: 8px; padding: 3px 2px; cursor: pointer; }
+.gcal-cal.is-added { opacity: .7; cursor: default; }
+.gcal-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.gcal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gcal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gcal-whose { display: flex; align-items: center; gap: 10px; margin-top: 10px; }

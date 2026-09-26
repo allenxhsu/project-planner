@@ -266,7 +266,7 @@ export function renderCalendarSide(root) {
       el('button', { class: 'side-icon', text: '›', title: 'Month after', onclick: () => { miniMonth = addMonths(month, 1); set({}); } })),
     grid,
     el('div', { class: 'cals-head' }, el('strong', { text: 'Calendars' }),
-      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '＋ Add calendar', onclick: () => act.connectCalendarDialog() })),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '＋ Add calendar', onclick: () => { void import('./gcal.js').then((m) => m.googleCalendarsDialog()); } })),
     el('input', { class: 'sc-input cals-search', type: 'search', placeholder: 'Search teammates', oninput: (e) => { peopleQ.value = e.target.value; drawPeople(); } }),
     section('People', everyone.length, peopleList),
     section('My calendars', feedsList.length, el('div', { class: 'cals-list' },
@@ -514,6 +514,7 @@ async function openOther(planId, taskId) {
  * then stays where it was put across redraws, until the days on screen change.
  */
 const dayScroll = { key: null, top: 0 };
+let lastStaleCheck = 0;
 
 export function renderCalendar(root) {
   const { project, schedule, ui } = store;
@@ -523,6 +524,9 @@ export function renderCalendar(root) {
   root.append(pane);
 
   if (!loadedPlans) void reloadCalendarPlans();
+  // Connected calendars are read again as the calendar is looked at — at most
+  // every five minutes, and only the ones older than half an hour.
+  if (Date.now() - lastStaleCheck > 5 * 60_000) { lastStaleCheck = Date.now(); void act.refreshStaleCalendars(); }
   // The open plan comes from the store, the rest from the shelf: one calendar
   // over everything, because the hours of a week are shared by all of it.
   // The open plan comes from the store and must not also arrive from the shelf.

@@ -463,22 +463,25 @@ export function formatAssignments(p, task) {
 
 // ---------------------------------------------------------------- calendars
 //
-// A connected calendar: Google's or Outlook's private ICS address. The events
-// are kept with the plan, so they travel with it and every device sees the
-// same busy hours without each one needing the address.
+// A connected calendar: one of a signed-in Google account's calendars (read
+// through the sync server, `google: { account, calendarId }`), or an ICS
+// address — Outlook's, Hotmail's, anyone's. The events are kept with the plan,
+// so they travel with it and every device sees the same busy hours.
 
 export const PROVIDERS = { google: 'Google Calendar', outlook: 'Outlook', ics: 'Other (iCalendar)' };
 
-export function addFeed(p, { name = 'My calendar', url = '', provider = 'ics', resourceId = null } = {}) {
+export function addFeed(p, { name = 'My calendar', url = '', provider = 'ics', resourceId = null, google = null } = {}) {
   if (!Array.isArray(p.feeds)) p.feeds = [];
-  if (!/^https?:\/\//i.test(String(url).trim()) && !/^webcal:\/\//i.test(String(url).trim())) {
+  const signedIn = google && typeof google.account === 'string' && google.account && typeof google.calendarId === 'string' && google.calendarId;
+  if (!signedIn && !/^https?:\/\//i.test(String(url).trim()) && !/^webcal:\/\//i.test(String(url).trim())) {
     throw new Error('A calendar address starts with https:// (Google and Outlook both give you one).');
   }
   if (resourceId && !getResource(p, resourceId)) throw new Error('No such resource.');
   const feed = {
     id: uid('feed'), name: String(name).trim() || 'My calendar',
-    url: String(url).trim().replace(/^webcal:/i, 'https:'),
-    provider: PROVIDERS[provider] ? provider : 'ics',
+    url: signedIn ? '' : String(url).trim().replace(/^webcal:/i, 'https:'),
+    provider: signedIn ? 'google' : (PROVIDERS[provider] ? provider : 'ics'),
+    ...(signedIn ? { google: { account: google.account.toLowerCase(), calendarId: google.calendarId } } : {}),
     resourceId: resourceId || null, fetchedAt: null, events: [],
     bufferMinutes: DEFAULT_BUFFER_MINUTES,
   };

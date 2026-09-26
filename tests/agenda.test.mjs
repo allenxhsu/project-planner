@@ -401,3 +401,13 @@ test('a chunk is never longer than its task', () => {
   setTaskField(p, t.id, 'blockHours', 2);
   assert.equal(t.calendar.blockHours, 2);
 });
+
+test('a signed-in Google calendar is kept by account and calendar, with no link, through a save', () => {
+  const { p } = week();
+  const f = addFeed(p, { name: 'Work', provider: 'google', google: { account: 'Allen.C.Xu@gmail.com', calendarId: 'primary' } });
+  assert.equal(f.url, '');
+  assert.deepEqual(f.google, { account: 'allen.c.xu@gmail.com', calendarId: 'primary' });
+  assert.throws(() => addFeed(p, { name: 'Nothing' }), /https/, 'without an account it still needs an address');
+  const back = parse(serialize(p)).project;
+  assert.deepEqual(back.feeds.map((x) => [x.name, x.google?.calendarId, x.provider]), [['Work', 'primary', 'google']]);
+});

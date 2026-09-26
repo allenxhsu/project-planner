@@ -55,6 +55,14 @@ final class ModelDocument: WebDocument {
 /// the page cannot write itself, because only MPXJ can.
 final class PlannerWindowController: EditorWindowController {
     override func handleMessage(type: String, body: [String: Any]) -> Bool {
+        // Google's sign-in for calendars, in the default browser: Google does
+        // not allow it inside an app's web view. Only https addresses.
+        if type == "openURL" {
+            if let text = body["url"] as? String, let url = URL(string: text), url.scheme == "https" {
+                NSWorkspace.shared.open(url)
+            }
+            return true
+        }
         guard type == "convertExport" else { return false }
         // Our Project XML → MPX / XER / PMXML / Planner through MPXJ, then a save panel.
         if let name = body["name"] as? String, let xml = body["xml"] as? String {

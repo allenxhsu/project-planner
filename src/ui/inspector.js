@@ -266,7 +266,7 @@ function renderProject(root, { dialog = false, only = null } = {}) {
   // ---- connected calendars: real meetings, so work goes around them
   if (want('calendars')) {
   root.append(el('div', { class: 'sc-section-title', text: 'Connected calendars' }));
-  root.append(el('p', { class: 'sc-muted small', text: 'Google and Outlook each hand out a private iCalendar address for a calendar. Paste one here and its meetings become busy hours the calendar schedules around.' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'Meetings on these calendars become busy hours the calendar schedules around. Google: sign in once and tick calendars. Outlook, Hotmail and others: paste the calendar’s published iCalendar link. Both are read through your sync server, and read again as the calendar opens.' }));
   const list = el('div', { class: 'link-list' });
   for (const f of feeds(project)) {
     list.append(el('div', { class: 'tb-card sc-card' },
@@ -276,9 +276,11 @@ function renderProject(root, { dialog = false, only = null } = {}) {
         select(String(bufferOf(f)), BUFFER_CHOICES.map((m) => ({ value: String(m), label: m === 0 ? 'No travel time' : `${m} min travel` })), (v) => act.editCalendar(f.id, 'bufferMinutes', +v)),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↻', title: 'Read it again', onclick: () => act.refreshCalendar(f.id) }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Disconnect', onclick: () => act.disconnectCalendar(f.id) })),
-      el('div', { class: 'sc-faint small', text: `${PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.events.some((e) => e.location) ? `, ${f.events.filter((e) => e.location).length} with a place to get to` : ''}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
+      el('div', { class: 'sc-faint small', text: `${f.google ? `Google · ${f.google.account}` : PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.events.some((e) => e.location) ? `, ${f.events.filter((e) => e.location).length} with a place to get to` : ''}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
   }
-  list.append(el('button', { class: 'sc-button sc-button--sm', text: '+ Connect a calendar…', onclick: () => act.connectCalendarDialog() }));
+  list.append(el('div', { class: 'tb-row' },
+    el('button', { class: 'sc-button sc-button--sm sc-button--primary', text: '＋ Google calendars…', title: 'Sign in with Google and tick calendars', onclick: () => { void import('./gcal.js').then((m) => m.googleCalendarsDialog()); } }),
+    el('button', { class: 'sc-button sc-button--sm', text: '+ Paste a calendar link…', title: 'Outlook, Hotmail or any published iCalendar address', onclick: () => act.connectCalendarDialog() })));
   root.append(list);
   }
 

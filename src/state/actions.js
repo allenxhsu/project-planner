@@ -296,25 +296,47 @@ export function unassignResource(taskId, resourceId) { tryCommit('Unassign', (p)
 
 // ---------------------------------------------------------------- calendars
 
+/** What the sync server said, as an Error worth showing. */
+async function serverError(res, what) {
+  let code = '';
+  try { code = (await res.json()).error || ''; } catch { /* not JSON */ }
+  if (code === 'reconnect') return new Error(`${what}: Google needs you to connect this account again (Settings ▸ Calendars ▸ Google accounts).`);
+  if (res.status === 401) return new Error(`${what}: sign in to your sync server first.`);
+  return new Error(`${what} could not be read${code ? ` — ${code}` : ` (${res.status})`}.`);
+}
+
 /**
- * Read a calendar's ICS. The page cannot fetch it directly — Google and
- * Outlook serve those addresses without CORS headers — so it goes through the
- * server this page is served from, which is also what lets the Mac app do it.
+ * Read a calendar's ICS. A page cannot fetch one directly — Google and
+ * Outlook serve those addresses without CORS headers — so it goes through a
+ * server: `./serve.sh` when the page is served locally by it, otherwise the
+ * sync server (`/calendar/ics`), which is also what lets the Mac app do it.
  */
 async function fetchIcs(url) {
-  // The Mac app serves the page from its own scheme and has no such endpoint,
-  // so refreshing happens in a browser tab; the events themselves travel with
-  // the plan, which is why the Mac app still shows them.
-  if (hosted) throw new Error('Read this calendar in a browser tab (the Mac app has nothing to fetch it with). The events sync with the plan, so they will appear here.');
-  let res;
-  try { res = await fetch(`/api/ics?url=${encodeURIComponent(url)}`); }
-  catch { throw new Error('The page has to be served by ./serve.sh to read a calendar (a browser cannot fetch one directly).'); }
-  if (!res.ok) {
-    let message = `The calendar could not be read (${res.status}).`;
-    try { const j = await res.json(); message = j.error || message; } catch { /* not JSON */ }
-    throw new Error(message);
+  const local = !hosted && typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  if (local) {
+    try {
+      const res = await fetch(`/api/ics?url=${encodeURIComponent(url)}`);
+      if (res.ok) return res.text();
+    } catch { /* not serve.sh: try the sync server */ }
   }
+  const { serverFetch } = await import('./sync.js');
+  const res = await serverFetch(`/calendar/ics?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw await serverError(res, 'The calendar');
   return res.text();
+}
+
+/** A signed-in Google calendar's events, from four weeks ago to four months ahead, as the planner keeps them. */
+async function fetchGoogleEvents(feed) {
+  const { serverFetch } = await import('./sync.js');
+  const from = new Date(Date.now() - 28 * 86_400_000).toISOString();
+  const to = new Date(Date.now() + 120 * 86_400_000).toISOString();
+  const q = new URLSearchParams({ account: feed.google.account, calendar: feed.google.calendarId, from, to });
+  const res = await serverFetch(`/calendar/google/events?${q}`);
+  if (!res.ok) throw await serverError(res, feed.name);
+  const { events } = await res.json();
+  // An all-day event is a local day, midnight to midnight; a timed one is an instant.
+  const at = (v, allDay) => (allDay ? (([y, m, d]) => new Date(y, m - 1, d).getTime())(String(v).split('-').map(Number)) : Date.parse(v));
+  return (events || []).map((e) => ({ ...e, start: at(e.start, e.allDay), end: at(e.end, e.allDay) }));
 }
 
 /** Ask for an address, and say where each provider keeps theirs. */
@@ -344,9 +366,13 @@ export async function refreshCalendar(id) {
   if (!feed) return false;
   set({ hint: `Reading ${feed.name}…` });
   try {
-    const text = await fetchIcs(feed.url);
-    const { parseIcs } = await import('../io/ics.js');
-    const { events, name } = parseIcs(text);
+    let events;
+    let name = null;
+    if (feed.google) events = await fetchGoogleEvents(feed);
+    else {
+      const { parseIcs } = await import('../io/ics.js');
+      ({ events, name } = parseIcs(await fetchIcs(feed.url)));
+    }
     const kept = tryCommit('Read a calendar', (p) => {
       const n = setFeedEvents(p, id, events);
       if (name && getFeed(p, id).name === 'My calendar') setFeedField(p, id, 'name', name);
@@ -362,6 +388,25 @@ export async function refreshCalendar(id) {
 
 export async function refreshAllCalendars() {
   for (const f of feeds(store.project)) await refreshCalendar(f.id);
+}
+
+/** Calendars last read more than half an hour ago, read again — quietly, as the calendar opens. */
+let refreshingStale = false;
+export async function refreshStaleCalendars(maxAgeMs = 30 * 60_000) {
+  if (refreshingStale) return;
+  refreshingStale = true;
+  try {
+    for (const f of feeds(store.project)) {
+      if (!f.fetchedAt || Date.now() - f.fetchedAt > maxAgeMs) await refreshCalendar(f.id);
+    }
+  } finally { refreshingStale = false; }
+}
+
+/** Add a signed-in Google account's calendar, and read it. */
+export function connectGoogleCalendar({ account, calendarId, name, resourceId = null }) {
+  const feed = tryCommit('Connect a calendar', (p) => addFeed(p, { name, provider: 'google', resourceId, google: { account, calendarId } }));
+  if (feed) void refreshCalendar(feed.id);
+  return feed;
 }
 export function editCalendar(id, field, value) { return attempt('Edit calendar', (p) => setFeedField(p, id, field, value)); }
 export function disconnectCalendar(id) { return attempt('Disconnect a calendar', (p) => removeFeed(p, id)); }
