@@ -846,7 +846,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .ps-range:hover { color: var(--sc-text-1); }
 .ps-late { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; background: var(--sc-danger); color: #fff; font-size: 10px; font-weight: 700; flex: none; }
 .ps-stage-sum { padding-left: 20px; }
-.ps-task { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto 16px 18px; align-items: center; gap: 6px; padding: 3px 2px 3px 18px; font-size: 12.5px; border-radius: 4px; }
+.ps-task { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto 16px 18px 14px; align-items: center; gap: 6px; padding: 3px 2px 3px 18px; font-size: 12.5px; border-radius: 4px; }
 .ps-task:hover { background: color-mix(in srgb, var(--sc-line) 45%, transparent); }
 .ps-task.is-done .ps-task-name { text-decoration: line-through; color: var(--sc-text-3); }
 .ps-task.is-archived { opacity: .55; }
@@ -1206,3 +1206,8 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .markdown th, .markdown td { border: 1px solid var(--sc-line); padding: 3px 8px; }
 .markdown details.toggle > summary { cursor: pointer; }
 .md-notes.ps-desc { resize: none; padding: 0; min-height: 0; border: 0; }
+.ps-auto-toggle { border: 0; background: none; cursor: pointer; padding: 0 3px; font: inherit; }
+.ps-auto-toggle.is-off { color: var(--sc-text-3); opacity: .45; }
+.ps-auto-toggle:hover { opacity: 1; }
+.ps-task-more { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 4px; visibility: hidden; }
+.ps-task:hover .ps-task-more { visibility: visible; }

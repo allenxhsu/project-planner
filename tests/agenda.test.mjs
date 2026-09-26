@@ -337,3 +337,16 @@ test('Do later: none of the task is laid before the time it was put off to', () 
   setTaskField(p, t.id, 'notBefore', null);
   assert.equal(lay(p).blocks.filter((b) => b.taskId === t.id)[0].dateIso, MON);
 });
+
+test('ASAP cuts in front of other projects', () => {
+  // Two plans on one person: plan A's task is due first; plan B's is ASAP.
+  const a = week(); const b = week();
+  b.p.resources[0].personId = 'person_ann'; a.p.resources[0].personId = 'person_ann';
+  const early = job(a.p, a.ann, 'Due Tuesday', { work: 8, deadline: TUE });
+  const now = job(b.p, b.ann, 'Do it now', { work: 4, urgency: 'now' });
+  const both = planBlocksAcross([{ project: a.p, schedule: computeSchedule(a.p) }, { project: b.p, schedule: computeSchedule(b.p) }], { now: new Date(2026, 8, 21, 0, 0) });
+  const first = both.blocks.filter((x) => !x.worked).sort((x, y) => x.day - y.day || x.start - y.start)[0];
+  assert.equal(first.taskId, now.id, 'the ASAP task is laid first, ahead of the other project');
+  assert.equal(first.dateIso, MON);
+  assert.ok(both.blocks.some((x) => x.taskId === early.id), 'the other project still gets its time');
+});

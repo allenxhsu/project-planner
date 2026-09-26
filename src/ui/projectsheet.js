@@ -21,7 +21,7 @@ import { toDay, fromDay, today, formatDate, WEEKDAY_NAMES, weekday, makeCalendar
 import { open, foot, button, showMenu, showPanel, promptText, confirmDialog } from './dialog.js';
 import { datePanel, quickDates } from './datepick.js';
 import { currentLayout, personColour } from './calendar.js';
-import { taskSheet } from './blockmenu.js';
+import { taskSheet, taskMenu } from './blockmenu.js';
 
 const HUES = [null, 0, 25, 45, 90, 140, 170, 200, 220, 260, 290, 320];
 const hueCss = (h) => (h === null || h === undefined ? 'var(--sc-text-3)' : `hsl(${h} 60% 55%)`);
@@ -314,14 +314,20 @@ function taskRow(t) {
   const late = t.deadline && !done && toDay(t.deadline) < toDay(today());
   const minutes = Math.round(expectedHours(p, info, t) * 60);
   const who = t.assignments.map((a) => p.resources.find((r) => r.id === a.resourceId)).filter(Boolean)[0];
-  return el('div', { class: `ps-task${done ? ' is-done' : ''}${t.archived ? ' is-archived' : ''}`, title: stageOf(p, t).name },
+  const row = el('div', { class: `ps-task${done ? ' is-done' : ''}${t.archived ? ' is-archived' : ''}`, title: stageOf(p, t).name },
     el('input', { type: 'checkbox', class: 'ps-ring', checked: done, title: done ? 'Completed — click to reopen' : 'Mark complete', onclick: (e) => e.stopPropagation(), onchange: (e) => act.setPercent(t.id, e.target.checked ? 100 : 0) }),
     el('button', { class: 'ps-task-name', text: t.name, onclick: () => { void taskSheet({ taskId: t.id }); } }),
-    late ? el('span', { class: 'ps-late', title: `Past its deadline, ${formatDate(t.deadline, 'long')}`, text: '!' }) : null,
+    late ? el('span', { class: 'ps-late', title: `Past its deadline, ${formatDate(t.deadline, 'long')}`, text: '!' }) : el('span'),
     el('span', { class: 'ps-task-dur', text: minutes ? minText(minutes) : '' }),
     el('span', { class: `ps-task-due${late ? ' is-late' : ''}`, text: t.deadline ? shortDay(t.deadline) : '' }),
-    agendaOf(p, t).show && !done ? el('span', { class: 'ps-auto', title: 'Auto-scheduled', text: '✦' }) : el('span', { class: 'ps-auto is-off', title: 'Not auto-scheduled', text: '' }),
-    who ? el('span', { class: 'ps-who', title: who.name, style: { background: personColour(who.name).line }, text: (who.initials || who.name[0] || '?').slice(0, 1) }) : el('span', { class: 'ps-who is-none' }));
+    // Auto-scheduled or not, switched right here.
+    el('button', { class: `ps-auto ps-auto-toggle${agendaOf(p, t).show ? '' : ' is-off'}`, text: '✦',
+      title: agendaOf(p, t).show ? 'Auto-scheduled — click to keep it off the calendar' : 'Not auto-scheduled — click to let the calendar lay it',
+      onclick: (e) => { e.stopPropagation(); act.editTask(t.id, 'calendarShow', !agendaOf(p, t).show); } }),
+    who ? el('span', { class: 'ps-who', title: who.name, style: { background: personColour(who.name).line }, text: (who.initials || who.name[0] || '?').slice(0, 1) }) : el('span', { class: 'ps-who is-none' }),
+    el('button', { class: 'ps-task-more', text: '⋮', title: 'Task menu', onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); void taskMenu(p.id, t.id, r.left, r.bottom + 4); } }));
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); void taskMenu(p.id, t.id, e.clientX, e.clientY); });
+  return row;
 }
 
 function rightColumn(ui, draw) {

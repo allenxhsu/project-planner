@@ -193,6 +193,21 @@ const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h$
  * The right-click menu on a block — the list Motion puts there, mapped onto
  * this planner. "Schedule event" is a pin: the block becomes a fixed booking.
  */
+/**
+ * The same menu for a task named in a list (a project's tasks, a list view):
+ * its next block on the calendar stands in for "this block", or today when
+ * the calendar has none; fixing a time is left to the calendar itself.
+ */
+export async function taskMenu(planId, taskId, x, y) {
+  const { currentLayout } = await import('./calendar.js');
+  let next = null;
+  try {
+    const todayNum = toDay(today());
+    next = (currentLayout().all.byTask?.get(taskId) || []).filter((k) => k.planId === planId && !k.worked && k.day >= todayNum).sort((a, c) => a.day - c.day || a.start - c.start)[0] || null;
+  } catch { next = null; }
+  blockMenu({ ...(next || { day: toDay(today()), dateIso: today(), start: 9 * 60, end: 10 * 60, minutes: 60 }), planId, taskId, fromList: true }, x, y);
+}
+
 export function blockMenu(b, x, y) {
   if (b.worked) {
     showMenu(x, y, [
@@ -215,7 +230,7 @@ export function blockMenu(b, x, y) {
       : { icon: '✓', label: 'Complete task', run: run(b, (t) => act.setPercent(t.id, 100)) },
     { icon: '⊗', label: 'Cancel task', run: run(b, (t) => { const c = stages(store.project).find((s) => s.cancelled); if (c) act.setTaskStage(t.id, c.id); }) },
     '-',
-    b.pinned
+    b.fromList ? null : b.pinned
       ? { icon: '⌖', label: 'Unschedule the fixed time', run: run(b, (t) => act.unpinBlock(t.id, b.pinIndex)) }
       : { icon: '⌖', label: 'Schedule event (fix it at this time)', run: run(b, (t) => act.pinBlock(t.id, { day: b.dateIso, start: b.start, minutes: b.minutes })) },
     '-',
