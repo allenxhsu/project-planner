@@ -270,9 +270,9 @@ export const COMMANDS = {
   'edit.undo': undo, 'edit.redo': redo, 'edit.selectAll': act.selectAll, 'edit.delete': () => (['resources', 'usage'].includes(store.ui.view) ? act.deleteResource() : act.deleteSelection()),
   'task.new': act.newTaskBelow, 'task.newAbove': act.newTaskAbove, 'task.milestone': act.newMilestone, 'task.toggleMilestone': act.toggleMilestone,
   'task.indent': act.indentSelection, 'task.outdent': act.outdentSelection, 'task.up': () => act.moveSelection(-1), 'task.down': () => act.moveSelection(1),
-  'task.link': act.linkSelection, 'task.unlink': act.unlinkSelection, 'task.info': () => set({ rightOpen: true, rightTab: 'task' }),
+  'task.link': act.linkSelection, 'task.unlink': act.unlinkSelection, 'task.info': () => { const id = act.activeId(); if (id) void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); else act.hint('Select a task first.'); },
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
-  'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ rightOpen: true, rightTab: 'resource' }),
+  'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ view: 'resources' }),
   'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'), 'view.team': goView('team'),
   'view.calendar': goView('calendar'), 'view.priority': goView('priority'),
   'view.weekBack': () => shiftWeek(-1), 'view.weekOn': () => shiftWeek(1), 'view.thisWeek': showThisWeek,
@@ -292,7 +292,7 @@ export const COMMANDS = {
     await setPlanArchived(store.project.id, on);
     reloadPlans();
   },
-  'project.info': () => set({ rightOpen: true, rightTab: 'project' }), 'project.stats': () => set({ bottomOpen: true, bottomTab: 'stats' }),
+  'project.info': () => { void import('./inspector.js').then((m) => m.projectSettingsDialog()); }, 'project.stats': () => set({ bottomOpen: true, bottomTab: 'stats' }),
   'export.svg': guarded(exportSvg), 'export.png': guarded(exportPng), 'export.pdf': guarded(exportPdf),
   'help.guide': help,
 };
@@ -341,12 +341,12 @@ const MENUS = {
     ...(store.ui.view === 'calendar' ? [{ note: 'Calendar shows' }, ...Object.entries(RANGES).map(([id, r]) => ({ label: `  ${r.label}`, checked: rangeOf() === id, run: () => set({ calendarRange: id }) })), '-'] : []),
     { label: 'Zoom in', key: '⌘+', run: run('view.zoomIn') }, { label: 'Zoom out', key: '⌘−', run: run('view.zoomOut') }, { label: 'Go to today', key: '⌘0', run: run('view.today') }, '-',
     { label: 'Expand all', run: run('view.expandAll') }, { label: 'Collapse all', run: run('view.collapseAll') }, '-',
-    { label: 'Details panel', checked: store.ui.rightOpen, run: run('view.inspector') }, { label: 'Checks panel', checked: store.ui.bottomOpen, run: run('view.checks') }, '-',
+{ label: 'Checks panel', checked: store.ui.bottomOpen, run: run('view.checks') }, '-',
     { label: 'Appearance…', run: run('view.appearance') },
     { label: 'Sync…', run: run('view.sync') },
   ],
   Project: () => [
-    { label: 'Project information & working time…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') }, '-',
+    { label: 'Project…', run: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }, { label: 'Project settings — working time & scheduling…', run: run('project.info') }, { label: 'Statistics', run: run('project.stats') }, '-',
     { label: 'Custom fields…', run: () => { void editFieldsDialog(); } }, '-',
     { label: store.project.archived ? 'Bring back from the archive' : 'Archive this project', run: run('project.archive') },
   ],
@@ -378,18 +378,11 @@ export function initHeader(root) {
     class: 'sc-button sc-button--ghost sc-button--sm', text: name,
     onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); showMenu(r.left, r.bottom + 4, MENUS[name]()); },
   })));
-  const find = el('input', { class: 'sc-input find', placeholder: 'Find task', id: 'find', oninput: (e) => findResults(e.target), onkeydown: (e) => { if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); } e.stopPropagation(); } });
-  // New, search, the workspaces and what is on now live in the sidebar
-  // (ui/sidebar.js); the header keeps the menus, the file and undo.
-  void find;
-  root.append(
-    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm side-show', title: 'Show the sidebar', text: '»', onclick: () => { void import('./sidebar.js').then((m) => m.toggleSidebar()); } }),
-    menubar, el('span', { class: 'sc-spacer' }),
-    el('span', { class: 'sc-mono sc-muted', id: 'file-name' }),
-    el('span', { class: 'sc-resource', title: 'Tasks' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-tasks' })),
-    el('span', { class: 'sc-resource sc-resource--alt', title: 'Resources' }, el('span', { class: 'sc-resource-icon' }), el('span', { id: 'count-resources' })),
-    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-undo', title: 'Undo', text: '↶', onclick: undo }),
-    el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', id: 'btn-redo', title: 'Redo', text: '↷', onclick: redo }));
+  // New, search, undo, the workspaces and what is on now live in the sidebar
+  // (ui/sidebar.js). A plan is saved as it is edited and its counts are in the
+  // status line, so the header is the menus alone — and on the Mac, which has
+  // its own menu bar, it is not drawn at all.
+  root.append(menubar);
 }
 
 /**
@@ -448,7 +441,7 @@ export function findResults(input) {
   const hits = project.tasks.filter((t) => `${t.name} ${t.notes || ''}`.toLowerCase().includes(q)).slice(0, 14);
   const r = input.getBoundingClientRect();
   showMenu(r.left, r.bottom + 4, hits.length
-    ? hits.map((t) => ({ label: `${schedule.tasks[t.id].index}  ${t.name}  ·  ${formatDate(schedule.tasks[t.id].startIso, 'day')}`, run: () => { if (!['gantt', 'sheet', 'network'].includes(store.ui.view)) set({ view: 'gantt' }); act.revealTask(t.id); act.selectTask(t.id); set({ rightTab: 'task' }); } }))
+    ? hits.map((t) => ({ label: `${schedule.tasks[t.id].index}  ${t.name}  ·  ${formatDate(schedule.tasks[t.id].startIso, 'day')}`, run: () => { if (!['gantt', 'sheet', 'network'].includes(store.ui.view)) set({ view: 'gantt' }); act.revealTask(t.id); act.selectTask(t.id); } }))
     : [{ note: 'No task matches.' }]);
   input.focus();
 }
@@ -470,11 +463,8 @@ export function renderHeader() {
   const { project, ui } = store;
   const btn = document.getElementById('workspace-pick');
   if (btn) btn.textContent = workspaceLabel;
-  document.getElementById('file-name').textContent = `${ui.fileName || `${slugify(project.name)}${FILE_EXT}`}${ui.dirty ? ' •' : ''}`;
-  document.getElementById('count-tasks').textContent = project.tasks.length;
-  document.getElementById('count-resources').textContent = project.resources.length;
-  document.getElementById('btn-undo').disabled = !canUndo();
-  document.getElementById('btn-redo').disabled = !canRedo();
+  for (const [id, can] of [['btn-undo', canUndo()], ['btn-redo', canRedo()]]) { const n = document.getElementById(id); if (n) n.disabled = !can; }
+  void slugify; void FILE_EXT; void ui;
   document.title = `${project.name} — Project Planner`;
   // What is on now is drawn by the sidebar (ui/sidebar.js).
 }
@@ -572,8 +562,7 @@ export function renderToolbar(root) {
     root.append(b('−', 'Zoom out', () => zoomNetwork(-1)), b('+', 'Zoom in', () => zoomNetwork(1)), sep());
   }
   if (taskView) root.append(b('Collapse all', 'Hide every subtask', () => act.collapseAll(true)), b('Expand all', 'Show every subtask', () => act.collapseAll(false)), sep());
-  root.append(b('ⓘ Details', 'Show or hide the details panel', () => set({ rightOpen: !ui.rightOpen }), { on: ui.rightOpen }),
-    b('Checks', 'Show or hide the checks panel', () => set({ bottomOpen: !ui.bottomOpen }), { on: ui.bottomOpen }));
+  root.append(b('Checks', 'Show or hide the checks panel', () => set({ bottomOpen: !ui.bottomOpen }), { on: ui.bottomOpen }));
 }
 
 export function renderStatus(root) {

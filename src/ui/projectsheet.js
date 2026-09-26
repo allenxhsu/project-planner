@@ -85,7 +85,9 @@ function leftColumn() {
         : el('span', { class: 'act-text', text: x.from === undefined ? `Changed ${x.field}` : `Changed ${x.field} from ${x.from} to ${x.to}` }),
     el('span', { class: 'sc-faint act-at', title: x.at.replace('T', ' '), text: ago(x.at) })));
   return el('div', { class: 'ps-col ps-left' },
-    el('div', { class: 'ps-crumb sc-faint small', text: `▢ ${p.template ? 'Template' : 'Project'}` }),
+    el('div', { class: 'ps-crumb sc-faint small' }, el('span', { text: `▢ ${p.template ? 'Template' : 'Project'}` }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '⚙ Settings', title: 'Working time, calendar and scheduling settings of this project',
+        onclick: () => { void import('./inspector.js').then((m) => m.projectSettingsDialog()); } })),
     title, desc,
     el('details', { class: 'act', open: true }, el('summary', { text: 'Activity' }), comment,
       el('ul', { class: 'act-list' }, ...(lines.length ? lines : [el('li', { class: 'sc-faint small', text: 'Nothing recorded yet. Stage changes, dates and comments are kept here.' })]))));

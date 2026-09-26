@@ -156,7 +156,7 @@ export function displayOptions(close) {
     el('div', { class: 'dopt-sep' }),
     el('button', { class: 'dopt-link', text: 'Auto-schedule every unfinished task', onclick: () => { close(); act.showAllInCalendar(); } }),
     el('button', { class: 'dopt-link', text: 'Schedules — the hours work may use ⚙', onclick: () => { close(); set({ view: 'schedules' }); } }),
-    el('button', { class: 'dopt-link', text: 'Auto-scheduling settings ⚙', onclick: () => { close(); set({ rightOpen: true, rightTab: 'project', view: 'gantt' }); } }));
+    el('button', { class: 'dopt-link', text: 'Auto-scheduling settings ⚙', onclick: () => { close(); void import('./inspector.js').then((m) => m.projectSettingsDialog()); } }));
 }
 
 let miniMonth = null;
@@ -443,7 +443,7 @@ async function openOther(planId, taskId) {
   if (!taskId) return;
   act.revealTask(taskId);
   act.selectTask(taskId);
-  set({ rightOpen: true, rightTab: 'task' });
+  void taskSheet({ taskId });
 }
 
 export function renderCalendar(root) {
@@ -775,7 +775,7 @@ function renderMonth(pane, { entries, blocks, meetings, screen, project, who, pl
         class: `cal-month-item${b.critical ? ' is-critical' : ''}`,
         style: { background: colour.fill, borderLeftColor: colour.line },
         title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h`,
-        onclick: (e) => { e.stopPropagation(); if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); set({ rightOpen: true, rightTab: 'task' }); },
+        onclick: (e) => { e.stopPropagation(); if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); void taskSheet({ taskId: t.id }); },
       },
         el('span', { class: 'cal-month-time sc-mono', text: formatClock(b.start) }),
         el('span', { class: 'cal-month-name', text: t.name }),

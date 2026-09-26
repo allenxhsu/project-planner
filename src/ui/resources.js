@@ -68,7 +68,7 @@ export function renderResourceSheet(root) {
   renderGrid(pane, {
     columns: RESOURCE_COLUMNS, rows, selected: new Set(ui.resourceId ? [ui.resourceId] : []), activeId: ui.resourceId, activeCol: ui.activeCol,
     editing: ui.editing?.kind === 'resource' ? ui.editing : null,
-    onSelect: (id) => set({ resourceId: id, rightTab: 'resource' }),
+    onSelect: (id) => set({ resourceId: id }),
     onCell: (id, col) => {
       if (ui.editing) return;
       if (ui.resourceId === id && ui.activeCol === col && editableKeys.includes(col)) set({ editing: { kind: 'resource', id, col } });
@@ -88,7 +88,7 @@ export function renderResourceSheet(root) {
     onContext: (id, e) => {
       set({ resourceId: id });
       showMenu(e.clientX, e.clientY, [
-        { label: 'Resource information…', run: () => set({ rightOpen: true, rightTab: 'resource' }) }, '-',
+        
         { label: 'New resource', run: act.newResource }, '-',
         { label: 'Delete resource', danger: true, run: () => act.deleteResource(id) },
       ]);
@@ -305,5 +305,5 @@ async function openUsagePlan(planId, taskId) {
   if (!(await openPlan(planId))) return;
   act.revealTask(taskId);
   act.selectTask(taskId);
-  set({ rightOpen: true, rightTab: 'task' });
+  void import('./blockmenu.js').then((m) => m.taskSheet({ taskId }));
 }

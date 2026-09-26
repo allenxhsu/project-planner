@@ -86,12 +86,12 @@ function card(t, grouping) {
     class: `kb-card sc-card${s.critical ? ' is-critical' : ''}${s.milestone ? ' is-milestone' : ''}${ui.selection.includes(t.id) ? ' is-sel' : ''}`,
     draggable: 'true', dataset: { id: t.id },
     onclick: (e) => act.selectTask(t.id, { extend: e.metaKey || e.ctrlKey }),
-    ondblclick: () => { set({ rightOpen: true, rightTab: 'task', selection: [t.id] }); },
+    ondblclick: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: t.id })); },
     oncontextmenu: (e) => {
       e.preventDefault();
       if (!ui.selection.includes(t.id)) act.selectTask(t.id);
       showMenu(e.clientX, e.clientY, [
-        { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
+        { label: 'Open task…', run: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: t.id })); } },
         '-',
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',

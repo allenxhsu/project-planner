@@ -10,7 +10,7 @@ import { hueColour } from './calendar.js';
 import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf, pinsOf, bufferOf, BUFFER_CHOICES } from '../model/model.js';
 import { currentLayout } from './calendar.js';
 import { describeSchedule } from './schedules.js';
-import { tryCommit } from '../state/store.js';
+import { tryCommit, subscribe as subscribeStore } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
 const readout = (rows) => el('div', { class: 'readout sc-mono' }, ...rows.map(([k, v]) => el('div', { class: 'readout-row' }, el('span', { class: 'sc-muted', text: k }), el('span', { text: v }))));
@@ -135,37 +135,64 @@ function renderTask(root) {
 
   // ---- time: what was expected, what was spent, what is left
   if (!s.summary || timesheetsFor(project, id).length) {
-    root.append(el('div', { class: 'sc-section-title', text: 'Time' }));
-    root.append(readout([
-      ['Allocated', formatHours(s.work)],
-      ['Spent', formatHours(s.spent)],
-      ['Remaining', formatHours(s.remaining)],
-    ]));
-    const lines = el('div', { class: 'link-list' });
-    for (const line of timesheetsFor(project, id)) {
-      const who = getResource(project, line.resourceId);
-      lines.append(el('div', { class: 'time-row' },
-        date(line.date, (v) => act.editTimeLine(line.id, 'date', v)),
-        select(line.resourceId || '', [{ value: '', label: '—' }, ...project.resources.map((r) => ({ value: r.id, label: r.initials || r.name }))], (v) => act.editTimeLine(line.id, 'resourceId', v)),
-        text(String(line.hours), (v) => act.editTimeLine(line.id, 'hours', v), { class: 'sc-input lag', title: 'Hours' }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Remove this line', onclick: () => act.deleteTimeLine(line.id) })));
-      if (line.note) lines.append(el('div', { class: 'sc-faint small time-note', text: line.note }));
-    }
-    const newDate = el('input', { class: 'sc-input', type: 'date', value: today() });
-    const newWho = el('select', { class: 'sc-select' }, el('option', { value: '', text: '—' }),
-      ...project.resources.map((r) => el('option', { value: r.id, text: r.initials || r.name })));
-    const newHours = el('input', { class: 'sc-input lag', type: 'text', placeholder: 'h' });
-    if (t.assignments.length) newWho.value = t.assignments[0].resourceId;
-    for (const input of [newHours]) input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') addLine(); });
-    const addLine = () => {
-      if (!newHours.value.trim()) { act.hint('How many hours?'); newHours.focus(); return; }
-      if (act.logTime({ taskId: id, resourceId: newWho.value || null, date: newDate.value || null, hours: newHours.value })) newHours.value = '';
-    };
-    lines.append(el('div', { class: 'time-row' }, newDate, newWho, newHours,
-      el('button', { class: 'sc-button sc-button--sm', text: '+', title: 'Log this time', onclick: addLine })));
-    root.append(lines);
+    renderTimeLines(root, t.id);
   }
 }
+
+/** A task's logged time: what was allocated, spent and is left, and each line, editable. */
+export function renderTimeLines(root, id) {
+  const { project, schedule } = store;
+  const t = project.tasks.find((x) => x.id === id);
+  const s = schedule.tasks[id];
+  if (!t || !s) return;
+  root.append(readout([
+    ['Allocated', formatHours(s.work)],
+    ['Spent', formatHours(s.spent)],
+    ['Remaining', formatHours(s.remaining)],
+  ]));
+  const lines = el('div', { class: 'link-list' });
+  for (const line of timesheetsFor(project, id)) {
+    const who = getResource(project, line.resourceId);
+    lines.append(el('div', { class: 'time-row' },
+      date(line.date, (v) => act.editTimeLine(line.id, 'date', v)),
+      select(line.resourceId || '', [{ value: '', label: '—' }, ...project.resources.map((r) => ({ value: r.id, label: r.initials || r.name }))], (v) => act.editTimeLine(line.id, 'resourceId', v)),
+      text(String(line.hours), (v) => act.editTimeLine(line.id, 'hours', v), { class: 'sc-input lag', title: 'Hours' }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Remove this line', onclick: () => act.deleteTimeLine(line.id) })));
+    if (line.note) lines.append(el('div', { class: 'sc-faint small time-note', text: line.note }));
+  }
+  const newDate = el('input', { class: 'sc-input', type: 'date', value: today() });
+  const newWho = el('select', { class: 'sc-select' }, el('option', { value: '', text: '—' }),
+    ...project.resources.map((r) => el('option', { value: r.id, text: r.initials || r.name })));
+  const newHours = el('input', { class: 'sc-input lag', type: 'text', placeholder: 'h' });
+  if (t.assignments.length) newWho.value = t.assignments[0].resourceId;
+  for (const input of [newHours]) input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') addLine(); });
+  const addLine = () => {
+    if (!newHours.value.trim()) { act.hint('How many hours?'); newHours.focus(); return; }
+    if (act.logTime({ taskId: id, resourceId: newWho.value || null, date: newDate.value || null, hours: newHours.value })) newHours.value = '';
+  };
+  lines.append(el('div', { class: 'time-row' }, newDate, newWho, newHours,
+    el('button', { class: 'sc-button sc-button--sm', text: '+', title: 'Log this time', onclick: addLine })));
+  root.append(lines);
+}
+
+/** A window over a part of this panel that redraws as the plan changes. */
+function liveDialog(title, draw, { wide = true } = {}) {
+  let off = () => {};
+  const done = import('./dialog.js').then(({ open, foot, button }) => open(title, (close) => {
+    const body = el('div', { class: 'insp settings-dialog' });
+    const redraw = () => { const y = body.scrollTop; clear(body); draw(body); body.scrollTop = y; };
+    redraw();
+    let rev = store._rev;
+    off = subscribeStore(() => { if (store._rev !== rev) { rev = store._rev; if (document.body.contains(body)) redraw(); } });
+    return [body, foot(el('span', { class: 'sc-spacer' }), button('Done', () => close(true), 'sc-button--primary'))];
+  }, { wide }));
+  return done.then(() => off());
+}
+
+/** Project settings: working time and how the calendar schedules — Motion keeps these in Settings. */
+export const projectSettingsDialog = () => liveDialog(`Project settings — ${store.project.name}`, (root) => renderProject(root, { dialog: true }));
+/** Logged time for one task. */
+export const timeLogDialog = (taskId) => liveDialog('Logged time', (root) => renderTimeLines(root, taskId), { wide: false });
 
 function renderResource(root) {
   const { project, schedule, ui } = store;
@@ -194,12 +221,12 @@ function renderResource(root) {
   root.append(el('div', { class: 'insp-actions' }, el('button', { class: 'sc-button sc-button--danger sc-button--sm', text: 'Delete resource', onclick: () => act.deleteResource(r.id) })));
 }
 
-function renderProject(root) {
+function renderProject(root, { dialog = false } = {}) {
   const { project, schedule } = store;
   // The project itself — name, dates, stages, status, colour — is in its
   // window; this is how it is scheduled: working time and the calendar.
-  root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project settings' }), el('div', { class: 'sc-display insp-title', text: project.name }),
-    el('button', { class: 'sc-button sc-button--sm insp-open', text: 'Open the project…', title: 'Name, stages, dates, status, colour, labels and its tasks', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } })));
+  if (!dialog) root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project settings' }), el('div', { class: 'sc-display insp-title', text: project.name })));
+  root.append(el('div', { class: 'sc-section-title', text: 'Working time' }));
   const form = el('div', { class: 'insp-form' });
   form.append(field('Status date', date(project.statusDate, (v) => act.setProjectInfo({ statusDate: v })), 'what “today” is for progress — blank is today'));
   form.append(el('div', { class: 'two' },
@@ -261,6 +288,8 @@ function renderProject(root) {
   sched.append(el('button', { class: 'sc-button sc-button--sm', text: 'Edit schedules…', onclick: () => set({ view: 'schedules' }) }));
   root.append(sched);
 
+  // Statistics are in the Statistics tab under the page; the window does not repeat them.
+  if (dialog) return;
   root.append(el('div', { class: 'sc-section-title', text: 'Statistics' }));
   root.append(readout([
     ['Start', formatDate(schedule.startIso)], ['Finish', formatDate(schedule.finishIso)], ['Duration', `${schedule.duration} d`],

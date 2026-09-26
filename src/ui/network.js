@@ -64,7 +64,7 @@ export function renderNetwork(root) {
     const g = e.target.closest('.n-box');
     if (g && e.button === 0) act.selectTask(g.dataset.id, { extend: e.metaKey || e.ctrlKey, range: e.shiftKey });
   });
-  root$.addEventListener('dblclick', (e) => { const g = e.target.closest('.n-box'); if (g) set({ rightOpen: true, rightTab: 'task', selection: [g.dataset.id] }); });
+  root$.addEventListener('dblclick', (e) => { const g = e.target.closest('.n-box'); if (g) { set({ selection: [g.dataset.id] }); void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: g.dataset.id })); } });
   pane.addEventListener('wheel', (e) => { if (e.metaKey || e.ctrlKey) { e.preventDefault(); zoomNetwork(e.deltaY < 0 ? 1 : -1); } }, { passive: false });
   pane.addEventListener('scroll', () => { scroll = { left: pane.scrollLeft, top: pane.scrollTop }; });
   requestAnimationFrame(() => { pane.scrollLeft = scroll.left; pane.scrollTop = scroll.top; });

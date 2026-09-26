@@ -143,7 +143,7 @@ export function showMenu(x, y, items) {
       it.key ? el('span', { class: 'sc-kbd', text: it.key }) : opens ? el('span', { class: 'menu-more', text: '›' }) : null);
     return row;
   };
-  const menu = el('div', { class: 'sc-menu pop-menu' }, ...items.map((it) => itemRow(it)));
+  const menu = el('div', { class: 'sc-menu pop-menu' }, ...items.filter(Boolean).map((it) => itemRow(it)));
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - r.width - 4))}px`;

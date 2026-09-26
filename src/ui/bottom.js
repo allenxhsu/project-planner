@@ -52,8 +52,8 @@ export function renderBottom(root) {
         const { openPlan } = await import('../state/sync.js');
         if (!(await openPlan(i.planId))) return;
       }
-      if (i.taskId) { if (!['gantt', 'sheet', 'network'].includes(ui.view)) set({ view: 'gantt' }); act.revealTask(i.taskId); act.selectTask(i.taskId); set({ rightTab: 'task' }); }
-      else if (i.resourceId) set({ resourceId: i.resourceId, rightTab: 'resource', view: ui.view === 'usage' ? 'usage' : 'resources' });
+      if (i.taskId) { if (!['gantt', 'sheet', 'network'].includes(ui.view)) set({ view: 'gantt' }); act.revealTask(i.taskId); act.selectTask(i.taskId); }
+      else if (i.resourceId) set({ resourceId: i.resourceId, view: ui.view === 'usage' ? 'usage' : 'resources' });
     },
   }, el('td', {}, el('span', { class: 'sc-pill', style: { '--tint': `var(--sc-${i.level === 'error' ? 'danger' : i.level === 'warning' ? 'warning' : 'info'})` }, text: i.level })),
     el('td', { class: 'sc-mono sc-muted', text: i.code }), el('td', { text: i.text }))))));

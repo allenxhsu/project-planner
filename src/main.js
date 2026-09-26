@@ -21,7 +21,6 @@ import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
 import { renderTeamSchedule } from './ui/teamschedule.js';
 import { renderCalendar, renderCalendarSide, shiftWeek, showThisWeek } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
-import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
@@ -46,7 +45,9 @@ function render() {
   renderHeader();
   renderSidebar();
   renderToolbar($('toolbar'));
-  $('app').classList.toggle('no-right', !ui.rightOpen);
+  // The right-hand panel is the calendar's (mini month and calendars) and
+  // nothing else's: a task's and a project's details open in their windows.
+  $('app').classList.toggle('no-right', !ui.rightOpen || ui.view !== 'calendar');
   $('app').classList.toggle('no-bottom', !ui.bottomOpen);
   VIEW_RENDERERS[ui.view]($('stage'));
   renderStatus($('statusbar'));
@@ -55,16 +56,12 @@ function render() {
   // On the calendar the right-hand panel is the month and the calendars, as
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
-  $('app').classList.toggle('cal-side', calSide);
+  $('app').classList.toggle('view-calendar', calSide);
   for (const v of ['team', 'today', 'alltasks']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.
-  const resourceView = ['resources', 'usage'].includes(ui.view);
-  if (ui.rightTab === 'resource' && !resourceView) ui.rightTab = 'task';
-  if (ui.rightTab === 'task' && resourceView) ui.rightTab = 'resource';
-  tabs($('right-tabs'), 'rightTab', resourceView ? [['resource', 'Resource'], ['project', 'Settings']] : [['task', 'Scheduling'], ['project', 'Settings']]);
-  if (ui.rightOpen) { if (calSide) renderCalendarSide($('inspector')); else renderInspector($('inspector')); }
+  if (ui.rightOpen && calSide) renderCalendarSide($('inspector'));
 }
 
 function onKey(e) {
@@ -138,6 +135,8 @@ initSidebar($('sidebar'), {
   settings: () => {
     const r = document.querySelector('.side-top .side-icon:nth-of-type(2)')?.getBoundingClientRect() || { left: 40, bottom: 40 };
     showMenu(r.left, r.bottom + 4, [
+      { label: 'Project settings — working time & scheduling…', run: () => { void import('./ui/inspector.js').then((m) => m.projectSettingsDialog()); } },
+      '-',
       { label: 'Sync…', run: () => COMMANDS['view.sync']() },
       { label: 'Appearance…', run: () => COMMANDS['view.appearance']() },
       { label: 'Custom fields…', run: () => { void import('./ui/newproject.js').then((m) => m.editFieldsDialog()); } },
@@ -182,7 +181,7 @@ async function followLink() {
   if (taskId && store.project.tasks.some((t) => t.id === taskId)) {
     set({ view: 'gantt' });
     act.revealTask(taskId); act.selectTask(taskId);
-    set({ rightOpen: true, rightTab: 'task' });
+    void import('./ui/blockmenu.js').then((m) => m.taskSheet({ taskId }));
   }
 }
 window.addEventListener('hashchange', () => { void followLink(); });

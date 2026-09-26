@@ -287,7 +287,7 @@ export function renderGantt(root) {
   });
   body.addEventListener('dblclick', (e) => {
     const g = e.target.closest('.g-task');
-    if (g) { set({ rightOpen: true, rightTab: 'task', selection: [g.dataset.id] }); }
+    if (g) { set({ selection: [g.dataset.id] }); void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: g.dataset.id })); }
   });
   body.addEventListener('contextmenu', (e) => {
     e.preventDefault();

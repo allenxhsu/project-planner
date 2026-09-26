@@ -689,9 +689,12 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
    Motion's layout: a sidebar on the left, the page, and a right panel. */
 #body { grid-template-columns: 224px minmax(0, 1fr) 330px; }
 #app.no-right #body { grid-template-columns: 224px minmax(0, 1fr); }
-#app.no-side #body { grid-template-columns: minmax(0, 1fr) 330px; }
-#app.no-side.no-right #body { grid-template-columns: minmax(0, 1fr); }
-#app.no-side #sidebar { display: none; }
+#app.no-side #body { grid-template-columns: 34px minmax(0, 1fr) 330px; }
+#app.no-side.no-right #body { grid-template-columns: 34px minmax(0, 1fr); }
+.side-rail { display: none; }
+#app.no-side #sidebar > :not(.side-rail) { display: none; }
+#app.no-side .side-rail { display: block; border: 0; background: none; color: var(--sc-text-2); font-size: 16px; cursor: pointer; padding: 12px 0; width: 100%; }
+#app.no-side .side-rail:hover { color: var(--sc-text-1); }
 @media (max-width: 1100px) { #body { grid-template-columns: 200px minmax(0, 1fr) 280px; } #app.no-right #body { grid-template-columns: 200px minmax(0, 1fr); } }
 #view-tabs { display: none; }
 .side-show { display: none; }
@@ -718,6 +721,9 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .side-item.is-on { background: color-mix(in srgb, var(--sc-accent) 16%, transparent); color: var(--sc-text-1); }
 .side-item-icon { width: 16px; text-align: center; color: var(--sc-text-3); flex: none; }
 .side-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-open { margin-left: auto; border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 3px; border-radius: 4px; visibility: hidden; font-size: 12px; }
+.side-item:hover .side-open { visibility: visible; }
+.side-open:hover { background: var(--sc-line); color: var(--sc-text-1); }
 .side-item-aside { color: var(--sc-text-3); font-size: 11.5px; white-space: nowrap; }
 .side-badge { min-width: 18px; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--sc-warning) 30%, transparent); color: var(--sc-warning); font-size: 11px; text-align: center; }
 .side-count { color: var(--sc-text-3); font-size: 11px; }
@@ -736,7 +742,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .side-foot { padding: 8px 12px; border-top: 1px solid var(--sc-line); }
 
 /* ---- calendar, as Motion draws it */
-#app.cal-side #right-tabs { display: none; }
+#app.view-calendar #right-tabs { display: none; }
 #toolbar.is-cal { gap: 6px; padding: 8px 12px; }
 .cal-title { font-size: 20px; margin: 0 6px 0 4px; white-space: nowrap; }
 .cal-title strong { font-weight: 700; }
@@ -779,7 +785,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cals-item > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cals-chip { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .cals-src { color: var(--sc-text-3); font-size: 11px; }
-#app.cal-side #bottom { display: none; }
+#app.view-calendar #bottom { display: none; }
 .cal-late { margin: 0; padding: 0 12px; background: color-mix(in srgb, var(--sc-danger) 10%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--sc-danger) 35%, transparent); font-size: 12.5px; }
 .cal-late > summary { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; list-style: none; white-space: nowrap; overflow: hidden; }
 .cal-late > summary::-webkit-details-marker { display: none; }
@@ -972,3 +978,10 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .tl-controls .sc-select { width: auto; max-width: 320px; }
 #app.view-alltasks #bottom { display: none; }
 .pg-nav .sc-select { width: auto; min-width: 88px; }
+/* The Mac app has its own menu bar, so the page needs no header at all. */
+[data-hosted] #header { display: none; }
+#header { min-height: 0; padding-top: 4px; padding-bottom: 4px; }
+.side-icon:disabled { opacity: .35; cursor: default; }
+[data-hosted] .side-show { display: none; }
+#app.no-side[data-hosted] .side-show, [data-hosted] #app.no-side .side-show { display: none; }
+.ps-crumb { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

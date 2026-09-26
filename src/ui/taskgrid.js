@@ -26,6 +26,7 @@ export const COLUMN_DEFS = {
   remaining: { label: 'Left', width: 70, readonly: true, align: 'right' },
   stage: { label: 'Status', width: 120, readonly: true },
   urgency: { label: 'Urgency', width: 96, edit: 'select', options: Object.entries(URGENCIES).map(([value, u]) => ({ value, label: u.label })) },
+  fixedCost: { label: 'Fixed Cost', width: 90, edit: 'text', align: 'right' },
   cost: { label: 'Cost', width: 90, readonly: true, align: 'right' },
   slack: { label: 'Slack', width: 60, readonly: true, align: 'right' },
   critical: { label: 'Critical', width: 62, readonly: true },
@@ -35,7 +36,7 @@ export const COLUMN_DEFS = {
   notes: { label: 'Notes', width: 260, edit: 'text' },
 };
 export const GANTT_COLUMNS = ['id', 'ind', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources'];
-export const SHEET_COLUMNS = ['id', 'ind', 'wbs', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources', 'percent', 'urgency', 'stage', 'work', 'spent', 'remaining', 'cost', 'slack', 'critical', 'constraint', 'constraintDate', 'deadline', 'notes'];
+export const SHEET_COLUMNS = ['id', 'ind', 'wbs', 'name', 'duration', 'start', 'finish', 'predecessors', 'resources', 'percent', 'urgency', 'stage', 'work', 'spent', 'remaining', 'fixedCost', 'cost', 'slack', 'critical', 'constraint', 'constraintDate', 'deadline', 'notes'];
 export const columnsForView = (view) => (view === 'sheet' ? SHEET_COLUMNS : GANTT_COLUMNS);
 
 export const taskColumns = (keys) => keys.map((key) => ({ key, ...COLUMN_DEFS[key] }));
@@ -79,7 +80,7 @@ export function taskRows(ids) {
         id: s.index, ind: indicators(t, s), wbs: s.wbs, name: t.name, duration: summary ? formatDuration(s.duration) : formatDuration(t.duration),
         start: formatDate(s.startIso), finish: formatDate(s.finishIso), predecessors: formatPredecessors(project, t), resources: formatAssignments(project, t),
         percent: `${s.percent}%`, urgency: urgencyOf(t) === 'normal' ? '' : URGENCIES[urgencyOf(t)].label, stage: stageOf(project, t).name, work: s.work ? formatHours(s.work) : '',
-        spent: s.spent ? formatHours(s.spent) : '', remaining: s.work ? formatHours(s.remaining) : '', cost: s.cost ? formatMoney(s.cost, project.currency) : '',
+        spent: s.spent ? formatHours(s.spent) : '', remaining: s.work ? formatHours(s.remaining) : '', fixedCost: t.fixedCost ? formatMoney(t.fixedCost, project.currency) : '', cost: s.cost ? formatMoney(s.cost, project.currency) : '',
         slack: summary ? '' : `${s.slack}d`, critical: s.critical ? 'Yes' : '', constraint: t.constraint?.type === 'ASAP' ? '' : CONSTRAINTS[t.constraint.type].label,
         constraintDate: t.constraint?.date ? formatDate(t.constraint.date) : '', deadline: t.deadline ? formatDate(t.deadline) : '', notes: t.notes,
       },
@@ -87,7 +88,7 @@ export function taskRows(ids) {
         name: t.name, duration: formatDuration(t.duration), start: s.startIso, finish: s.finishIso, predecessors: formatPredecessors(project, t),
         resources: formatAssignments(project, t), percent: String(s.percent), urgency: urgencyOf(t), work: t.work == null ? '' : String(t.work),
         constraint: t.constraint?.type || 'ASAP', constraintDate: t.constraint?.date || '',
-        deadline: t.deadline || '', notes: t.notes,
+        deadline: t.deadline || '', notes: t.notes, fixedCost: String(t.fixedCost || 0),
       },
     };
   });
@@ -128,7 +129,7 @@ export function gridHandlers(columnKeys = columnsForView(store.ui.view)) {
       if (!store.ui.selection.includes(id)) act.selectTask(id);
       const t = act.activeTask();
       showMenu(e.clientX, e.clientY, [
-        { label: 'Task information…', key: '⌘I', run: () => set({ rightOpen: true, rightTab: 'task' }) }, '-',
+        { label: 'Open task…', key: '⌘I', run: () => { const id = act.activeId(); if (id) void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); } }, '-',
         { label: 'Insert task below', key: 'Ins', run: act.newTaskBelow }, { label: 'Insert task above', run: act.newTaskAbove }, { label: 'Insert milestone', run: act.newMilestone }, '-',
         { label: 'Indent', key: '⌥⇧→', run: act.indentSelection }, { label: 'Outdent', key: '⌥⇧←', run: act.outdentSelection },
         { label: 'Move up', key: '⌥⇧↑', run: () => act.moveSelection(-1) }, { label: 'Move down', key: '⌥⇧↓', run: () => act.moveSelection(1) }, '-',

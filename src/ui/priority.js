@@ -22,12 +22,12 @@ function row(r, rank) {
   return el('article', {
     class: `pri-row sc-card${r.blocked ? ' is-blocked' : ''}${ui.selection.includes(t.id) ? ' is-sel' : ''}`,
     onclick: () => act.selectTask(t.id),
-    ondblclick: () => set({ rightOpen: true, rightTab: 'task', selection: [t.id] }),
+    ondblclick: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: t.id })); },
     oncontextmenu: (e) => {
       e.preventDefault();
       act.selectTask(t.id);
       showMenu(e.clientX, e.clientY, [
-        { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
+        { label: 'Open task…', run: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: t.id })); } },
         { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
         '-',
         { label: 'ASAP', run: () => act.editTask(t.id, 'urgency', 'now') },
@@ -83,7 +83,7 @@ export function renderPriority(root) {
       el('div', { class: 'sc-display pri-hero-name', text: top.name }),
       el('div', { class: 'sc-muted', text: top.reasons.join(' · ') }),
       el('div', { class: 'row', style: { marginTop: '8px' } },
-        el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: 'Open it', onclick: () => { act.revealTask(top.taskId); act.selectTask(top.taskId); set({ view: 'gantt', rightOpen: true, rightTab: 'task' }); } }),
+        el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: 'Open it', onclick: () => { act.revealTask(top.taskId); act.selectTask(top.taskId); set({ view: 'gantt' }); } }),
         el('button', { class: 'sc-button sc-button--sm', text: agendaOf(project, getTask(project, top.taskId)).show ? 'Auto-scheduled' : 'Auto-schedule', onclick: () => act.editTask(top.taskId, 'calendarShow', true) }))));
   }
 

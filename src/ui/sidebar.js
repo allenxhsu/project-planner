@@ -89,9 +89,13 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
     return el('div', { class: 'side-group', 'data-key': key }, head, body);
   };
   root.append(
+    // What is left of the sidebar when it is hidden: a way back.
+    el('button', { class: 'side-rail', text: '»', title: 'Show the sidebar', onclick: toggleSidebar }),
     el('div', { class: 'side-top' },
       el('span', { class: 'sc-brand-mark side-brand', text: 'PJ', title: 'Project Planner' }),
       el('span', { class: 'sc-spacer' }),
+      el('button', { class: 'side-icon', id: 'btn-undo', text: '↶', title: 'Undo (⌘Z)', onclick: () => { void import('../state/store.js').then((m) => m.undo()); } }),
+      el('button', { class: 'side-icon', id: 'btn-redo', text: '↷', title: 'Redo (⇧⌘Z)', onclick: () => { void import('../state/store.js').then((m) => m.redo()); } }),
       el('button', { class: 'side-icon', text: '«', title: 'Hide the sidebar', onclick: toggleSidebar }),
       el('button', { class: 'side-icon', text: '⚙', title: 'Settings — sync and appearance', onclick: () => hooks.settings?.() }),
       el('button', { class: 'sc-button sc-button--primary sc-button--sm side-new', text: '＋ New', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); hooks.newMenu(r.left, r.bottom + 4); } })),
@@ -117,16 +121,27 @@ async function newWorkspace() {
   await refreshSidebar();
 }
 
-const item = ({ icon, label, active = false, badge = null, aside = null, onclick, title = '', cls = '', menu = null }) => el('div', {
+const item = ({ icon, label, active = false, badge = null, aside = null, onclick, title = '', cls = '', menu = null, open = null }) => el('div', {
   class: `side-item${active ? ' is-on' : ''}${cls ? ` ${cls}` : ''}`, title, onclick,
+  ondblclick: open ? (e) => { e.preventDefault(); open(); } : null,
   oncontextmenu: menu ? (e) => { e.preventDefault(); menu(e.clientX, e.clientY); } : null,
 },
   el('span', { class: 'side-item-icon', text: icon }),
   el('span', { class: 'side-item-label', text: label }),
   aside ? el('span', { class: 'side-item-aside', text: aside }) : null,
-  badge ? el('span', { class: 'side-badge', text: String(badge) }) : null);
+  badge ? el('span', { class: 'side-badge', text: String(badge) }) : null,
+  open ? el('button', { class: 'side-open', text: '↗', title: 'Open the project window', onclick: (e) => { e.stopPropagation(); open(); } }) : null);
 
-/** A project, clicked: its window, over a view of it (Motion opens the project the same way). */
+/** A project, clicked: it becomes the plan the views show; the view stays as it is. */
+async function selectPlanFromSidebar(id) {
+  if (id !== store.project.id) {
+    const { openPlan } = await import('../state/sync.js');
+    if (!(await openPlan(id))) return;
+  }
+  renderSidebar();
+}
+
+/** A project's window (its ↗ button, a double-click, or Open project), over a view of it. */
 async function openPlanFromSidebar(id) {
   if (!['gantt', 'kanban', 'sheet', 'network', 'priority', 'alltasks'].includes(store.ui.view)) set({ view: 'gantt' });
   const { projectSheet } = await import('./projectsheet.js');
@@ -285,7 +300,7 @@ export function renderSidebar() {
   const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));
   if (!pinned.length) parts.favorites.append(el('div', { class: 'side-empty', text: 'Right-click a project below to add it here.' }));
   for (const p of pinned) {
-    parts.favorites.append(item({ icon: '◈', label: p.name, active: p.id === project.id, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, pinned) }));
+    parts.favorites.append(item({ icon: '◈', label: p.name, active: p.id === project.id, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, pinned) }));
   }
 
   clear(parts.workspaces);
@@ -316,7 +331,7 @@ export function renderSidebar() {
     if (open) {
       for (const p of plans) {
         parts.workspaces.append(item({ icon: p.pinned ? '◈' : '▢', label: p.name, cls: 'side-child', active: p.id === project.id,
-          title: `${p.tasks} tasks`, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, plans) }));
+          title: `${p.tasks} tasks — double-click or ↗ to open`, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, plans) }));
       }
       if (!plans.length) parts.workspaces.append(el('div', { class: 'side-empty side-child', text: 'No projects yet' }));
     }
