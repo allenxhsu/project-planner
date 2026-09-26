@@ -15,7 +15,7 @@ import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu, showText } from './dialog.js';
-import { blockMenu, blockSheet, meetingSheet } from './blockmenu.js';
+import { blockMenu, blockSheet, meetingSheet, taskSheet } from './blockmenu.js';
 
 /**
  * How much of the calendar is on screen.
@@ -472,7 +472,7 @@ export function renderCalendar(root) {
       // task's name and the day says the rest.
       const oneDay = range === 'day';
       col.append(el('div', {
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${!foreign ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
@@ -481,9 +481,10 @@ export function renderCalendar(root) {
         onclick: (e) => {
           if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; }
           const lateLine = (all.late || []).find((l) => l.taskId === t.id && l.planId === b.planId);
+          if (b.worked) { void taskSheet({ planId: b.planId, taskId: b.taskId }); return; }
           void blockSheet(b, { late: lateLine ? lateSentence(lateLine) : null });
         },
-        onpointerdown: foreign ? null : (e) => startDrag(e, b, { hourFrom, y }),
+        onpointerdown: foreign || b.worked ? null : (e) => startDrag(e, b, { hourFrom, y }),
         oncontextmenu: (e) => {
           e.preventDefault();
           if (!foreign) act.selectTask(t.id);
@@ -491,7 +492,9 @@ export function renderCalendar(root) {
         },
       },
         el('div', { class: 'cal-block-time sc-mono' },
-          b.pinned ? el('span', { class: 'cal-pin', title: 'Pinned', text: '⌖' }) : null,
+          b.worked ? el('span', { class: 'cal-pin', title: 'Worked — logged time', text: '✓' })
+            : b.live ? el('span', { class: 'cal-pin', title: 'Running now', text: '▶' })
+            : b.pinned ? el('span', { class: 'cal-pin', title: 'Pinned', text: '⌖' }) : null,
           oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
           person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
         el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),

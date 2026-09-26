@@ -171,11 +171,11 @@ export function renderToday(root) {
     if (!hit) continue;
     const colour = palette.get(b.planId) || personColour(b.planName);
     col.append(el('div', {
-      class: `today-block${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}`,
+      class: `today-block${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}`,
       style: { top: `${y(b.start)}px`, height: `${Math.max(14, y(b.end) - y(b.start) - 2)}px`, background: colour.fill, borderLeftColor: colour.line },
       title: `${hit.task.name} · ${b.planName}`,
-      onclick: () => { void taskSheet({ planId: b.planId, taskId: b.taskId, block: b }); },
-    }, el('span', { text: `${b.pinned ? '⌖ ' : ''}${hit.task.name}` }), el('span', { class: 'sc-faint', text: `${formatClock(b.start)} – ${formatClock(b.end)}` })));
+      onclick: () => { void taskSheet({ planId: b.planId, taskId: b.taskId, block: b.worked ? null : b }); },
+    }, el('span', { text: `${b.worked ? '✓ ' : b.live ? '▶ ' : b.pinned ? '⌖ ' : ''}${hit.task.name}` }), el('span', { class: 'sc-faint', text: `${formatClock(b.start)} – ${formatClock(b.end)}` })));
   }
   side.append(
     el('div', { class: 'today-day-head' }, el('span', { class: 'sc-label', text: title }), el('strong', { text: formatDate(iso, 'long') })),

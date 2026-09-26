@@ -227,3 +227,26 @@ test('nothing is laid in hours that have already gone today', () => {
   const evening = lay(p, new Date(2026, 8, 21, 22, 0)).blocks.filter((b) => b.taskId === t.id);
   assert.ok(evening.every((b) => b.dateIso !== MON));
 });
+
+test('stopping a started task logs the time where it was worked and re-lays the rest', async () => {
+  const { setPin, stopWork, pinsOf } = await import('../src/model/model.js');
+  const { p, ann } = week();
+  const t = job(p, ann, 'Essay', { days: 1, work: 2 });
+  setPin(p, t.id, { day: MON, start: 10 * 60, minutes: 60, live: true });
+  assert.equal(pinsOf(t)[0].live, true);
+  stopWork(p, t.id, { worked: 15, more: 45 });
+  assert.equal(pinsOf(t).length, 0);
+  assert.deepEqual(p.timesheets.map((x) => [x.date, x.start, x.hours, x.resourceId]), [[MON, 600, 0.25, ann.id]]);
+  // Monday at 10:15: the logged quarter hour is drawn done at 10:00, and the
+  // 45 minutes still needed are laid from now, not before.
+  const { blocks } = lay(p, new Date(2026, 8, 21, 10, 15));
+  const worked = blocks.filter((b) => b.worked);
+  assert.deepEqual(worked.map((b) => [b.dateIso, b.start, b.end]), [[MON, 600, 615]]);
+  const rest = blocks.filter((b) => b.taskId === t.id && !b.worked);
+  assert.equal(rest.reduce((n, b) => n + b.minutes, 0), 45);
+  assert.ok(rest.every((b) => b.dateIso !== MON || b.start >= 615));
+  // Nothing more needed: done.
+  setPin(p, t.id, { day: MON, start: 11 * 60, minutes: 30, live: true });
+  stopWork(p, t.id, { worked: 30, more: 0 });
+  assert.equal(p.tasks.find((x) => x.id === t.id).percent, 100);
+});

@@ -11,7 +11,7 @@ import {
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
   cleanField, fieldsOf, getField, removeField, setFieldValue,
-  setPin, removePin, clearPins, phaseOf,
+  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -363,10 +363,17 @@ export function startTaskNow(taskId, minutes, { pinIndex = null } = {}) {
         setTaskField(p, t.id, 'work', String(Math.ceil(hours * 100) / 100));
       }
     }
-    setPin(p, t.id, { day, start, minutes: length }, pinIndex);
+    // One running block a task: starting again moves the one already running.
+    const running = pinsOf(t).findIndex((x) => x.live);
+    setPin(p, t.id, { day, start, minutes: length, live: true }, pinIndex ?? (running >= 0 ? running : null));
   });
   if (ok && length < minutes) hint(`Only ${length} minutes are left in today; the block stops at midnight.`);
   return ok;
+}
+
+/** Stop a started task: log what was worked, and say what it still needs. */
+export function stopTask(taskId, { worked, more }) {
+  return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => stopWork(p, taskId, { worked, more }));
 }
 
 /**

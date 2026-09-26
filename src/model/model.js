@@ -489,7 +489,36 @@ function checkPin(pin) {
   const minutes = Math.round(+pin.minutes);
   if (!Number.isFinite(start) || start < 0 || start >= 24 * 60) throw new Error('A pin starts within the day.');
   if (!Number.isFinite(minutes) || minutes < 5 || start + minutes > 24 * 60) throw new Error('A pin has to fit inside its day.');
-  return { day: pin.day, start, minutes };
+  // `live`: the block of a task someone started and has not stopped yet.
+  return { day: pin.day, start, minutes, ...(pin.live ? { live: true } : {}) };
+}
+
+/** Which of a task's pins is the one running now, or -1. */
+export const livePinIndex = (t) => pinsOf(t).findIndex((x) => x.live);
+
+/**
+ * Stop a task that was started: the time actually worked is logged — a
+ * timesheet line with the hour it began, which the calendar draws as done —
+ * the running block goes, and what the task still needs is what the person
+ * says it needs. Nothing more needed means it is finished.
+ */
+export function stopWork(p, taskId, { worked, more }) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  const i = livePinIndex(t);
+  if (i < 0) throw new Error('This task is not running.');
+  const pin = pinsOf(t)[i];
+  removePin(p, taskId, i);
+  const w = Math.max(0, Math.round(+worked || 0));
+  const m = Math.max(0, Math.round(+more || 0));
+  if (w > 0) {
+    addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date: pin.day, start: pin.start, hours: w / 60, note: 'Worked' });
+  }
+  const spent = spentOn(p, taskId);
+  if (m === 0) { setTaskField(p, taskId, 'percent', 100); return; }
+  setTaskField(p, taskId, 'work', String(Math.round((spent + m / 60) * 100) / 100));
+  // Floored, so "what is left by progress" is never less than what was said.
+  setTaskField(p, taskId, 'percent', Math.min(99, Math.floor((spent / (spent + m / 60)) * 100)));
 }
 
 /** Pin a block, or move a pin that is already there when `index` names it. */
@@ -858,7 +887,10 @@ export function addTimesheet(p, props = {}) {
   const hours = Number(props.hours);
   if (!Number.isFinite(hours) || hours < 0) throw new Error('Hours is a number, and never negative.');
   if (props.date && !isoValid(props.date)) throw new Error('A timesheet date is a date (YYYY-MM-DD).');
+  const start = props.start === undefined || props.start === null ? null : Math.round(+props.start);
+  if (start !== null && !(start >= 0 && start < 24 * 60)) throw new Error('A timesheet line starts within its day.');
   const line = newTimesheet({ ...props, hours: Math.round(hours * 100) / 100 });
+  if (start === null) delete line.start; else line.start = start;
   p.timesheets.push(line);
   return line;
 }

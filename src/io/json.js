@@ -126,7 +126,7 @@ export function parse(text) {
             ...(Array.isArray(t.calendar.pins) && t.calendar.pins.length ? { pins: t.calendar.pins
               .filter((q) => q && /^\d{4}-\d{2}-\d{2}$/.test(String(q.day)) && Number.isFinite(+q.start) && Number.isFinite(+q.minutes)
                 && +q.start >= 0 && +q.minutes >= 5 && +q.start + +q.minutes <= 24 * 60)
-              .map((q) => ({ day: q.day, start: Math.round(+q.start), minutes: Math.round(+q.minutes) })) } : {}) }
+              .map((q) => ({ day: q.day, start: Math.round(+q.start), minutes: Math.round(+q.minutes), ...(q.live ? { live: true } : {}) })) } : {}) }
         : { show: false, timeBlockIds: [] },
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
@@ -153,6 +153,8 @@ export function parse(text) {
         id: typeof x.id === 'string' && x.id ? x.id : newTimesheet().id,
         taskId: x.taskId, resourceId: resIds.has(x.resourceId) ? x.resourceId : null,
         date: isoValid(x.date) ? x.date : null, hours: Math.round(+x.hours * 100) / 100, note: String(x.note || ''),
+        // The minute the work began, when it was logged by stopping a started task.
+        ...(Number.isInteger(+x.start) && x.start !== null && +x.start >= 0 && +x.start < 24 * 60 ? { start: +x.start } : {}),
       }));
     if (p.timesheets.length !== before) repairs.push(`${before - p.timesheets.length} timesheet line(s) pointing at missing tasks were dropped.`);
   }

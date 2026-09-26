@@ -17,7 +17,8 @@ import { reloadPeople } from './people.js';
 import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
-import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf } from './calendar.js';
+import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf, currentLayout } from './calendar.js';
+import { formatClock } from '../model/agenda.js';
 import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, persistence, lastCounts, storeCounts, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
@@ -379,6 +380,7 @@ export function initHeader(root) {
   root.append(
     el('span', { class: 'sc-brand-mark', text: 'PJ' }), el('h1', { class: 'sc-header-title', text: 'Project Planner' }),
     el('button', { class: 'sc-button sc-button--primary sc-button--sm new-pick', text: '+ New', title: 'A new task, project or schedule', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); newMenu(r.left, r.bottom + 4); } }),
+    el('button', { class: 'sc-button sc-button--sm running-chip', id: 'running-chip', hidden: true }),
     el('button', { class: 'sc-button sc-button--ghost sc-button--sm workspace-pick', id: 'workspace-pick', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); void workspaceMenu(r.left, r.bottom + 4); } }, 'All workspaces'),
     menubar, el('span', { class: 'sc-spacer' }),
     el('span', { class: 'sc-mono sc-muted', id: 'file-name' }),
@@ -473,7 +475,22 @@ export function renderHeader() {
   document.getElementById('btn-undo').disabled = !canUndo();
   document.getElementById('btn-redo').disabled = !canRedo();
   document.title = `${project.name} — Project Planner`;
+  // The task that was started and not stopped, wherever it is: one click stops it.
+  const chip = document.getElementById('running-chip');
+  if (chip) {
+    let live = null;
+    try { live = currentLayout().all.blocks.find((b) => b.live && b.dateIso === localDay()) || null; } catch { live = null; }
+    chip.hidden = !live;
+    if (live) {
+      const entry = currentLayout().entries.find((e) => e.project.id === live.planId);
+      const name = entry?.project.tasks.find((t) => t.id === live.taskId)?.name || 'Task';
+      chip.textContent = `▶ ${name} · ${formatClock(live.start)}`;
+      chip.title = 'Running now — click to stop and log the time';
+      chip.onclick = () => { void import('./blockmenu.js').then((m) => m.stopNowDialog({ planId: live.planId, taskId: live.taskId })); };
+    }
+  }
 }
+const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // ---------------------------------------------------------------- view tabs, toolbar, status
 

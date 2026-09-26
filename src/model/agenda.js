@@ -323,7 +323,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
         taskId: t.id, planId: project.id, planName: project.name,
         day, start: pin.start, end: pin.start + minutes, minutes,
         lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day),
-        overdue: info.start < floor, pinned: true, pinIndex: index,
+        overdue: info.start < floor, pinned: true, pinIndex: index, ...(pin.live ? { live: true } : {}),
       };
       blocks.push(block);
       if (!byTask.has(t.id)) byTask.set(t.id, []);
@@ -333,6 +333,31 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
       used += minutes;
     });
     pinnedMinutes.set(t.id, used);
+  }
+
+  // ---- work already done, where it was done. A task that was started and
+  // stopped logged its time with the minute it began; the calendar shows it
+  // there, ticked, so the day reads as what happened. It is history: it
+  // books nothing (the hours behind now are not free anyway) and it counts
+  // toward nothing but the task's logged hours.
+  const since = todayDay - 62;
+  for (const { project } of entries) {
+    for (const x of project.timesheets || []) {
+      if (!Number.isInteger(x.start) || !x.date || !(x.hours > 0)) continue;
+      const day = toDay(x.date);
+      if (day < since || day > todayDay + horizonDays) continue;
+      const t = project.tasks.find((k) => k.id === x.taskId);
+      if (!t) continue;
+      const minutes = Math.max(5, Math.round(x.hours * 60));
+      const who = x.resourceId && getResource(project, x.resourceId);
+      const lane = who ? personKeyOf(who) : '__unassigned';
+      blocks.push({
+        taskId: t.id, planId: project.id, planName: project.name,
+        day, start: x.start, end: Math.min(24 * 60, x.start + minutes), minutes,
+        lanes: [lane], lane, people: [lane], critical: false, dateIso: x.date, overdue: false,
+        worked: true, sheetId: x.id,
+      });
+    }
   }
 
   // ---- then everything else, around them.
