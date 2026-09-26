@@ -362,3 +362,15 @@ test('a task fixed at a time shows there even when it is not auto-scheduled', ()
   assert.equal(mine[0].pinned, true);
   assert.equal(mine[0].dateIso, TUE);
 });
+
+test('a finished project is not planned, but its logged time is still drawn', () => {
+  const live = week();
+  const done = week();
+  const t = job(done.p, done.ann, 'Old work', { work: 4 });
+  done.p.archived = true;
+  done.p.timesheets.push({ id: 'ts1', taskId: t.id, resourceId: done.ann.id, date: MON, start: 9 * 60, hours: 1 });
+  const out = planBlocksAcross([{ project: live.p, schedule: computeSchedule(live.p) }], { now: new Date(2026, 8, 21, 12, 0), history: [{ project: done.p, schedule: computeSchedule(done.p) }] });
+  const mine = out.blocks.filter((b) => b.planId === done.p.id);
+  assert.equal(mine.length, 1, 'only the logged hour — nothing of it is laid');
+  assert.equal(mine[0].worked, true);
+});

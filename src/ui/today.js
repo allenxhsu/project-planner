@@ -55,12 +55,12 @@ function taskRow({ planId, planName, task, info, extra, showPlan }) {
 
 export function renderToday(root) {
   clear(root);
-  const { entries, all } = currentLayout();
+  const { entries, history = [], all } = currentLayout();
   const day = toDay(today()) + offset;
   const iso = fromDay(day);
   const many = entries.length > 1;
   const find = (planId, taskId) => {
-    const e = entries.find((x) => x.project.id === planId);
+    const e = entries.find((x) => x.project.id === planId) || history.find((x) => x.project.id === planId);
     const task = e?.project.tasks.find((t) => t.id === taskId);
     return task ? { e, task, info: e.schedule.tasks[taskId] } : null;
   };

@@ -204,7 +204,7 @@ export function notBeforeOf(t) {
   return toDay(s.slice(0, 10)) * 24 * 60 + (+s.slice(11, 13)) * 60 + (+s.slice(14, 16));
 }
 
-export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [] } = {}) {
+export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [], history = [] } = {}) {
   // One plan, once. The same plan arriving twice — the open copy and its own
   // record from the shelf — would book every hour of it twice over.
   const seenPlans = new Set();
@@ -403,8 +403,10 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
   // there, ticked, so the day reads as what happened. It is history: it
   // books nothing (the hours behind now are not free anyway) and it counts
   // toward nothing but the task's logged hours.
-  const since = todayDay - 62;
-  for (const { project } of entries) {
+  // Finished and archived projects (`history`) are not planned, but the time
+  // worked on them is still where it was worked.
+  const since = -Infinity;   // all of it: the calendar can be scrolled back to any week, and it draws only the days on screen
+  for (const { project } of [...entries, ...history]) {
     for (const x of project.timesheets || []) {
       if (!Number.isInteger(x.start) || !x.date || !(x.hours > 0)) continue;
       const day = toDay(x.date);

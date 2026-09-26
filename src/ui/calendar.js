@@ -82,6 +82,8 @@ const HOUR_H = 46;
  */
 const planCache = new Map();
 let others = [];
+/** Archived and finished plans: their logged time is drawn, nothing of them is planned. */
+let historyPlans = [];
 let loadedPlans = false;
 /** Bumped whenever the shelf's plans are re-read, so a memo knows. */
 let othersVersion = 0;
@@ -99,8 +101,15 @@ export function currentLayout() {
   // stop being free, and the layout has to say so.
   const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${Math.floor(Date.now() / 900000)}`;
   if (layoutMemo.key === key && layoutMemo.value) return layoutMemo.value;
-  const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
-  const value = { entries, all: planBlocksAcross(entries, { held: heldBlocks() }) };
+  // Live projects are planned; finished and archived ones are history — their
+  // logged time is drawn, nothing of them is laid. The open project is
+  // whichever it is.
+  const open = { project, schedule };
+  const openIsLive = !project.template && isLiveWork(project);
+  const onlyOpen = ui.calendarScope === 'plan';
+  const entries = [...(openIsLive ? [open] : []), ...(onlyOpen ? [] : others.filter((e) => e.project.id !== project.id))];
+  const history = [...(openIsLive || project.template ? [] : [open]), ...(onlyOpen ? [] : historyPlans.filter((e) => e.project.id !== project.id))];
+  const value = { entries, history, all: planBlocksAcross(entries, { held: heldBlocks(), history }) };
   layoutMemo = { key, value };
   rememberToday(value.all.blocks);
   return value;
@@ -272,22 +281,26 @@ export async function reloadCalendarPlans() {
   try {
     const records = await planRecords();
     const out = [];
+    const past = [];
     for (const r of records) {
       if (r.id === store.project.id) continue;
       const hit = planCache.get(r.id);
-      if (hit && hit.updatedAt === r.updatedAt) { out.push(hit.entry); continue; }
+      if (hit && hit.updatedAt === r.updatedAt) { (hit.history ? past : out).push(hit.entry); continue; }
       try {
         const project = parse(r.body).project;
-        // A template's tasks are a pattern to copy and an archived plan's are
-        // history. Neither is hours anyone is spending this week. Workspaces
-        // are not a filter here: the calendar is every hour, always.
-        if (!isLiveWork(project)) continue;
+        // A template's tasks are a pattern to copy: not on the calendar. An
+        // archived or finished plan's are history: nothing of it is planned,
+        // but the time worked on it stays where it was worked. Workspaces are
+        // not a filter here: the calendar is every hour, always.
+        if (project.template) continue;
+        const history = !isLiveWork(project);
         const entry = { project, schedule: computeSchedule(project) };
-        planCache.set(r.id, { updatedAt: r.updatedAt, entry });
-        out.push(entry);
+        planCache.set(r.id, { updatedAt: r.updatedAt, entry, history });
+        (history ? past : out).push(entry);
       } catch { /* a plan that cannot be read simply is not on the calendar */ }
     }
     others = out;
+    historyPlans = past;
     othersVersion++;
   } catch {
     others = [];
@@ -493,7 +506,9 @@ export function renderCalendar(root) {
   // does not re-read it, so the newly opened plan would still be in there —
   // and every one of its tasks would be booked twice, which looks like a task
   // taking twice the time it asked for.
-  const { entries, all } = currentLayout();
+  const { entries, history = [], all } = currentLayout();
+  // Blocks can belong to a finished project too (time worked on it): look them up in both.
+  const known = [...entries, ...history];
   // Whose week this is, by name — the same person is a different id in each plan.
   const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
@@ -502,7 +517,7 @@ export function renderCalendar(root) {
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who || m.lane === '*') : all.meetings;
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
-  const palette = planPalette(entries);
+  const palette = planPalette(known);
   const phaseList = phases(project);
   const current = project.currentPhaseId ? getPhase(project, project.currentPhaseId) : null;
   const planCount = entries.length;
@@ -531,7 +546,7 @@ export function renderCalendar(root) {
   const lateHere = (all.late || []).filter((l) => !who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who)));
   if (lateHere.length) pane.append(lateBanner(lateHere));
 
-  if (range === 'month') { renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount, colourMode, palette }); return; }
+  if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, planCount, colourMode, palette }); return; }
   const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
@@ -636,11 +651,11 @@ export function renderCalendar(root) {
         m.own && !m.allDay ? el('div', { class: 'cal-meeting-time', text: `${formatClock(m.start)} – ${formatClock(m.end)}${m.location ? ` · ${m.location}` : ''}` }) : null));
     }
     for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
-      const entry = entries.find((e) => e.project.id === b.planId) || entries[0];
+      const entry = known.find((e) => e.project.id === b.planId) || known[0];
       const t = entry.project.tasks.find((x) => x.id === b.taskId);
       const info = entry.schedule.tasks[b.taskId];
       if (!t || !info) continue;
-      const person = whoOf(entries, b);
+      const person = whoOf(known, b);
       const colour = colourMode === 'plan'
         ? (palette.get(b.planId) || personColour(b.planName))
         : personColour(person.names[0] || 'unassigned');
