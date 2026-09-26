@@ -679,3 +679,8 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 @media (max-width: 760px) { .tp-sheet { grid-template-columns: 1fr; } .tp-side { border-left: 0; padding-left: 0; } }
 .cal-block.is-flash { animation: cal-flash 0.7s ease-in-out 3; z-index: 4; }
 @keyframes cal-flash { 50% { box-shadow: 0 0 0 3px var(--sc-accent), 0 0 18px color-mix(in srgb, var(--sc-accent) 60%, transparent); } }
+/* Events made here: as easy to see as the work around them. */
+.cal-meeting.is-own { background: color-mix(in srgb, var(--ev) 48%, var(--sc-panel)); border-left: 4px solid var(--ev); color: var(--sc-text-1); }
+.cal-meeting.is-own .cal-meeting-name { color: var(--sc-text-1); font-weight: 600; opacity: 1; }
+.cal-meeting-time { font-size: 10.5px; color: color-mix(in srgb, var(--sc-text-1) 80%, transparent); font-family: var(--sc-font-mono); }
+.cal-meeting.is-own.is-free { background: color-mix(in srgb, var(--ev) 14%, transparent); border: 1px dashed var(--ev); border-left-width: 4px; }

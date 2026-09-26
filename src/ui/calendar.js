@@ -9,7 +9,7 @@ import { el, clear } from '../util.js';
 import { store, set, revision } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAULT_AGENDA } from '../model/agenda.js';
-import { planRecords, isCurrentWork } from '../state/sync.js';
+import { planRecords, isLiveWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
@@ -126,8 +126,9 @@ export async function reloadCalendarPlans() {
       try {
         const project = parse(r.body).project;
         // A template's tasks are a pattern to copy and an archived plan's are
-        // history. Neither is hours anyone is spending this week.
-        if (!isCurrentWork(project)) continue;
+        // history. Neither is hours anyone is spending this week. Workspaces
+        // are not a filter here: the calendar is every hour, always.
+        if (!isLiveWork(project)) continue;
         const entry = { project, schedule: computeSchedule(project) };
         planCache.set(r.id, { updatedAt: r.updatedAt, entry });
         out.push(entry);
@@ -505,7 +506,8 @@ export function renderCalendar(root) {
         onclick: () => { void meetingSheet(m); },
         style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px`, ...(m.colour && EVENT_COLOURS[m.colour] ? { '--ev': EVENT_COLOURS[m.colour].hex } : {}) },
         title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}${m.location ? `\n${m.location}` : ''}${m.bufferBefore ? `\n${m.bufferBefore} minutes' travel either side` : ''}`,
-      }, el('div', { class: 'cal-meeting-name', text: m.title })));
+      }, el('div', { class: 'cal-meeting-name', text: m.title }),
+        m.own && !m.allDay ? el('div', { class: 'cal-meeting-time', text: `${formatClock(m.start)} – ${formatClock(m.end)}${m.location ? ` · ${m.location}` : ''}` }) : null));
     }
     for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
       const entry = entries.find((e) => e.project.id === b.planId) || entries[0];

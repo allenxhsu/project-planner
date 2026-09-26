@@ -838,7 +838,8 @@ export async function peopleWithLoad() {
     try {
       const project = parse(record.body).project;
       // An archived plan's hours are history, not what someone is carrying.
-      if (!isCurrentWork(project)) continue;
+      // Every workspace counts: a person's week is all of it.
+      if (!isLiveWork(project)) continue;
       count(project, computeSchedule(project), project.name || record.name);
     } catch { /* a plan that cannot be read adds nothing */ }
   }
@@ -1049,7 +1050,17 @@ export async function duplicatePlan(id, { asTemplate = false, name } = {}) {
  * Neither is anyone's current work, so neither belongs on the calendar, in All
  * Tasks, or in what a person is carrying. Both are kept in full.
  */
-export const isCurrentWork = (project) => !project?.template && !project?.archived && inActiveWorkspace(project);
+export const isCurrentWork = (project) => isLiveWork(project) && inActiveWorkspace(project);
+
+/**
+ * Live work, whatever workspace is in front: not a template, not archived.
+ * The calendar and a person's load use this. A workspace narrows the lists
+ * of projects and tasks, but a week has one set of hours in it — a meeting
+ * filed under Work still takes the evening a Personal task wanted, and
+ * switching workspace must not make it vanish or let something be laid on
+ * top of it.
+ */
+export const isLiveWork = (project) => !project?.template && !project?.archived;
 
 /**
  * Archive a plan, or bring it back.
