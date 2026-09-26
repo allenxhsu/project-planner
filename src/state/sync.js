@@ -764,7 +764,15 @@ export async function mergeWorkspaces(fromId, intoId, choices = {}) {
   // Folders: choices.folders[id] is a target folder's id, 'new', or 'none';
   // unsaid, a folder joins the target's of the same name, or is made there.
   const map = new Map();
-  for (const f of foldersOf(from)) {
+  // As one folder: every project goes into a folder of the target named
+  // choices.asFolder (the workspace's own name, usually), made if missing.
+  let single = null;
+  if (choices.asFolder) {
+    const into = await recordStore.get(intoId);
+    const same = foldersOf(into).find((x) => norm(x.name) === norm(choices.asFolder));
+    single = same ? same.id : (await createFolder(intoId, choices.asFolder))?.id || null;
+  }
+  for (const f of choices.asFolder ? [] : foldersOf(from)) {
     const pick = choices.folders?.[f.id];
     const into = await recordStore.get(intoId);
     const same = foldersOf(into).find((x) => norm(x.name) === norm(f.name));
@@ -779,7 +787,7 @@ export async function mergeWorkspaces(fromId, intoId, choices = {}) {
   let moved = 0;
   for (const s of await listPlans()) {
     if (s.workspaceId !== fromId) continue;
-    const folderId = s.folderId ? map.get(s.folderId) || null : null;
+    const folderId = single || (s.folderId ? map.get(s.folderId) || null : null);
     await patchPlan(s.id, (p) => {
       p.workspaceId = intoId;
       p.folderId = folderId;

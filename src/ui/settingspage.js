@@ -162,7 +162,7 @@ export async function mergeWorkspaceDialog(fromId) {
   const labelsOf = (ps) => [...new Set(ps.flatMap((p) => p.tasks.flatMap((t) => t.labels || [])))].sort();
   const mine = plansIn[fromId] || [];
 
-  const state = { step: 0, into: others[0].id, folders: {}, statuses: {}, labels: {} };
+  const state = { step: 0, into: others[0].id, asFolder: false, folders: {}, statuses: {}, labels: {} };
   const STEPS = ['Into', 'Folders', 'Statuses', 'Labels', 'Review'];
   const target = () => others.find((w) => w.id === state.into);
   const theirs = () => plansIn[state.into] || [];
@@ -181,11 +181,16 @@ export async function mergeWorkspaceDialog(fromId) {
       let content;
       if (state.step === 0) {
         content = [el('p', { class: 'sc-muted small', text: `${mine.length} project${mine.length === 1 ? '' : 's'} and ${sync.foldersOf(from).length} folder${sync.foldersOf(from).length === 1 ? '' : 's'} will move, and “${from.name}” is removed.` }),
-          line(from.name, pick(state.into, others.map((w) => [w.id, w.name]), (v) => { state.into = v; state.folders = {}; state.statuses = {}; state.labels = {}; }))];
+          line(from.name, pick(state.into, others.map((w) => [w.id, w.name]), (v) => { state.into = v; state.folders = {}; state.statuses = {}; state.labels = {}; })),
+          el('div', { class: 'mw-choice' },
+            el('label', {}, el('input', { type: 'radio', name: 'mw-how', checked: !state.asFolder, onchange: () => { state.asFolder = false; } }), el('span', { text: ' Its projects and folders join the workspace' })),
+            el('label', {}, el('input', { type: 'radio', name: 'mw-how', checked: state.asFolder, onchange: () => { state.asFolder = true; } }),
+              el('span', { text: ` As one folder, “${from.name}”, holding all its projects` })))];
       } else if (state.step === 1) {
         const folders = sync.foldersOf(from);
         const theirFolders = sync.foldersOf(t);
-        content = folders.length ? [el('p', { class: 'sc-muted small', text: `Where each folder of ${from.name} goes in ${t.name}.` }),
+        if (state.asFolder) content = [el('p', { class: 'sc-muted small', text: `All ${mine.length} project${mine.length === 1 ? '' : 's'} go into the folder “${from.name}” in ${t.name}${sync.foldersOf(t).some((x) => norm(x.name) === norm(from.name)) ? ' (it is there already)' : ''}.${folders.length ? ` Folders do not nest, so ${from.name}’s own ${folders.length} folder${folders.length === 1 ? ' is' : 's are'} not kept.` : ''}` })];
+        else content = folders.length ? [el('p', { class: 'sc-muted small', text: `Where each folder of ${from.name} goes in ${t.name}.` }),
           ...folders.map((f) => {
             const same = theirFolders.find((x) => norm(x.name) === norm(f.name));
             const value = state.folders[f.id] || (same ? same.id : 'new');
@@ -206,7 +211,7 @@ export async function mergeWorkspaceDialog(fromId) {
           ...extra.map((n) => line(`# ${n}`, pick(n in state.labels ? state.labels[n] : n, [[n, 'Keep it'], ...theirLabels.map((m) => [m, `Becomes “${m}”`]), ['', 'Take it off']], (v) => { state.labels[n] = v; })))]
           : [el('p', { class: 'sc-muted small', text: 'No labels to resolve.' })];
       } else {
-        const folderLines = sync.foldersOf(from).map((f) => {
+        const folderLines = state.asFolder ? [`All projects → folder “${from.name}”`] : sync.foldersOf(from).map((f) => {
           const v = state.folders[f.id];
           const same = sync.foldersOf(t).find((x) => norm(x.name) === norm(f.name));
           const to = v === 'none' ? 'no folder' : v && v !== 'new' ? `“${sync.foldersOf(t).find((x) => x.id === v)?.name}”` : same && !v ? `“${same.name}”` : `new “${f.name}”`;
@@ -229,7 +234,7 @@ export async function mergeWorkspaceDialog(fromId) {
     return [body, footer];
   }, { wide: true });
   if (!done) return;
-  const moved = await sync.mergeWorkspaces(fromId, state.into, { folders: state.folders, statuses: state.statuses, labels: state.labels });
+  const moved = await sync.mergeWorkspaces(fromId, state.into, { asFolder: state.asFolder ? from.name : null, folders: state.folders, statuses: state.statuses, labels: state.labels });
   const { refreshSidebar } = await import('./sidebar.js');
   await refreshSidebar();
   if (store.ui.view === 'settings') set({ settingsPage: `ws:${state.into}` }); else set({});

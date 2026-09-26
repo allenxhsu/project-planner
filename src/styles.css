@@ -1156,3 +1156,4 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .typed-body { margin: 0 0 10px; }
 .typed-ask { margin: 0 0 8px; }
 .typed-word { color: var(--sc-danger); }
+.mw-choice { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
