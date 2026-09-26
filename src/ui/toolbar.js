@@ -254,7 +254,7 @@ function help() {
   ].join('\n'));
 }
 
-const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); if (view === 'usage') void reloadUsage(); };
+const goView = (view) => () => { set({ view, editing: null }); if (view === 'projects') void reloadPlans(); if (view === 'alltasks') void reloadAllTasks(); if (view === 'calendar' || view === 'today') void reloadCalendarPlans(); if (view === 'people') void reloadPeople(); if (view === 'usage') void reloadUsage(); };
 const zoomIn = () => (store.ui.view === 'network' ? zoomNetwork(1) : zoomGantt(1));
 const zoomOut = () => (store.ui.view === 'network' ? zoomNetwork(-1) : zoomGantt(-1));
 
@@ -277,7 +277,7 @@ export const COMMANDS = {
   'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },
   'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
-  'view.people': goView('people'), 'view.schedules': goView('schedules'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
+  'view.today': goView('today'), 'view.people': goView('people'), 'view.schedules': goView('schedules'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
@@ -513,6 +513,9 @@ export function renderToolbar(root) {
       b('↑', 'Move up (⌥⇧↑)', () => act.moveSelection(-1), { disabled: !sel }), b('↓', 'Move down (⌥⇧↓)', () => act.moveSelection(1), { disabled: !sel }), sep(),
       b('⛓ Link', 'Link the selected tasks in order (⌘L)', act.linkSelection, { disabled: sel < 2 }), b('Unlink', 'Remove links from the selected tasks (⇧⌘L)', act.unlinkSelection, { disabled: !sel }), sep(),
       b('✓ 100%', 'Mark the active task complete', COMMANDS['task.complete'], { disabled: !sel }));
+  } else if (ui.view === 'today') {
+    root.append(b('↻ Refresh', 'Sync, then re-read every plan', () => { void reloadPlans({ pull: true }).then(() => reloadCalendarPlans()); }),
+      b('Calendar', 'The week', COMMANDS['view.calendar']), b('Priority', 'Everything, ranked', COMMANDS['view.priority']));
   } else if (ui.view === 'schedules') {
     root.append(b('+ Schedule', 'Draw a new set of hours', () => { void import('./schedules.js').then((m) => m.editSchedule(null)); }, { primary: true }),
       b('Calendar', 'Back to the week', COMMANDS['view.calendar']));

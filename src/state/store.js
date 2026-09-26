@@ -16,6 +16,7 @@ const AUTOSAVE_KEY = 'project-planner:autosave';
 // `label` names the view in menus and the status line; `short` is what fits in
 // the tab strip once there are seven of them.
 export const VIEWS = {
+  today: { label: 'Today', short: 'Today', glyph: '☀' },
   projects: { label: 'Projects', short: 'Projects', glyph: '▢' },
   people: { label: 'People', short: 'People', glyph: '☺' },
   gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },

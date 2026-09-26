@@ -458,6 +458,33 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .sheet-notes { min-height: 110px; }
 .sheet-late { font-size: 12.5px; }
 .cal-meeting { cursor: pointer; }
+.today-pane { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; overflow: hidden; }
+.today-main { overflow-y: auto; padding: 28px clamp(16px, 5vw, 72px); }
+.today-head { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 18px; }
+.today-date { margin: 2px 0 0; font: 700 30px var(--sc-font-display); letter-spacing: 0.01em; }
+.today-section { margin: 22px 0 8px; font: 600 16px var(--sc-font-display); }
+.today-section.is-warning { color: var(--sc-danger); }
+.today-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.today-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; cursor: pointer; font-size: 13.5px; }
+.today-row:hover { background: color-mix(in srgb, var(--sc-accent) 10%, transparent); }
+.today-row.is-done .today-name { text-decoration: line-through; opacity: 0.6; }
+.today-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.today-due { color: var(--sc-text-2); font-size: 12px; white-space: nowrap; }
+.today-due.is-overdue { color: var(--sc-danger); }
+.today-hours { font-size: 12px; white-space: nowrap; }
+.today-plan { --tint: var(--sc-text-3); font-size: 10px; margin-left: auto; white-space: nowrap; }
+.today-late .today-name { white-space: normal; color: var(--sc-text-1); }
+.today-empty { margin: 4px 8px; }
+.today-day { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; padding: 14px; border-left: 1px solid var(--sc-line); min-height: 0; }
+.today-day-head { display: grid; gap: 2px; }
+.today-allday { padding: 3px 6px; font-size: 11.5px; background: color-mix(in srgb, var(--sc-line) 40%, transparent); }
+.today-day-scroll { overflow-y: auto; min-height: 0; }
+.today-col { position: relative; margin-left: 52px; }
+.today-hour { position: absolute; left: -52px; right: 0; border-top: 1px solid color-mix(in srgb, var(--sc-line) 60%, transparent); }
+.today-hour span { position: absolute; left: 0; top: -7px; font-size: 10px; color: var(--sc-text-3); }
+.today-block, .today-meeting { position: absolute; left: 2px; right: 2px; display: grid; align-content: start; padding: 2px 6px; font-size: 11.5px; border-left: 3px solid; overflow: hidden; cursor: pointer; }
+.today-meeting { background: color-mix(in srgb, var(--sc-line) 55%, transparent); border-left-color: var(--sc-text-3); }
+.today-block.is-late { outline: 1px dashed var(--sc-danger); outline-offset: -1px; }
 .sheet-archived { display: flex; align-items: center; justify-content: center; gap: 10px; margin: -4px -4px 12px; padding: 8px 12px;
   background: color-mix(in srgb, var(--sc-danger) 70%, transparent); color: #fff; font-size: 13px; }
 .task-sheet { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; width: min(1000px, calc(92vw - 48px)); }
