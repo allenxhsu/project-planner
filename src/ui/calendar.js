@@ -19,6 +19,8 @@ import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
 import { icon } from './icons.js';
 
+/** Which day is on screen, or a day inside the week or month that is. */
+let anchor = null;
 /**
  * How much of the calendar is on screen.
  *
@@ -35,10 +37,19 @@ export const RANGES = {
   week: { label: 'Week', step: 7, unit: 'week' },
   month: { label: 'Month', step: 1, unit: 'month' },
 };
-export const rangeOf = () => (RANGES[store.ui.calendarRange] ? store.ui.calendarRange : 'work');
+export const rangeOf = () => {
+  const chosen = RANGES[store.ui.calendarRange] ? store.ui.calendarRange : 'work';
+  // A work week that would leave today out — a weekend, or a day the open
+  // project does not work — shows the whole week while today is in it, so
+  // opening the calendar always shows today. Another week keeps the work week.
+  if (chosen === 'work') {
+    const now = toDay(today());
+    const at = anchor ?? now;
+    if (weekStart(at) === weekStart(now) && !makeCalendar(store.project.calendar).isWorking(now)) return 'week';
+  }
+  return chosen;
+};
 
-/** Which day is on screen, or a day inside the week or month that is. */
-let anchor = null;
 export function goToWeek(day) { anchor = day; set({}); }
 export const showThisWeek = () => goToWeek(toDay(today()));
 /** Move by whatever the current range is: a day, a week, or a month. */
