@@ -15,6 +15,7 @@ import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
 import { showMenu, showText } from './dialog.js';
+import { blockMenu, blockSheet, meetingSheet } from './blockmenu.js';
 
 /**
  * How much of the calendar is on screen.
@@ -440,6 +441,7 @@ export function renderCalendar(root) {
       }
       col.append(el('div', {
         class: `cal-meeting${m.allDay ? ' is-allday' : ''}`,
+        onclick: () => { void meetingSheet(m); },
         style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px` },
         title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}${m.location ? `\n${m.location}` : ''}${m.bufferBefore ? `\n${m.bufferBefore} minutes' travel either side` : ''}`,
       }, el('div', { class: 'cal-meeting-name', text: m.title })));
@@ -476,29 +478,14 @@ export function renderCalendar(root) {
         title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
         onclick: (e) => {
           if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; }
-          if (foreign) { void openOther(b.planId, t.id); return; }
-          act.selectTask(t.id);
+          const lateLine = (all.late || []).find((l) => l.taskId === t.id && l.planId === b.planId);
+          void blockSheet(b, { late: lateLine ? lateSentence(lateLine) : null });
         },
         onpointerdown: foreign ? null : (e) => startDrag(e, b, { hourFrom, y }),
-        ondblclick: () => set({ rightOpen: true, rightTab: 'task', selection: [t.id] }),
         oncontextmenu: (e) => {
           e.preventDefault();
-          act.selectTask(t.id);
-          showMenu(e.clientX, e.clientY, [
-            { label: 'Task information…', run: () => set({ rightOpen: true, rightTab: 'task' }) },
-            { label: 'Show on the Gantt chart', run: () => { act.revealTask(t.id); set({ view: 'gantt' }); } },
-            '-',
-            { label: 'Do it now', run: () => act.editTask(t.id, 'urgency', 'now') },
-            { label: 'Urgency: high', run: () => act.editTask(t.id, 'urgency', 'high') },
-            { label: 'Urgency: low', run: () => act.editTask(t.id, 'urgency', 'low') },
-            '-',
-            { label: 'Break into subtasks…', run: () => act.breakUpDialog(t.id) },
-            '-',
-            ...(foreign ? [] : b.pinned
-              ? [{ label: 'Unpin — let the calendar place it', run: () => act.unpinBlock(t.id, b.pinIndex) }]
-              : [{ label: 'Pin it here', run: () => act.pinBlock(t.id, { day: b.dateIso, start: b.start, minutes: b.minutes }) }]),
-            { label: 'Take off the calendar', run: () => act.editTask(t.id, 'calendarShow', false) },
-          ]);
+          if (!foreign) act.selectTask(t.id);
+          blockMenu(b, e.clientX, e.clientY);
         },
       },
         el('div', { class: 'cal-block-time sc-mono' },

@@ -93,6 +93,9 @@ export function newTask(props = {}) {
     // means "as much as the assignment says", the old full-time assumption.
     work: null,
     stageId: null, phaseId: null, urgency: 'normal',
+    // Archived: kept, but no longer asking for anyone's time. Not the same as
+    // done — nothing is claimed about whether the work happened.
+    archived: false,
     // Calendar: off until asked for. `blockHours`, `from` and `to` fall back to
     // the plan's own defaults, so most tasks carry nothing but `show`.
     calendar: { show: false, timeBlockIds: [] },
@@ -461,6 +464,7 @@ export function setFeedEvents(p, id, events, at = Date.now()) {
     uid: String(e.uid || ''), title: String(e.title || '(no title)'),
     start: +e.start, end: +e.end, allDay: !!e.allDay,
     ...(e.location ? { location: String(e.location) } : {}),
+    ...(e.description ? { description: String(e.description).slice(0, 2000) } : {}),
   })).filter((e) => Number.isFinite(e.start) && Number.isFinite(e.end) && e.end > e.start);
   f.fetchedAt = at;
   return f.events.length;
@@ -871,6 +875,7 @@ export function setTaskField(p, id, field, value) {
     case 'predecessors': t.predecessors = parsePredecessors(p, value, id); break;
     case 'resources': t.assignments = parseAssignments(p, value); break;
     case 'notes': t.notes = String(value ?? ''); break;
+    case 'archived': t.archived = !!value; break;
     case 'deadline': if (value && !isoValid(value)) throw new Error('A deadline is a date (YYYY-MM-DD).'); t.deadline = value || null; break;
     case 'constraintType': {
       if (!CONSTRAINTS[value]) throw new Error('Unknown constraint.');

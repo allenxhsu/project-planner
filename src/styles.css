@@ -420,5 +420,45 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .sc-dialog p { margin: 0 0 var(--sc-space-2); }
 .pop-menu { position: fixed; z-index: 50; min-width: 220px; max-height: 80vh; overflow-y: auto; }
 .pop-menu .sc-menu-item { display: flex; justify-content: space-between; gap: 16px; width: 100%; }
+.pop-menu .menu-label { display: inline-flex; align-items: center; gap: 8px; }
+.pop-menu .menu-icon { width: 16px; text-align: center; opacity: 0.8; }
+.pop-menu .menu-more { opacity: 0.6; }
+.pop-menu .sc-menu-item.has-side:hover, .pop-menu .sc-menu-item.has-side:focus { background: color-mix(in srgb, var(--sc-accent) 14%, transparent); }
+.pop-side { min-width: 150px; }
+.pop-panel { min-width: 0; padding: 0; }
+/* the date picker beside a menu */
+.dp { display: flex; align-items: stretch; }
+.dp-cal { padding: 8px 10px 10px; min-width: 238px; }
+.dp-head { display: flex; align-items: center; gap: 6px; padding: 2px 0 8px; border-bottom: 1px solid var(--sc-line); font-size: 12.5px; }
+.dp-value { flex: 1; }
+.dp-clear { background: none; border: 0; color: var(--sc-text-3); cursor: pointer; font-size: 15px; }
+.dp-nav { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 6px; font-size: 12.5px; font-weight: 600; }
+.dp-step { background: none; border: 0; color: var(--sc-text-2); cursor: pointer; font-size: 15px; padding: 0 6px; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 30px); gap: 2px; }
+.dp-dow { text-align: center; font-size: 10.5px; color: var(--sc-text-3); padding-bottom: 2px; }
+.dp-day { position: relative; height: 28px; border: 0; background: none; color: var(--sc-text-1); font: inherit; font-size: 12px; cursor: pointer; }
+.dp-day:hover { background: color-mix(in srgb, var(--sc-accent) 18%, transparent); }
+.dp-day.is-outside { color: var(--sc-text-3); opacity: 0.55; }
+.dp-day.is-today { color: var(--sc-app); font-weight: 700; }
+.dp-day.is-chosen { background: var(--sc-app); color: var(--sc-bg-0, #000); font-weight: 700; }
+.dp-mark { position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; }
+.dp-quick { display: flex; flex-direction: column; border-left: 1px solid var(--sc-line); padding: 6px 0; min-width: 190px; }
+.dp-quick-item { display: flex; justify-content: space-between; gap: 14px; padding: 6px 12px; background: none; border: 0; color: var(--sc-text-1); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.dp-quick-item:hover, .dp-quick-item.is-chosen { background: color-mix(in srgb, var(--sc-accent) 14%, transparent); }
+/* the sheet a calendar block or event opens */
+.sheet { display: grid; gap: 12px; min-width: min(640px, 80vw); }
+.sheet-head { display: flex; align-items: center; gap: 8px; }
+.sheet-chip { --tint: var(--sc-app); }
+.sheet-title { font: 600 20px var(--sc-font-display); letter-spacing: 0.01em; }
+.sheet-title-ro { padding: 2px 0; }
+.sheet-when { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.sheet-when .sc-input { width: auto; }
+.sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; }
+.sheet-desc { white-space: pre-wrap; max-height: 220px; overflow: auto; padding: 10px; font-size: 12.5px; color: var(--sc-text-2); background: color-mix(in srgb, var(--sc-line) 30%, transparent); }
+.sheet-notes { min-height: 110px; }
+.sheet-late { font-size: 12.5px; }
+.cal-meeting { cursor: pointer; }
+.blocker-list { display: grid; gap: 2px; max-height: 50vh; overflow: auto; }
+.blocker-row .sc-faint { margin-left: auto; }
 .menu-note { padding: 8px 12px; color: var(--sc-text-3); font-size: 12px; }
 .pop-menu sc-theme-picker { display: block; padding: 4px 12px 10px; }

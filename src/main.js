@@ -129,6 +129,26 @@ if (!hosted) {
 } else render();
 
 // After the first plan is on screen: the record store, the engine and the timer.
+/**
+ * #plan=…&task=… — what Copy link on a calendar block hands out. Opening it
+ * opens that plan and lands on that task, in whichever copy of the app
+ * follows the link.
+ */
+async function followLink() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const planId = h.get('plan');
+  const taskId = h.get('task');
+  if (!planId) return;
+  const { openPlan } = await import('./state/sync.js');
+  if (planId !== store.project.id && !(await openPlan(planId))) return;
+  if (taskId && store.project.tasks.some((t) => t.id === taskId)) {
+    set({ view: 'gantt' });
+    act.revealTask(taskId); act.selectTask(taskId);
+    set({ rightOpen: true, rightTab: 'task' });
+  }
+}
+window.addEventListener('hashchange', () => { void followLink(); });
+
 // On the Portal the page carries the Portal's bar: the app switcher, the
 // account, and Sign in when the session is gone.
 function mountPortalBar() {
@@ -148,6 +168,7 @@ initSync()
       }
     }
     void storeCounts();
+    void followLink();
     return Promise.all([reloadPlans(), refreshWorkspaceLabel()]);
   })
   .catch((err) => console.error('sync could not start', err));

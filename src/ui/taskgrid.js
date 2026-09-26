@@ -52,6 +52,7 @@ function indicators(task, info) {
   const worst = issues.find((i) => i.level === 'error') || issues.find((i) => i.level === 'warning');
   if (worst) marks.push(el('span', { class: `ind ind-${worst.level}`, text: worst.level === 'error' ? '⨂' : '⚠', title: issues.map((i) => i.text).join('\n') }));
   if (info.percent === 100) marks.push(el('span', { class: 'ind ind-done', text: '✓', title: 'Complete' }));
+  if (task.archived) marks.push(el('span', { class: 'ind ind-archived', text: '▣', title: 'Archived — off the calendar and the priority list' }));
   if (task.constraint?.type !== 'ASAP') marks.push(el('span', { class: 'ind ind-pin', text: '⚑', title: `${CONSTRAINTS[task.constraint.type].label} ${formatDate(task.constraint.date)}` }));
   // The calendar's verdict, when it has one: the plan's dates can make a
   // deadline that the week, laid out beside every other project, cannot.

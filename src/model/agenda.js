@@ -246,7 +246,8 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       const travels = !e.allDay && buffer > 0 && typeof e.location === 'string' && e.location.trim() !== '';
       meetings.push({
         lane, day, start: startMin, end: endMin, title: e.title, allDay: !!e.allDay,
-        location: e.location || null,
+        location: e.location || null, description: e.description || null,
+        uid: e.uid || null, feedId: feed.id, feedName: feed.name, planId: project.id, buffer,
         bufferBefore: travels ? Math.min(buffer, startMin) : 0,
         bufferAfter: travels ? Math.min(buffer, 24 * 60 - endMin) : 0,
       });
@@ -269,7 +270,7 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       .map((t, i) => ({ t, i, info: schedule.tasks[t.id], project }))
       // Only the phase each plan says it is in. Work from a phase that has not
       // started yet is real, but it is not this week's business.
-      .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
+      .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !t.archived && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
     .map((c) => ({ ...c, deadline: c.t.deadline ? toDay(c.t.deadline) : Infinity }))
     // Earliest deadline first. For work that can be cut up and done in any
     // order — which is what blocks make of it — on one person's time, that
@@ -465,7 +466,7 @@ export function priorities(project, schedule, { now = null } = {}) {
   const out = [];
   project.tasks.forEach((t, i) => {
     const info = schedule.tasks[t.id];
-    if (!info || info.cyclic || isSummary(project, i) || info.percent === 100) return;
+    if (!info || info.cyclic || t.archived || isSummary(project, i) || info.percent === 100) return;
     const blockedBy = t.predecessors.filter((l) => !done.has(l.id) && schedule.tasks[l.id]).map((l) => l.id);
     const reasons = [];
     let score = 0;

@@ -133,6 +133,7 @@ export function parseIcs(text, { from = Date.now() - 7 * DAY_MS, to = Date.now()
             uid: current.uid || `${at}`, title: current.title || '(no title)',
             start: at, end: at + span, allDay: !!current.allDay, busy: current.busy !== false,
             ...(current.location ? { location: current.location } : {}),
+            ...(current.description ? { description: current.description } : {}),
           });
         }
       } else skipped++;

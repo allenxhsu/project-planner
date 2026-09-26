@@ -76,21 +76,55 @@ export function formDialog(title, fields, okLabel = 'OK', intro = null) {
 // ---------------------------------------------------------------- menus
 
 let openMenu = null;
-export function closeMenu() { openMenu?.remove(); openMenu = null; }
+export function closeMenu() { openMenu?._side?.remove(); openMenu?.remove(); openMenu = null; }
 
 /**
  * Pop a menu at a screen position. `items`: [{ label, run, danger?, disabled?, note?, key?, checked? } | '-'].
  */
+/**
+ * A pop-up menu.
+ *
+ * items: '-' for a separator, { note } for a line of text, or
+ *   { label, run, key?, checked?, danger?, disabled?, icon? } for a command,
+ *   { label, submenu: items } for a menu that opens beside it, or
+ *   { label, panel: (close) => Element } for anything else beside it — a date
+ *   picker, say. Side panels open on hover and on click, one at a time, and go
+ *   when the menu goes.
+ */
 export function showMenu(x, y, items) {
   closeMenu();
-  const menu = el('div', { class: 'sc-menu pop-menu' }, ...items.map((it) => {
+  let side = null;
+  const closeSide = () => { side?.remove(); side = null; };
+  const closeAll = () => { closeSide(); closeMenu(); };
+  const openSide = (row, it) => {
+    if (side?.dataset.for === it.label) return;
+    closeSide();
+    side = it.submenu
+      ? el('div', { class: 'sc-menu pop-menu pop-side' }, ...it.submenu.map((sub) => itemRow(sub, true)))
+      : el('div', { class: 'sc-menu pop-menu pop-side pop-panel' }, it.panel(closeAll));
+    side.dataset.for = it.label;
+    document.body.append(side);
+    const r = row.getBoundingClientRect();
+    const s = side.getBoundingClientRect();
+    const right = r.right + 2;
+    side.style.left = `${right + s.width < window.innerWidth - 4 ? right : Math.max(4, r.left - s.width - 2)}px`;
+    side.style.top = `${Math.max(4, Math.min(r.top - 4, window.innerHeight - s.height - 4))}px`;
+    if (openMenu) openMenu._side = side;
+  };
+  const itemRow = (it, inSide = false) => {
     if (it === '-') return el('div', { class: 'sc-menu-sep' });
     if (it.note) return el('div', { class: 'menu-note', text: it.note });
-    return el('button', {
-      class: `sc-menu-item${it.danger ? ' is-danger' : ''}`, disabled: !!it.disabled,
-      onclick: () => { closeMenu(); it.run(); },
-    }, el('span', { text: `${it.checked ? '✓ ' : ''}${it.label}` }), it.key ? el('span', { class: 'sc-kbd', text: it.key }) : null);
-  }));
+    const opens = !!(it.submenu || it.panel);
+    const row = el('button', {
+      class: `sc-menu-item${it.danger ? ' is-danger' : ''}${opens ? ' has-side' : ''}`, disabled: !!it.disabled,
+      onclick: (e) => { if (opens) { e.stopPropagation(); openSide(row, it); return; } closeAll(); it.run(); },
+      onpointerenter: inSide ? null : () => { if (opens) openSide(row, it); else closeSide(); },
+    },
+      el('span', { class: 'menu-label' }, it.icon ? el('span', { class: 'menu-icon', text: it.icon }) : null, `${it.checked ? '✓ ' : ''}${it.label}`),
+      it.key ? el('span', { class: 'sc-kbd', text: it.key }) : opens ? el('span', { class: 'menu-more', text: '›' }) : null);
+    return row;
+  };
+  const menu = el('div', { class: 'sc-menu pop-menu' }, ...items.map((it) => itemRow(it)));
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - r.width - 4))}px`;

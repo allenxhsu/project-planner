@@ -334,6 +334,27 @@ export function setCurrentPhase(id) {
 export function pinBlock(taskId, pin, index = null) {
   return attempt(index === null ? 'Pin a block' : 'Move a pinned block', (p) => { setPin(p, taskId, pin, index); });
 }
+/**
+ * A calendar event made into project work: a task of the event's length,
+ * fixed at its hour, in the open plan. The meeting stays in its calendar; the
+ * task is what makes its time count toward the project and toward the day.
+ */
+export function newTaskFromEvent({ name, day, start, minutes, notes = '' }) {
+  let made = null;
+  const ok = attempt('Add an event to the project', (p) => {
+    const t = insertTask(p, p.tasks.length, { name, duration: 1, level: 1 });
+    const who = p.resources.find((r) => r.type === 'work');
+    if (who) assign(p, t.id, who.id, 1);
+    setTaskField(p, t.id, 'work', String(Math.round((minutes / 60) * 100) / 100));
+    setTaskField(p, t.id, 'start', day);
+    setTaskField(p, t.id, 'calendarShow', true);
+    if (notes) setTaskField(p, t.id, 'notes', notes);
+    setPin(p, t.id, { day, start, minutes });
+    made = t;
+  });
+  return ok ? made : null;
+}
+
 export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }
 export function unpinAll(taskId) { return attempt('Unpin every block', (p) => clearPins(p, taskId)); }
 

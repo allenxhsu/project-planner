@@ -108,6 +108,7 @@ export function parse(text) {
       stageId: typeof t.stageId === 'string' && stageIds.has(t.stageId) ? t.stageId : null,
       // Checked against the plan's phases once those are read, below.
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
+      archived: t.archived === true,
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,
@@ -167,7 +168,8 @@ export function parse(text) {
         events: Array.isArray(f.events) ? f.events
           .filter((e) => e && Number.isFinite(+e.start) && Number.isFinite(+e.end) && +e.end > +e.start)
           .map((e) => ({ uid: String(e.uid || ''), title: String(e.title || '(no title)'), start: +e.start, end: +e.end, allDay: !!e.allDay,
-            ...(typeof e.location === 'string' && e.location.trim() ? { location: e.location.trim() } : {}) }))
+            ...(typeof e.location === 'string' && e.location.trim() ? { location: e.location.trim() } : {}),
+            ...(typeof e.description === 'string' && e.description.trim() ? { description: e.description.slice(0, 2000) } : {}) }))
           : [],
       }));
   }
