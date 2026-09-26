@@ -56,7 +56,7 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('cal-side', calSide);
-  for (const v of ['team', 'today']) $('app').classList.toggle(`view-${v}`, ui.view === v);
+  for (const v of ['team', 'today', 'alltasks']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.
