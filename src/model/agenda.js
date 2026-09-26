@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, inCurrentPhase, feeds, bufferOf, getResource, identityOf, pinsOf, URGENCIES, urgencyOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, inCurrentPhase, feeds, bufferOf, getResource, identityOf, pinsOf, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -70,12 +70,11 @@ export function agendaOf(project, task) {
   const ownTo = parseTime(own.to);
   const windows = ownFrom !== null && ownTo !== null
     ? [{ from: ownFrom, to: ownTo, days: null, block: named }]
-    : list.map((b) => ({
-      from: parseTime(b.from) ?? parseTime(base.from) ?? 540,
-      to: parseTime(b.to) ?? parseTime(base.to) ?? 1020,
-      days: b.days?.length ? [...b.days] : null,
-      block: b,
-    })).filter((w) => w.to > w.from).sort((a, b) => a.from - b.from);
+    // One window per range of each block: a schedule of 9–11:30 and 1–5 on
+    // weekdays is two windows a weekday, and the placement walks them in order.
+    : list.flatMap((b) => slotsOf(b).map((r) => ({
+      from: parseTime(r.from), to: parseTime(r.to), days: [r.day], block: b,
+    }))).filter((w) => w.to > w.from).sort((a, b) => a.from - b.from);
   const safe = windows.length ? windows : [{ from: parseTime(base.from) ?? 540, to: parseTime(base.to) ?? 1020, days: null, block: named }];
   const from = Math.min(...safe.map((w) => w.from));
   const to = Math.max(...safe.map((w) => w.to));

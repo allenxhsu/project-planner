@@ -277,7 +277,7 @@ export const COMMANDS = {
   'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },
   'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
-  'view.people': goView('people'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
+  'view.people': goView('people'), 'view.schedules': goView('schedules'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
   'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
@@ -492,10 +492,7 @@ export function renderToolbar(root) {
       b('+ Task', 'New task below the selection', act.newTaskBelow),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
       b('Put on calendar', 'Show every unfinished task on the calendar', act.showAllInCalendar),
-      b('Time blocks…', 'The hours each kind of work is allowed', () => {
-        set({ rightOpen: true, rightTab: 'project' });
-        requestAnimationFrame(() => document.querySelector('.tb-card')?.scrollIntoView({ block: 'center' }));
-      }));
+      b('Schedules…', 'The hours each kind of work may use', () => set({ view: 'schedules' })));
   } else if (ui.view === 'priority') {
     root.append(b('+ Task', 'New task below the selection', act.newTaskBelow, { primary: true }),
       b('Break up…', 'Cut the selected task into subtasks', () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); }, { disabled: !sel }),
@@ -516,6 +513,9 @@ export function renderToolbar(root) {
       b('↑', 'Move up (⌥⇧↑)', () => act.moveSelection(-1), { disabled: !sel }), b('↓', 'Move down (⌥⇧↓)', () => act.moveSelection(1), { disabled: !sel }), sep(),
       b('⛓ Link', 'Link the selected tasks in order (⌘L)', act.linkSelection, { disabled: sel < 2 }), b('Unlink', 'Remove links from the selected tasks (⇧⌘L)', act.unlinkSelection, { disabled: !sel }), sep(),
       b('✓ 100%', 'Mark the active task complete', COMMANDS['task.complete'], { disabled: !sel }));
+  } else if (ui.view === 'schedules') {
+    root.append(b('+ Schedule', 'Draw a new set of hours', () => { void import('./schedules.js').then((m) => m.editSchedule(null)); }, { primary: true }),
+      b('Calendar', 'Back to the week', COMMANDS['view.calendar']));
   } else if (ui.view === 'usage') {
     root.append(b('↻ Refresh', 'Sync, then re-read every plan', () => { void reloadPlans({ pull: true }).then(() => reloadUsage()); }),
       b('People…', 'Everyone, shared by every plan', COMMANDS['view.people']),

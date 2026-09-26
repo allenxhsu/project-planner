@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -53,8 +53,10 @@ export function parse(text) {
         from: parseTime(b.from) !== null ? b.from : '09:00',
         to: parseTime(b.to) !== null ? b.to : '17:00',
         days: Array.isArray(b.days) ? [...new Set(b.days.map(Number).filter((d) => d >= 0 && d <= 6))].sort() : [1, 2, 3, 4, 5],
+        // Ranges per day, when the block was drawn as a schedule.
+        ...(Array.isArray(b.slots) && b.slots.length ? { slots: mergeSlots(b.slots.filter((r) => r && parseTime(r.from) !== null && parseTime(r.to) !== null)) } : {}),
       }))
-      .filter((b) => b.days.length && parseTime(b.to) > parseTime(b.from));
+      .filter((b) => (b.slots?.length) || (b.days.length && parseTime(b.to) > parseTime(b.from)));
     if (list.length) p.timeBlocks = list;
     else repairs.push('The time blocks could not be read; the defaults are used.');
   }

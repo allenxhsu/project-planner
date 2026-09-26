@@ -12,6 +12,7 @@ import { renderResourceSheet, renderResourceUsage } from './ui/resources.js';
 import { renderNetwork, zoomNetwork } from './ui/network.js';
 import { renderProjects, reloadPlans } from './ui/projects.js';
 import { renderPeople } from './ui/people.js';
+import { renderSchedules } from './ui/schedules.js';
 import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
 import { renderCalendar, shiftWeek, showThisWeek } from './ui/calendar.js';
@@ -34,7 +35,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork };
+const VIEW_RENDERERS = { projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 function render() {
   const { ui } = store;

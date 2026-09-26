@@ -79,6 +79,7 @@ the duration.
 | Gantt Chart | editable task grid beside the timeline: bars, summary brackets, milestones, dependency arrows, progress, deadlines, today. Drag a bar to move it, its right edge to resize, the dot at its end onto another bar to link. Days, weeks or months. |
 | Task Sheet | the full column set: WBS, work, cost, slack, critical, constraint, deadline, notes |
 | Resource Sheet | people and things: type, max units, rate, group; work and cost roll-ups |
+| Schedules | the hours each kind of work may use, drawn on a week: several ranges a day, different by day, shared by every project |
 | Resource Usage | hours per person, by day or by week, across every project, with each task beneath and its project named; over-allocated columns highlighted |
 | Network Diagram | one box per task in dependency order, critical path in red |
 | People | everyone in the shared directory: hours, tasks and plans across the whole shelf, the rate that every plan uses, and the profile summary from Profiler |
@@ -358,6 +359,16 @@ weekend — and is placed in whichever of them has room first, in order of the
 clock. That is what makes a block a constraint worth setting rather than a
 cage: an essay that may be done any evening or at any hour of the weekend says
 exactly that, and the calendar fills the evenings before it takes a Saturday.
+
+**Schedules** is the page they are kept on. Each schedule is drawn on a week
+rather than typed into three boxes, because the hours people keep are rarely
+one span: nine to half past eleven and one to five on weekdays, mornings only
+on Saturday. Drag down a day to add hours, click × on a range to take it away,
+and Copy puts one day's hours on the weekdays, the weekend, every day or one
+other day. Ranges that touch are joined, so an hour is never counted twice.
+The calendar lays a task only inside its schedules' ranges, walking each day's
+windows in order of the clock. A block written before schedules could hold
+several ranges still reads as its one span on each of its days.
 
 Time blocks are **shared by every project**, because they are hours in your
 week and not properties of a plan: study from six, work from eight, deep focus

@@ -609,6 +609,50 @@ export const DEFAULT_TIME_BLOCKS = [
   { id: 'tb_work', name: 'Work', from: '08:00', to: '17:00', days: [1, 2, 3, 4, 5] },
   { id: 'tb_focus', name: 'Deep focus', from: '08:00', to: '10:00', days: [1, 2, 3, 4, 5] },
 ];
+/**
+ * The hours a block covers, day by day.
+ *
+ * A block used to be one span on some days — "Work, 08:00–17:00, weekdays".
+ * A schedule someone actually keeps is rarely that: 9 to 11:30 and 1 to 5 on
+ * weekdays, the mornings only on Saturday. So a block may carry `slots`, one
+ * { day, from, to } per range, and when it does they are the truth. A block
+ * written before that still reads as its span on each of its days.
+ *
+ * @returns {Array<{day: number, from: string, to: string}>} sorted by day, then start
+ */
+export function slotsOf(block) {
+  const toMin = (v) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim()); return m ? +m[1] * 60 + +m[2] : null; };
+  const raw = Array.isArray(block?.slots) && block.slots.length
+    ? block.slots
+    : (block?.days || []).map((day) => ({ day, from: block.from, to: block.to }));
+  return raw
+    .filter((r) => r && Number.isInteger(+r.day) && +r.day >= 0 && +r.day <= 6 && toMin(r.from) !== null && toMin(r.to) !== null && toMin(r.to) > toMin(r.from))
+    .map((r) => ({ day: +r.day, from: r.from, to: r.to }))
+    .sort((a, b) => a.day - b.day || toMin(a.from) - toMin(b.from));
+}
+
+/**
+ * Tidy a set of ranges: overlapping or touching ranges on the same day become
+ * one, so a schedule drawn by dragging never double-counts an hour.
+ */
+export function mergeSlots(slots) {
+  const toMin = (v) => { const [h, m] = String(v).split(':').map(Number); return h * 60 + m; };
+  const fmt = (n) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+  const out = [];
+  for (let day = 0; day <= 6; day++) {
+    const ranges = slots.filter((r) => +r.day === day).map((r) => [toMin(r.from), toMin(r.to)])
+      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a).sort((x, y) => x[0] - y[0]);
+    const merged = [];
+    for (const [a, b] of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+      else merged.push([a, b]);
+    }
+    for (const [a, b] of merged) out.push({ day, from: fmt(a), to: fmt(b) });
+  }
+  return out;
+}
+
 export const timeBlocks = (p) => (Array.isArray(p.timeBlocks) && p.timeBlocks.length ? p.timeBlocks : DEFAULT_TIME_BLOCKS);
 export const getTimeBlock = (p, id) => timeBlocks(p).find((b) => b.id === id) || null;
 

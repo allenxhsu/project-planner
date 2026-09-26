@@ -9,6 +9,7 @@ import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, 
 import { hueColour } from './calendar.js';
 import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf, pinsOf, bufferOf, BUFFER_CHOICES } from '../model/model.js';
 import { currentLayout } from './calendar.js';
+import { describeSchedule } from './schedules.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -108,9 +109,9 @@ function renderTask(root) {
         el('span')));
       cal.append(el('button', {
         class: 'sc-button sc-button--ghost sc-button--sm tb-edit-link',
-        text: 'Edit time blocks…',
-        title: 'The hours each kind of work is allowed, in Project information',
-        onclick: () => { set({ rightTab: 'project' }); requestAnimationFrame(() => document.querySelector('.tb-card')?.scrollIntoView({ block: 'center' })); },
+        text: 'Edit schedules…',
+        title: 'The hours each kind of work may use',
+        onclick: () => set({ view: 'schedules' }),
       }));
       // A task may be in several blocks — late evenings *and* the weekend — and
       // is placed in whichever has room first, so this is a set of choices
@@ -334,27 +335,16 @@ function renderProject(root) {
   list.append(el('button', { class: 'sc-button sc-button--sm', text: '+ Connect a calendar…', onclick: () => act.connectCalendarDialog() }));
   root.append(list);
 
-  // ---- time blocks: the hours of the week that are for a kind of work
-  root.append(el('div', { class: 'sc-section-title', text: 'Time blocks' }));
-  root.append(el('p', { class: 'sc-muted small', text: 'The hours a kind of work is allowed — shared by every project, because they are hours in your week, not properties of a plan. A task belongs to one, and the calendar releases it into those hours by itself.' }));
-  const blocks = el('div', { class: 'link-list' });
+  // ---- schedules: the hours of the week that are for a kind of work. They
+  // are drawn on their own page, because a week is not three boxes.
+  root.append(el('div', { class: 'sc-section-title', text: 'Schedules' }));
+  root.append(el('p', { class: 'sc-muted small', text: 'The hours each kind of work may use, shared by every project.' }));
+  const sched = el('div', { class: 'link-list' });
   for (const b of timeBlocks(project)) {
-    const days = el('div', { class: 'workdays tb-days' }, ...[1, 2, 3, 4, 5, 6, 0].map((d) => el('label', { class: 'row check-row', title: WEEKDAY_NAMES[d] },
-      el('input', { class: 'sc-check', type: 'checkbox', checked: b.days.includes(d), onchange: (e) => {
-        const next = e.target.checked ? [...b.days, d] : b.days.filter((x) => x !== d);
-        void act.editTimeBlock(b.id, 'days', next).then((ok) => { if (!ok) e.target.checked = !e.target.checked; });
-      } }),
-      el('span', { text: WEEKDAY_NAMES[d][0] }))));
-    blocks.append(el('div', { class: 'tb-card sc-card' },
-      el('div', { class: 'tb-row' },
-        text(b.name, (v) => act.editTimeBlock(b.id, 'name', v)),
-        text(b.from, (v) => act.editTimeBlock(b.id, 'from', v), { class: 'sc-input lag', title: 'Starts' }),
-        text(b.to, (v) => act.editTimeBlock(b.id, 'to', v), { class: 'sc-input lag', title: 'Ends' }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this block', onclick: () => { void act.deleteTimeBlock(b.id); } })),
-      days));
+    sched.append(el('div', { class: 'sched-mini' }, el('strong', { text: b.name }), el('span', { class: 'sc-faint small', text: describeSchedule(b) })));
   }
-  blocks.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New time block', onclick: () => { void act.newTimeBlock({ name: 'New block' }); } }));
-  root.append(blocks);
+  sched.append(el('button', { class: 'sc-button sc-button--sm', text: 'Edit schedules…', onclick: () => set({ view: 'schedules' }) }));
+  root.append(sched);
 
   root.append(el('div', { class: 'sc-section-title', text: 'Statistics' }));
   root.append(readout([

@@ -505,7 +505,7 @@ export async function saveTimeBlock(block) {
   const existing = await recordStore.get(id);
   const record = {
     ...(existing || {}), id, type: TIMEBLOCK_TYPE, name: block.name,
-    block: { id, name: block.name, from: block.from, to: block.to, days: [...block.days] },
+    block: { id, name: block.name, from: block.from, to: block.to, days: [...block.days], ...(block.slots?.length ? { slots: block.slots.map((r) => ({ ...r })) } : {}) },
     updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId(),
   };
   await recordStore.put([record]);
@@ -530,7 +530,7 @@ export async function removeTimeBlockEverywhere(id) {
 export function applyTimeBlocks(project, list) {
   if (!list.length) return false;
   const before = JSON.stringify(project.timeBlocks || []);
-  project.timeBlocks = list.map((b) => ({ ...b, days: [...b.days] }));
+  project.timeBlocks = list.map((b) => ({ ...b, days: [...b.days], ...(b.slots ? { slots: b.slots.map((r) => ({ ...r })) } : {}) }));
   const ids = new Set(list.map((b) => b.id));
   for (const t of project.tasks) {
     if (t.calendar?.timeBlockId && !ids.has(t.calendar.timeBlockId)) t.calendar = { ...t.calendar, timeBlockId: null };

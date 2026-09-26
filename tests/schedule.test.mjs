@@ -1027,8 +1027,9 @@ test('a task can be in several time blocks and uses whichever has room', async (
   setTaskField(p, essay.id, 'timeBlock', [evening.id, weekend.id]);
 
   const a = agendaOf(p, essay);
-  assert.equal(a.windows.length, 2, 'two windows, in order of the clock');
-  assert.deepEqual(a.windows.map((w) => formatTime(w.from)), ['09:00', '18:00']);
+  // One window per range per day: five weekday evenings and two weekend days.
+  assert.equal(a.windows.length, 7);
+  assert.deepEqual([...new Set(a.windows.map((w) => formatTime(w.from)))], ['09:00', '18:00'], 'both blocks, in order of the clock');
 
   const { blocks } = planBlocks(p, computeSchedule(p));
   assert.equal(blocks.reduce((n, b) => n + b.minutes, 0) / 60, 20, 'all twenty hours are placed');
@@ -1066,4 +1067,38 @@ test('overdue work is placed from today on, never on days that have gone', async
   p.statusDate = '2026-05-01';
   const early = planBlocks(p, computeSchedule(p)).blocks;
   assert.ok(early.every((b) => b.dateIso >= '2026-05-11' && !b.overdue), 'future work keeps its own start');
+});
+
+test('a schedule can hold several ranges a day, and work stays inside them', async () => {
+  const { planBlocks, formatTime } = await import('../src/model/agenda.js');
+  const { addTimeBlock, slotsOf, mergeSlots } = await import('../src/model/model.js');
+  const p = plan();
+  const r = addResource(p, { name: 'Ann' });
+  // Mornings 9–11:30 and afternoons 1–5, weekdays: a lunch break the calendar keeps.
+  const weekdays = [1, 2, 3, 4, 5];
+  const split = addTimeBlock(p, { name: 'Application SK', from: '09:00', to: '17:00', days: weekdays });
+  split.slots = mergeSlots(weekdays.flatMap((day) => [{ day, from: '09:00', to: '11:30' }, { day, from: '13:00', to: '17:00' }]));
+  p.agenda = { ...p.agenda, dailyCap: 8, assumedLoad: 100 };
+  assert.equal(slotsOf(split).length, 10);
+
+  const t = task(p, 'Application', 1);
+  assign(p, t.id, r.id, 1);
+  setTaskField(p, t.id, 'work', 6);
+  setTaskField(p, t.id, 'calendarShow', true);
+  setTaskField(p, t.id, 'blockHours', 1);
+  setTaskField(p, t.id, 'timeBlock', split.id);
+
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  const monday = blocks.filter((b) => b.dateIso === MON);
+  assert.ok(monday.length > 0);
+  assert.ok(monday.every((b) => (b.start >= 540 && b.end <= 690) || (b.start >= 780 && b.end <= 1020)), 'inside 9–11:30 or 1–5');
+  assert.ok(!monday.some((b) => b.start < 780 && b.end > 690), 'nothing across the lunch break');
+  assert.deepEqual(monday.map((b) => formatTime(b.start)), ['09:00', '10:00', '13:00', '14:00', '15:00', '16:00'],
+    'the half hour before lunch is too short for an hour, so the afternoon takes the rest');
+
+  // A block written as one span still reads as that span on each of its days.
+  assert.deepEqual(slotsOf({ from: '08:00', to: '17:00', days: [1, 2] }), [{ day: 1, from: '08:00', to: '17:00' }, { day: 2, from: '08:00', to: '17:00' }]);
+  // And the ranges survive the file.
+  const back = parse(serialize(p)).project;
+  assert.equal(slotsOf(back.timeBlocks.find((b) => b.id === split.id)).length, 10);
 });

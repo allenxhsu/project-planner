@@ -27,6 +27,7 @@ export const VIEWS = {
   resources: { label: 'Resource Sheet', short: 'Resources', glyph: '◧' },
   usage: { label: 'Resource Usage', short: 'Usage', glyph: '▦' },
   network: { label: 'Network Diagram', short: 'Network', glyph: '⬡' },
+  schedules: { label: 'Schedules', short: 'Schedules', glyph: '◷' },
 };
 
 export const store = {
