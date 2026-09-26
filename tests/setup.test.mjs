@@ -373,3 +373,4 @@ test('merging workspaces maps a plan\'s statuses and labels', async () => {
   mapLabel(p, 'home', '');
   assert.deepEqual(u.labels, ['ASAP']);
 });
+

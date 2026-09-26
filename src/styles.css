@@ -1161,3 +1161,11 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .sum-item { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 5px 6px; border-radius: 5px; cursor: pointer; }
 .sum-item:hover { background: color-mix(in srgb, var(--sc-line) 55%, transparent); }
 .sum-item > span:nth-child(2) { flex: 1; }
+/* Task window: grouped as Motion groups it. */
+.fact-gap { height: 8px; }
+.fact.is-sub .fact-label { display: inline-flex; gap: 6px; padding-left: 4px; }
+.fact-elbow { color: var(--sc-text-3); }
+.fact-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.fact-auto { cursor: pointer; }
+.fact-duration-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fact-duration { width: 110px; }

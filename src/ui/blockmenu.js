@@ -174,6 +174,18 @@ function askLaterTime() {
   });
 }
 
+/** "90m", "90 min", "1.5h", "2 hours", "1h 30m", "1.5" (hours) → minutes, or null. */
+export function parseDurationText(text) {
+  const s = String(text || '').trim().toLowerCase();
+  if (!s) return null;
+  if (/^\d+(\.\d+)?$/.test(s)) return Math.round(parseFloat(s) * 60);
+  const h = s.match(/(\d+(?:\.\d+)?)\s*h(?:ours?|rs?)?/);
+  const m = s.match(/(\d+)\s*m(?:in(?:utes?)?)?/);
+  if (!h && !m) return null;
+  const total = Math.round((h ? parseFloat(h[1]) * 60 : 0) + (m ? +m[1] : 0));
+  return total > 0 ? total : null;
+}
+
 const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`);
 
 /**
@@ -441,12 +453,19 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       ...(ownBlocks.length > 1 ? [el('option', { value: '__keep', text: `${ownBlocks.length} schedules (as set)`, selected: true })] : []),
       ...timeBlocks(project).map((tb) => el('option', { value: tb.id, text: tb.name, selected: ownBlocks.length === 1 && ownBlocks[0] === tb.id })));
     const labels = el('input', { class: 'sc-input', type: 'text', value: (t.labels || []).join(', '), placeholder: 'None — comma-separated' });
+    // Auto-scheduled or not: every task can be laid by the calendar, or kept off it.
+    const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!agendaOf(project, t).show });
+    // Duration, Motion's way: pick one or type one ("3h", "90m", "1h 30m", "1.5").
+    const durationList = el('datalist', { id: `dur-${t.id}` }, ...[15, 30, 45, 60, 120, 180, 240, 360, 480].map((m) => el('option', { value: minText(m) })));
+    const duration = el('input', { class: 'sc-input fact-duration', type: 'text', value: minText(expectedMin), list: `dur-${t.id}`, placeholder: 'Choose or type a duration',
+      title: 'How long the task takes: 15 min, 2h, 1h 30m, 1.5 (hours)…', onkeydown: (e) => e.stopPropagation() });
     const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
       hard: hard.checked, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
+      auto: auto.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
     setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
@@ -481,6 +500,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       ]);
     };
     const fact = (label, value) => el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), value);
+    // A setting that belongs to the one above it, drawn under it (Motion's └).
+    const subFact = (label, value) => el('div', { class: 'fact is-sub' }, el('span', { class: 'fact-label' }, el('span', { class: 'fact-elbow', text: '└' }), el('span', { text: label })), value);
     const list = (names) => el('span', { class: names.length ? '' : 'sc-faint', text: names.length ? names.join(', ') : 'None' });
 
     return [
@@ -519,21 +540,27 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
           fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
+          el('label', { class: 'fact fact-auto' }, el('span', { class: 'fact-label', text: 'Auto-schedule' }),
+            el('span', { class: 'fact-switch' }, auto, el('span', { class: 'tp-switch' }),
+              el('span', { class: 'sc-faint small', text: pins.length ? `${pins.length} fixed block${pins.length === 1 ? '' : 's'}` : '' }))),
+          el('div', { class: 'fact-gap' }),
+          phases(project).length ? fact('Stage', stage) : null,
           fact('Assignee', list(who)),
           fact('Status', status),
-          phases(project).length ? fact('Stage', stage) : null,
           fact('Priority', urgency),
-          fact('Duration', el('span', {}, el('span', { class: 'sc-mono', title: `${info?.duration ?? 0} day(s) open in the plan · ${info?.percent ?? 0}% complete`,
-            text: `${minText(spentMin)} of ${minText(expectedMin)} done · ${minText(leftMin)} left` }),
+          el('div', { class: 'fact-gap' }),
+          fact('Duration', el('span', { class: 'fact-duration-wrap' }, duration, durationList,
+            el('span', { class: 'sc-faint small', title: `${info?.duration ?? 0} day(s) open in the plan · ${info?.percent ?? 0}% complete`, text: `${minText(spentMin)} done · ${minText(leftMin)} left` }),
             el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Logged time…', title: 'Log, edit or remove the time worked on this task', onclick: () => { close(null); void import('./inspector.js').then((m) => m.timeLogDialog(t.id)); } }))),
+          subFact('Min chunk', chunk),
           fact('Start date', start),
-          fact('Deadline', el('div', { class: 'tp-deadline' }, deadline,
-            el('label', { class: 'tp-hard', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' })))),
-          fact('Labels', labels),
-          fact('Min chunk', chunk),
+          fact('Deadline', deadline),
+          subFact('Hard deadline', el('label', { class: 'fact-switch', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, hard, el('span', { class: 'tp-switch' }))),
           fact('Schedule', schedule),
+          el('div', { class: 'fact-gap' }),
+          fact('Labels', labels),
           ...custom.map((c) => fact(c.field.name, c.node)),
-          fact('Auto-schedule', el('span', { text: agendaOf(project, t).show ? `On${pins.length ? `, ${pins.length} fixed` : ''}` : 'Off' })),
+          el('div', { class: 'fact-gap' }),
           fact('Blocked by', list(blockedBy)),
           fact('Blocking', list(blocking)),
           el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Set blockers…', onclick: () => { close(null); void blockersDialog(t); } }))),
@@ -554,6 +581,10 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
   if (saved.hard !== !!t.hardDeadline) act.editTask(t.id, 'hardDeadline', saved.hard);
+  if (saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
+  const minutes = saved.duration.trim() === minText(expectedMin) ? expectedMin : parseDurationText(saved.duration);
+  if (minutes === null && saved.duration.trim()) act.hint(`“${saved.duration}” is not a duration — try 45 min, 2h or 1h 30m.`);
+  else if (minutes !== null && minutes !== expectedMin) act.editTask(t.id, 'work', String(Math.round((minutes / 60) * 100) / 100));
   if (saved.status && saved.status !== stageOf(store.project, t).id) act.setTaskStage(t.id, saved.status);
   if ((saved.stage || null) !== (t.phaseId || null)) act.setTaskPhase(t.id, saved.stage || null);
   if (saved.chunk === 'whole' && !t.calendar?.whole) act.editTask(t.id, 'wholeBlock', true);
