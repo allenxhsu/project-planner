@@ -751,6 +751,33 @@ async function patchWorkspace(id, change) {
   return next;
 }
 
+/**
+ * Two workspaces become one: every project of `fromId` moves into `intoId`,
+ * each folder going into the target's folder of the same name (made if it is
+ * not there), and `fromId`, empty, is deleted.
+ */
+export async function mergeWorkspaces(fromId, intoId) {
+  if (!recordStore || !fromId || !intoId || fromId === intoId) return 0;
+  const from = await recordStore.get(fromId);
+  if (!from || from.type !== WORKSPACE_TYPE) return 0;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const map = new Map();
+  for (const f of foldersOf(from)) {
+    const into = await recordStore.get(intoId);
+    const same = foldersOf(into).find((x) => norm(x.name) === norm(f.name));
+    map.set(f.id, same ? same.id : (await createFolder(intoId, f.name))?.id || null);
+  }
+  let moved = 0;
+  for (const s of await listPlans()) {
+    if (s.workspaceId !== fromId) continue;
+    await setPlanFolder(s.id, intoId, s.folderId ? map.get(s.folderId) || null : null);
+    moved++;
+  }
+  await deleteWorkspace(fromId);
+  if (activeWorkspace() === fromId) setActiveWorkspace(intoId);
+  return moved;
+}
+
 export const foldersOf = (workspace) => (Array.isArray(workspace?.folders) ? workspace.folders.filter((f) => f && f.id && f.name) : []);
 
 export async function createFolder(workspaceId, name) {

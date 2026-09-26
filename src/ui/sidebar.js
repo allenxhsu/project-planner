@@ -325,9 +325,17 @@ export function planMenu(p, siblings = []) {
       { icon: '↓', label: 'Move down', run: () => move(p, siblings, 1) },
       '-',
       { icon: '🗑', label: 'Delete', danger: true, run: async () => {
-        const { confirmDialog } = await import('./dialog.js');
-        if (!(await confirmDialog(`Delete “${p.name}”?`, 'It goes from this device and, on the next sync, from every other one. A file you saved with File ▸ Save As is not touched.'))) return;
+        const { typedConfirm } = await import('./dialog.js');
+        const n = p.tasks ?? 0;
+        if (!(await typedConfirm('Are you sure you want to delete this project?',
+          `“${p.name}” and its ${n} task${n === 1 ? '' : 's'} go from this device and, on the next sync, from every other one. A file you saved with File ▸ Save As is not touched.`,
+          p.name, 'Delete project'))) return;
         await sync.deletePlan(p.id);
+        // The open plan gone: another is put on screen.
+        if (p.id === store.project.id) {
+          const next = (await sync.listPlans()).find((x) => x.ok && !x.template && x.id !== p.id);
+          if (next) await sync.openPlan(next.id);
+        }
         await refreshSidebar();
         set({});
       } },
@@ -499,6 +507,7 @@ export function renderSidebar() {
         await sync.renameWorkspace(w.id, name);
         await refreshSidebar();
       } } : null,
+      w.id ? { icon: '⇲', label: 'Merge into another workspace…', run: () => { void import('./settingspage.js').then((m) => m.mergeWorkspaceDialog(w.id)); } } : null,
       w.id ? '-' : null,
       w.id ? { icon: '⚙', label: 'Workspace Settings', run: () => { void import('./settingspage.js').then((m) => m.openSettings(`ws:${w.id}`)); } } : null,
     ]);

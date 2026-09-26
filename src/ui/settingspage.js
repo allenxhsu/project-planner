@@ -137,6 +137,29 @@ const PAGES = {
 };
 
 let wsTab = 'overview';
+
+/** Merge a workspace into another: pick the one it goes into, confirm, move. */
+export async function mergeWorkspaceDialog(fromId) {
+  const sync = await import('../state/sync.js');
+  const { formDialog, confirmDialog: confirm, showText } = await import('./dialog.js');
+  const spaces = await sync.listWorkspaces();
+  const from = spaces.find((w) => w.id === fromId);
+  const others = spaces.filter((w) => w.id !== fromId);
+  if (!from || !others.length) { act.hint('There is no other workspace to merge into.'); return; }
+  const answer = await formDialog(`Merge “${from.name}”`, [
+    { key: 'into', label: 'Into', type: 'select', value: others[0].id, options: others.map((w) => ({ value: w.id, label: w.name })) },
+  ], 'Next');
+  if (!answer) return;
+  const into = others.find((w) => w.id === answer.into);
+  const n = (await sync.listPlans()).filter((p) => p.workspaceId === fromId).length;
+  if (!(await confirm(`Merge “${from.name}” into “${into.name}”?`,
+    `Its ${n} project${n === 1 ? '' : 's'} and ${sync.foldersOf(from).length} folder${sync.foldersOf(from).length === 1 ? '' : 's'} move into ${into.name} (a folder joins one of the same name there), and ${from.name} is deleted.`, 'Merge'))) return;
+  const moved = await sync.mergeWorkspaces(fromId, into.id);
+  const { refreshSidebar } = await import('./sidebar.js');
+  await refreshSidebar();
+  if (store.ui.view === 'settings') set({ settingsPage: `ws:${into.id}` }); else set({});
+  showText('Merged', `${moved} project${moved === 1 ? '' : 's'} moved into ${into.name}.`);
+}
 const WS_TABS = [['overview', 'Overview'], ['statuses', 'Statuses'], ['templates', 'Project Templates'], ['fields', 'Custom Fields'], ['labels', 'Labels']];
 
 /** A workspace's settings, in Motion's tabs: its name, people, folders; the statuses, templates, fields and labels its projects use. */
@@ -194,6 +217,8 @@ async function workspacePage(id) {
       button('＋ New folder…', async () => { const n = await promptText('New folder', `A folder in ${w.name}.`, ''); if (n?.trim()) { await sync.createFolder(id, n); await refresh(); } })),
       section('Projects', note(`${open.filter((p) => !p.archived).length} open, ${open.filter((p) => p.archived).length} archived.`),
         button('Archived tasks', () => { void import('./alltasks.js').then((m) => m.showArchived(id)); })),
+      section('Merge workspace', note('Move all of this workspace’s projects and folders into another workspace, and remove this one.'),
+        button('Merge into another workspace…', () => { void mergeWorkspaceDialog(id); })),
       section(null, button('Delete workspace', async () => {
         const n = open.length;
         const ok = await typedConfirm('Are you sure you want to delete this workspace?',

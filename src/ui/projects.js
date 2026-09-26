@@ -77,8 +77,10 @@ function cardMenu(p, x, y) {
         run: async () => { await setPlanTemplate(p.id, !p.template); void reloadPlans(); } },
       '-',
       { label: 'Delete from the shelf', danger: true, run: async () => {
-        const yes = await confirmDialog('Delete this plan?',
-          `“${p.name}” goes from this device and, on the next sync, from every other one. A file you saved with File ▸ Save is not touched.`);
+        const { typedConfirm } = await import('./dialog.js');
+        const yes = await typedConfirm('Are you sure you want to delete this project?',
+          `“${p.name}” and its ${p.tasks} task${p.tasks === 1 ? '' : 's'} go from this device and, on the next sync, from every other one. A file you saved with File ▸ Save As is not touched.`,
+          p.name, 'Delete project');
         if (!yes) return;
         await deletePlan(p.id);
         if (p.id === store.project.id) loadProject(createProject());
