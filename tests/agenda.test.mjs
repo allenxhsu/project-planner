@@ -374,3 +374,30 @@ test('a finished project is not planned, but its logged time is still drawn', ()
   assert.equal(mine.length, 1, 'only the logged hour — nothing of it is laid');
   assert.equal(mine[0].worked, true);
 });
+
+test('each task keeps its own days: a weekend-only plan listed first does not empty the weekdays', () => {
+  const home = createProject('Home', MON);
+  home.calendar.workDays = [0, 6];
+  const { p: work, ann } = week();
+  const t = job(work, ann, 'Report', { work: '2' });
+  // The open plan comes first in the list; its week must not become everyone's.
+  const { blocks, overflow } = planBlocksAcross([{ project: home, schedule: computeSchedule(home) }, { project: work, schedule: computeSchedule(work) }],
+    { now: new Date(`${MON}T08:00:00`) });
+  assert.deepEqual(overflow, []);
+  const mine = blocks.filter((b) => b.taskId === t.id);
+  assert.equal(mine.reduce((n, b) => n + b.minutes, 0), 120);
+  assert.equal(mine[0].dateIso, MON, 'on the Monday its schedule covers');
+});
+
+test('a chunk is never longer than its task', () => {
+  const { p, ann } = week();
+  const t = job(p, ann, 'Quick call', { work: '2' });
+  setTaskField(p, t.id, 'blockHours', 2);
+  setTaskField(p, t.id, 'work', '0.5');
+  assert.equal(t.calendar.blockHours, 0.5, 'half an hour of work, half-hour chunks');
+  setTaskField(p, t.id, 'blockHours', 4);
+  assert.equal(t.calendar.blockHours, 0.5, 'a longer chunk is brought back to the task');
+  setTaskField(p, t.id, 'work', '3');
+  setTaskField(p, t.id, 'blockHours', 2);
+  assert.equal(t.calendar.blockHours, 2);
+});

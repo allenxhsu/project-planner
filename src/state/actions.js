@@ -755,7 +755,8 @@ export function setAgenda(patch) {
     if (!LOAD_CHOICES.includes(load)) throw new Error(`An assumed load is one of ${LOAD_CHOICES.join(', ')} per cent.`);
     const cap = +(next.dailyCap ?? DEFAULT_AGENDA.dailyCap);
     if (!CAP_CHOICES.includes(cap)) throw new Error(`A day's limit is one of ${CAP_CHOICES.join(', ')} hours.`);
-    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap };
+    const capSet = 'dailyCap' in patch || p.agenda?.capSet === true;
+    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap, ...(capSet ? { capSet: true } : {}) };
   });
 }
 

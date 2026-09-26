@@ -93,7 +93,7 @@ export function createProject(name = 'Untitled project', start = null) {
     // A task with no hours of its own takes its days in full — Microsoft
     // Project's rule (work = duration × units × hours a day). Plans made
     // before kept the half-day assumption in their own setting.
-    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 6 },
+    agenda: { blockHours: 1, timeBlockId: 'tb_work', gapMinutes: 0, assumedLoad: 100, dailyCap: 0 },
     // Which workspace this plan lives in — work, personal, school. Null is
     // unfiled, which shows up wherever you are.
     workspaceId: null,
@@ -1264,6 +1264,20 @@ function describeField(p, t, field) {
   }
 }
 
+/**
+ * A chunk is never longer than the task: half an hour of work has a
+ * half-hour chunk, as Motion rescales it, not a two-hour one it can never use.
+ * The largest choice that fits, or the smallest there is.
+ */
+export function fitChunk(p, t) {
+  if (t.work === null || t.work === undefined || t.calendar?.whole) return;
+  const plan = +(p.agenda?.blockHours) || 1;
+  const now = t.calendar?.blockHours || plan;
+  if (now <= t.work) return;
+  const fits = BLOCK_CHOICES.filter((h) => h <= t.work);
+  t.calendar = { ...t.calendar, blockHours: fits.length ? fits.at(-1) : BLOCK_CHOICES[0] };
+}
+
 export function setTaskField(p, id, field, value) {
   const t = getTask(p, id);
   if (!t) throw new Error('No such task.');
@@ -1303,6 +1317,7 @@ function applyTaskField(p, t, id, field, value) {
       const n = parseFloat(m[1].replace(',', '.'));
       const unit = (m[2] || 'h').toLowerCase();
       t.work = Math.round((unit.startsWith('d') ? n * (p.calendar?.hoursPerDay || 8) : n) * 100) / 100;
+      fitChunk(p, t);
       break;
     }
     case 'percent': {
@@ -1358,6 +1373,7 @@ function applyTaskField(p, t, id, field, value) {
       const n = parseFloat(value);
       if (!BLOCK_CHOICES.includes(n)) throw new Error(`A block is one of ${BLOCK_CHOICES.join(', ')} hours.`);
       t.calendar = { ...t.calendar, blockHours: n };
+      fitChunk(p, t);
       break;
     }
     case 'timeBlock': {

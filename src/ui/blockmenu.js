@@ -483,6 +483,20 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const durationList = el('datalist', { id: `dur-${t.id}` }, ...[15, 30, 45, 60, 120, 180, 240, 360, 480].map((m) => el('option', { value: minText(m) })));
     const duration = el('input', { class: 'sc-input fact-duration', type: 'text', value: minText(expectedMin), list: `dur-${t.id}`, placeholder: 'Choose or type a duration',
       title: 'How long the task takes: 15 min, 2h, 1h 30m, 1.5 (hours)…', onkeydown: (e) => e.stopPropagation() });
+    // The chunk follows the duration down, as Motion's does: a chunk longer
+    // than the task is one it can never use.
+    const fitChunkTo = () => {
+      const m = parseDurationText(duration.value);
+      if (m === null || chunk.value === 'whole') return;
+      for (const o of chunk.options) if (o.value !== 'whole') o.disabled = +o.value * 60 > m && +o.value !== BLOCK_CHOICES[0];
+      if (+chunk.value * 60 > m) {
+        const fits = BLOCK_CHOICES.filter((h) => h * 60 <= m);
+        chunk.value = String(fits.length ? fits.at(-1) : BLOCK_CHOICES[0]);
+      }
+    };
+    duration.addEventListener('input', fitChunkTo);
+    duration.addEventListener('change', fitChunkTo);
+    fitChunkTo();
     const notesBox = markdownNotes({ value: t.notes || '', placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 8 });
     const notes = notesBox.node;
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));

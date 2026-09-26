@@ -754,11 +754,11 @@ export function renderCalendar(root) {
   if (held.length > 4) heldBack.push(`${held.length - 4} more`);
   const heldBackDetail = held.flatMap((h) => [`${h.name} — ${h.tasks.length}`, ...h.tasks.slice(0, 12).map((t) => `   ${t.name}`), h.tasks.length > 12 ? `   … ${h.tasks.length - 12} more` : null, '']).filter((x) => x !== null);
   const capHours = { ...DEFAULT_AGENDA, ...(project.agenda || {}) }.dailyCap;
-  const room = Math.max(0, capHours * columns.length - placedHours);
+  const room = capHours ? Math.max(0, capHours * columns.length - placedHours) : 1;
   if (placedHours || laterTasks || notReleased) {
     pane.append(el('p', { class: 'sc-faint small cal-note' },
       `${placedHours}h placed${columns.length > 1 ? ` across ${columns.length} days` : ''}. `,
-      room > 0 ? `Room for ${Math.round(room * 10) / 10}h more at ${capHours}h a day. ` : `That is the ${capHours}h a day this plan allows. `,
+      !capHours ? '' : room > 0 ? `Room for ${Math.round(room * 10) / 10}h more at ${capHours}h a day. ` : `That is the ${capHours}h a day this plan allows. `,
       laterTasks ? `${laterTasks} ${laterTasks === 1 ? 'task is' : 'tasks are'} on the calendar but not scheduled to start until later. ` : '',
       notReleased ? `${notReleased} unfinished ${notReleased === 1 ? 'task is' : 'tasks are'} not on the calendar yet${heldBack.length ? ` — ${heldBack.join(', ')}` : ''}. ` : '',
       notReleased ? el('button', {

@@ -143,3 +143,49 @@ export function motionToPlans({ projects = [], tasks = [] }) {
   for (const [ws, list] of loose) build({ name: `${ws} — tasks without a project`, workspace: ws, list });
   return { workspaces: [...workspaces].sort(), plans, counts };
 }
+
+// -------------------------------------------------------------- schedules
+
+const MOTION_DAYS = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+/** "8:30am" → "08:30"; null when it is not a time. */
+function clock(text) {
+  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i.exec(String(text || ''));
+  if (!m) return null;
+  let h = +m[1] % 12;
+  if (/pm/i.test(m[3])) h += 12;
+  return `${two(h)}:${m[2] || '00'}`;
+}
+
+/**
+ * Motion's schedules (user/settings.json › schedules) as the planner's.
+ * Each keeps Motion's hours, day by day; `work` is the one Motion gives every
+ * task that names none, whatever it has been renamed to, so it is the
+ * default. Ids are stable, so importing again updates rather than doubles.
+ * @returns {{ blocks: object[], defaultId: string|null }}
+ */
+export function motionSchedules(settings) {
+  const all = settings?.schedules && typeof settings.schedules === 'object' ? settings.schedules : {};
+  const blocks = [];
+  for (const [key, s] of Object.entries(all)) {
+    const slots = [];
+    for (const [dayName, ranges] of Object.entries(s?.schedule || {})) {
+      const day = MOTION_DAYS[dayName];
+      if (day === undefined || !Array.isArray(ranges)) continue;
+      for (const r of ranges) {
+        const [a, b] = String(r?.range || '').split('-');
+        const from = clock(a);
+        const to = clock(b);
+        if (from && to && to > from) slots.push({ day, from, to });
+      }
+    }
+    if (!slots.length) continue;
+    slots.sort((x, y) => x.day - y.day || x.from.localeCompare(y.from));
+    blocks.push({
+      id: `tb_motion_${key.replace(/[^\w-]/g, '_')}`, name: String(s.title || key).trim() || key,
+      from: slots.map((x) => x.from).sort()[0], to: slots.map((x) => x.to).sort().at(-1),
+      days: [...new Set(slots.map((x) => x.day))].sort(), slots,
+    });
+  }
+  const main = blocks.find((b) => b.id === 'tb_motion_work');
+  return { blocks, defaultId: main ? main.id : null };
+}

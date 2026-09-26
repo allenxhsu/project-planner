@@ -538,6 +538,44 @@ export async function saveTimeBlock(block) {
   return record.block;
 }
 
+/** Several blocks at once — Motion's schedules, say — written, then spread once. */
+export async function saveTimeBlocks(blocks) {
+  if (!recordStore || !blocks.length) return 0;
+  const at = Date.now();
+  const records = [];
+  for (const [i, block] of blocks.entries()) {
+    const existing = await recordStore.get(block.id);
+    records.push({
+      ...(existing || {}), id: block.id, type: TIMEBLOCK_TYPE, name: block.name,
+      block: { id: block.id, name: block.name, from: block.from, to: block.to, days: [...block.days], ...(block.slots?.length ? { slots: block.slots.map((r) => ({ ...r })) } : {}) },
+      updatedAt: Math.max(at + i, (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId(),
+    });
+  }
+  await recordStore.put(records);
+  await spreadTimeBlocks();
+  if (syncConfigured()) void syncNow();
+  return records.length;
+}
+
+/** The schedule every project's tasks use when they name none. */
+export async function setDefaultScheduleEverywhere(id) {
+  if (!recordStore) return 0;
+  const set = (p) => { p.agenda = { ...(p.agenda || {}), timeBlockId: id }; };
+  if (store.project.agenda?.timeBlockId !== id) tryCommit('Default schedule', set);
+  let n = 0;
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    if (project.agenda?.timeBlockId === id) continue;
+    set(project);
+    await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+    n++;
+  }
+  if (syncConfigured()) void syncNow();
+  return n;
+}
+
 /** Take a block out. Tasks that used it fall back to the plan's default. */
 export async function removeTimeBlockEverywhere(id) {
   if (!recordStore) return false;
@@ -603,7 +641,7 @@ async function seedTimeBlocks() {
   const at = Date.now();
   await recordStore.put([...seen.values()].map((b, i) => ({
     id: b.id, type: TIMEBLOCK_TYPE, name: b.name,
-    block: { id: b.id, name: b.name, from: b.from, to: b.to, days: [...b.days] },
+    block: { id: b.id, name: b.name, from: b.from, to: b.to, days: [...b.days], ...(b.slots?.length ? { slots: b.slots.map((r) => ({ ...r })) } : {}) },
     updatedAt: at + i, deletedAt: null, origin: deviceId(),
   })));
   await spreadTimeBlocks();

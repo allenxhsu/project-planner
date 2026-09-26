@@ -11,7 +11,7 @@ import { set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { open, foot, button } from './dialog.js';
 import { readZip, zipText } from '../io/zip.js';
-import { motionToPlans } from '../io/motion.js';
+import { motionToPlans, motionSchedules } from '../io/motion.js';
 
 function pickFiles() {
   return new Promise((resolve) => {
@@ -24,10 +24,11 @@ function pickFiles() {
 
 /** projects and tasks from whatever was picked: the export's ZIP, or its JSON files. */
 async function readExport(files) {
-  const out = { projects: null, tasks: null };
+  const out = { projects: null, tasks: null, settings: null };
   const take = (name, text) => {
     let data;
     try { data = JSON.parse(text); } catch { return; }
+    if (/settings\.json$/i.test(name) || (data && typeof data === 'object' && data.schedules && !Array.isArray(data))) { out.settings = data; return; }
     const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : null;
     if (!items) return;
     if (/tasks\.json$/i.test(name) && !/recurring/i.test(name)) out.tasks = items;
@@ -37,12 +38,12 @@ async function readExport(files) {
   };
   for (const f of files) {
     if (/\.zip$/i.test(f.name) || f.type === 'application/zip') {
-      const entries = await readZip(await f.arrayBuffer(), { only: (n) => /(^|\/)(projects|tasks)\/(projects|tasks)\.json$/i.test(n) });
+      const entries = await readZip(await f.arrayBuffer(), { only: (n) => /(^|\/)(projects|tasks)\/(projects|tasks)\.json$/i.test(n) || /(^|\/)user\/settings\.json$/i.test(n) });
       for (const [name, bytes] of entries) take(name, zipText(bytes));
     } else take(f.name, await f.text());
   }
-  if (!out.tasks && !out.projects) throw new Error('No Motion projects or tasks were found. Choose the ZIP from Motion’s Settings ▸ Export data.');
-  return { projects: out.projects || [], tasks: out.tasks || [] };
+  if (!out.tasks && !out.projects && !out.settings) throw new Error('No Motion projects or tasks were found. Choose the ZIP from Motion’s Settings ▸ Export data.');
+  return { projects: out.projects || [], tasks: out.tasks || [], settings: out.settings };
 }
 
 /**
@@ -63,6 +64,7 @@ export async function importMotion(picked = null) {
   let data;
   try { data = await readExport(files); } catch (err) { act.hint(err.message); return; }
   const result = motionToPlans(data);
+  const schedules = motionSchedules(data.settings);
   const sync = await import('../state/sync.js');
   const shelf = await sync.planRecords().catch(() => []);
   const known = new Map();
@@ -89,7 +91,8 @@ export async function importMotion(picked = null) {
           el('li', { text: `${counts.completed} completed, with when they were done` }),
           el('li', { text: `${counts.worked} stretches of time worked, drawn on the calendar where they happened` }),
           el('li', { text: `${result.plans.filter((p) => p.archived).length} completed projects go to the archive` }),
-          again ? el('li', { text: `${again} project${again === 1 ? ' was' : 's were'} imported before and will be replaced by this copy` }) : null),
+          schedules.blocks.length ? el('li', { text: `${schedules.blocks.length} schedules (${schedules.blocks.map((b) => b.name).join(', ')})${schedules.defaultId ? ` — “${schedules.blocks.find((b) => b.id === schedules.defaultId).name}”, Motion’s default, is these projects’ default` : ''}` }) : null,
+        again ? el('li', { text: `${again} project${again === 1 ? ' was' : 's were'} imported before and will be replaced by this copy` }) : null),
         el('p', { class: 'sc-faint small', text: `Workspaces: ${result.workspaces.join(', ')}.` }),
         el('label', { class: 'np-check' }, history, el('span', { text: `Bring the archived history too (${counts.archived} tasks)` })),
         el('p', { class: 'sc-faint small', text: 'Motion’s export has no stages or statuses for tasks, so tasks arrive in Todo or Completed and in no stage. Notes, docs and booking links are not imported.' })),
@@ -119,6 +122,9 @@ export async function importMotion(picked = null) {
     completedFolder.set(workspaceId, folder?.id || null);
     return folder?.id || null;
   };
+  // Motion's schedules, shared by every project; Motion's default is the imported projects' default.
+  if (schedules.blocks.length) await sync.saveTimeBlocks(schedules.blocks);
+  const shared = schedules.blocks.length ? await sync.listTimeBlocks() : [];
   // The people, once each, into the directory.
   const personIds = new Map();
   let stored = 0;
@@ -140,6 +146,10 @@ export async function importMotion(picked = null) {
       if (!personIds.has(key)) personIds.set(key, (await sync.rememberPerson({ name: r.name }).catch(() => null))?.id || null);
       r.personId = personIds.get(key);
     }
+    if (shared.length) {
+      sync.applyTimeBlocks(p, shared);
+      if (schedules.defaultId) p.agenda = { ...p.agenda, timeBlockId: schedules.defaultId };
+    }
     if (p.motionId && known.has(p.motionId)) p.id = known.get(p.motionId);
     if (await sync.storePlan(p)) stored++;
   }
@@ -149,4 +159,37 @@ export async function importMotion(picked = null) {
   const { reloadCalendarPlans } = await import('./calendar.js');
   void reloadCalendarPlans();
   set({ view: 'projects' });
+}
+
+/**
+ * Settings ▸ Schedules ▸ Import from Motion…: only the schedules, from the
+ * export's user/settings.json. Offers to make Motion's default the default of
+ * every project, which is what Motion does with a task that names none.
+ */
+export async function importMotionSchedules(picked = null) {
+  const files = picked || await chooseFiles();
+  if (!files?.length) return;
+  let data;
+  try { data = await readExport(files); } catch (err) { act.hint(err.message); return; }
+  const { blocks, defaultId } = motionSchedules(data.settings);
+  if (!blocks.length) { act.hint('No schedules were found in that export — it needs user/settings.json.'); return; }
+  const main = blocks.find((b) => b.id === defaultId);
+  const choice = await open('Import Motion’s schedules', (close) => {
+    const everywhere = el('input', { type: 'checkbox', class: 'sc-check', checked: !!main });
+    return [
+      el('p', {}, el('strong', { text: `${blocks.length} schedules: ` }), blocks.map((b) => b.name).join(', '), '.'),
+      el('p', { class: 'sc-faint small', text: 'Imported again, they are updated rather than doubled.' }),
+      main ? el('label', { class: 'np-check' }, everywhere, el('span', { text: `Make “${main.name}”, Motion’s default, every project’s default schedule` })) : null,
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)), button('Import', () => close({ everywhere: everywhere.checked }), 'sc-button--primary')),
+    ];
+  });
+  if (!choice) return;
+  const sync = await import('../state/sync.js');
+  await sync.saveTimeBlocks(blocks);
+  const moved = choice.everywhere && main ? await sync.setDefaultScheduleEverywhere(main.id) : 0;
+  act.hint(`Imported ${blocks.length} schedules from Motion${choice.everywhere && main ? `; “${main.name}” is now every project’s default` : ''}.`);
+  void moved;
+  const { reloadCalendarPlans } = await import('./calendar.js');
+  void reloadCalendarPlans();
+  set({});
 }

@@ -193,15 +193,28 @@ export function renderSchedules(root) {
       el('div', { class: 'sc-display', text: 'Schedules' }),
       el('span', { class: 'sc-muted small', text: 'The hours each kind of work may use, shared by every project. A task belongs to one or more, and the calendar lays it only inside their hours.' })),
     el('div', { class: 'people-head-actions' },
+      el('button', { class: 'sc-button sc-button--sm', text: 'Import from Motion…', onclick: () => { void import('./motionimport.js').then((m) => m.importMotionSchedules()); } }),
       el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: '+ New schedule', onclick: () => { void editSchedule(null); } }))));
 
   const list = el('div', { class: 'sched-list sc-card' });
   const blocks = timeBlocks(store.project);
+  // The default: what a task that names no schedule uses — in every project, as Motion has one.
+  const current = store.project.agenda?.timeBlockId;
+  const pick = el('select', { class: 'sc-select sc-select--sm', onchange: async (e) => {
+    const sync = await import('../state/sync.js');
+    const n = await sync.setDefaultScheduleEverywhere(e.target.value);
+    act.hint(`“${blocks.find((b) => b.id === e.target.value)?.name}” is the default schedule of every project${n ? ` (${n + 1} changed)` : ''}.`);
+    const { reloadCalendarPlans } = await import('./calendar.js');
+    void reloadCalendarPlans();
+  } }, ...blocks.map((b) => el('option', { value: b.id, text: b.name, selected: b.id === current })));
+  pane.append(el('div', { class: 'sched-default' },
+    el('span', { text: 'Default schedule' }), pick,
+    el('span', { class: 'sc-faint small', text: 'for every project — what a task that names no schedule uses' })));
   for (const b of blocks) {
     const used = usersOf(b.id);
     list.append(el('div', { class: 'sched-row', ondblclick: () => { void editSchedule(b); } },
       el('div', { class: 'sched-row-text' },
-        el('div', { class: 'sched-row-name', text: b.name }),
+        el('div', { class: 'sched-row-name' }, el('span', { text: b.name }), b.id === current ? el('span', { class: 'ps-chip', text: 'Default' }) : null),
         el('div', { class: 'sc-faint small', text: describeSchedule(b) })),
       el('span', { class: 'sc-faint small', text: used ? `${used} task${used === 1 ? '' : 's'} here` : '' }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✎', title: 'Edit this schedule', onclick: () => { void editSchedule(b); } }),

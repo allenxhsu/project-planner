@@ -107,7 +107,10 @@ export function parse(text) {
       timeBlockId: blockIds.has(a.timeBlockId) ? a.timeBlockId : p.timeBlocks[0].id,
       gapMinutes: GAP_CHOICES.includes(+a.gapMinutes) ? +a.gapMinutes : 0,
       assumedLoad: LOAD_CHOICES.includes(+a.assumedLoad) ? +a.assumedLoad : DEFAULT_AGENDA.assumedLoad,
-      dailyCap: CAP_CHOICES.includes(+a.dailyCap) ? +a.dailyCap : DEFAULT_AGENDA.dailyCap,
+      // A day's limit counts only when someone chose it: plans saved before
+      // there was "no limit" carry the old default of 6 hours, which nobody picked.
+      dailyCap: a.capSet === true && CAP_CHOICES.includes(+a.dailyCap) ? +a.dailyCap : DEFAULT_AGENDA.dailyCap,
+      ...(a.capSet === true ? { capSet: true } : {}),
     };
   }
 

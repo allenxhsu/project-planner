@@ -251,8 +251,8 @@ function renderProject(root, { dialog = false, only = null } = {}) {
       GAP_CHOICES.map((m) => ({ value: String(m), label: m === 0 ? 'None — back to back' : `${m} minutes` })), (v) => act.setAgenda({ gapMinutes: +v })),
       'breathing room after every block'),
     field('Most work in a day', select(String((project.agenda || {}).dailyCap ?? DEFAULT_AGENDA.dailyCap),
-      CAP_CHOICES.map((h) => ({ value: String(h), label: `${h} hours` })), (v) => act.setAgenda({ dailyCap: +v })),
-      'per person, so a day is never filled wall to wall')));
+      CAP_CHOICES.map((h) => ({ value: String(h), label: h ? `${h} hours` : 'No limit — fill the schedule' })), (v) => act.setAgenda({ dailyCap: +v })),
+      'per person; with no limit the schedule’s hours are filled, as Motion fills them')));
   form.append(field('When a task does not say its hours', select(String((project.agenda || {}).assumedLoad ?? DEFAULT_AGENDA.assumedLoad),
     LOAD_CHOICES.map((n) => ({ value: String(n), label: n === 100 ? 'All of its duration — full time' : `${n}% of its duration` })), (v) => act.setAgenda({ assumedLoad: +v })),
     'Microsoft Project counts a task’s days in full; a task’s own duration (its hours) always wins'));

@@ -470,8 +470,12 @@ test('two tasks for one person never overlap, and a different person is free at 
   const annFirst = annBlocks[0];
   assert.equal(bobFirst.day, annFirst.day);
   assert.equal(bobFirst.start, annFirst.start, 'two people can work the same hour');
-  // Ann has 8 hours against a 6-hour day, so her work runs into the next day.
-  assert.equal(new Set(annBlocks.map((b) => b.day)).size, 2);
+  // With no limit on a day, Ann's 8 hours fill her 8-hour schedule in one day;
+  // with a 6-hour limit set, her work runs into the next day.
+  assert.equal(new Set(annBlocks.map((b) => b.day)).size, 1);
+  p.agenda = { ...p.agenda, dailyCap: 6 };
+  const capped = planBlocks(p, computeSchedule(p)).blocks.filter((b) => b.lane === ann.id);
+  assert.equal(new Set(capped.map((b) => b.day)).size, 2);
 });
 
 test('a chunk longer than its window is laid in window-sized pieces, not hidden', async () => {
@@ -572,7 +576,7 @@ test('a named time block decides which hours and which days a task may use', asy
   assert.ok(!timeBlocks(p).some((b) => b.id === focus.id));
 });
 
-test('only the phase the plan is in reaches the calendar', async () => {
+test('every stage reaches the calendar, as Motion schedules it', async () => {
   const { planBlocks } = await import('../src/model/agenda.js');
   const { phases, phaseOf, inCurrentPhase, addPhase } = await import('../src/model/model.js');
   const p = plan();
@@ -599,8 +603,8 @@ test('only the phase the plan is in reaches the calendar', async () => {
   p.currentPhaseId = design.id;
   assert.ok(inCurrentPhase(p, wire.id));
   assert.ok(!inCurrentPhase(p, cms.id));
-  const onlyDesign = new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId));
-  assert.deepEqual([...onlyDesign], [wire.id], 'build work stays off the calendar while the plan is in design');
+  const both = new Set(planBlocks(p, computeSchedule(p)).blocks.map((b) => b.taskId));
+  assert.deepEqual([...both].sort(), [wire.id, cms.id].sort(), 'build work is laid while the plan is in design, not hidden');
 
   // A phase that was deleted must not empty the calendar.
   p.currentPhaseId = 'gone';
@@ -668,23 +672,22 @@ test('duration is how long a task is open; work is how much of it is spent', asy
   }
   assert.ok(!validate(p, s).some((i) => i.code === 'overallocated'));
 
-  // On the calendar that is blocks spread across the five days, not three full ones.
+  // On the calendar it is laid as early as there is room, as Motion lays it:
+  // the first day's hours are filled before the next day is used.
   setTaskField(p, design.id, 'calendarShow', true);
   setTaskField(p, design.id, 'blockHours', 1);
   const { blocks } = planBlocks(p, computeSchedule(p));
   assert.equal(blocks.length, 12, 'twelve hours in one-hour blocks');
   const perDay = new Map();
   for (const b of blocks) perDay.set(b.dateIso, (perDay.get(b.dateIso) || 0) + 1);
-  // Each day's share is worked out against the days left, so twelve hours
-  // over five open days is 3, 3, 2, 2, 2 — every day it is open, none full.
-  assert.equal(perDay.size, 5, 'spread over all five days it is open');
-  assert.ok([...perDay.values()].every((n) => n <= 3), 'never more than three hours a day');
+  const counts = [...perDay.entries()].sort().map(([, n]) => n);
+  assert.equal(counts.length, 2, 'two days, not spread over five');
+  assert.ok(counts[0] > counts[1], 'the first day is filled first');
 
-  // Bigger blocks, same twelve hours: four-hour blocks land one a day.
+  // Bigger blocks, same twelve hours: four-hour blocks, as many a day as fit.
   setTaskField(p, design.id, 'blockHours', 4);
   const big = planBlocks(p, computeSchedule(p)).blocks;
   assert.equal(big.length, 3);
-  assert.equal(new Set(big.map((b) => b.dateIso)).size, 3, 'one four-hour block a day');
   assert.ok(big.every((b) => b.minutes === 240));
 });
 
