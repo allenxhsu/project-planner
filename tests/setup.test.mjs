@@ -374,3 +374,22 @@ test('merging workspaces maps a plan\'s statuses and labels', async () => {
   assert.deepEqual(u.labels, ['ASAP']);
 });
 
+
+test('a project keeps its docs and sheets', async () => {
+  const { createProject } = await import('../src/model/model.js');
+  const d = await import('../src/model/docs.js');
+  const { serialize, parse } = await import('../src/io/json.js');
+  const p = createProject('Docs', '2026-10-05');
+  const doc = d.addDoc(p, 'doc');
+  d.updateDoc(p, doc.id, { title: 'Notes', body: '# Hello\n- one' });
+  const sh = d.addDoc(p, 'sheet');
+  const col = d.addColumn(p, sh.id, 'Owner');
+  d.setCell(p, sh.id, sh.rows[0].id, sh.columns[0].id, 'Brief');
+  d.setCell(p, sh.id, sh.rows[0].id, col.id, 'Allen');
+  const back = parse(serialize(p)).project;
+  assert.equal(back.docs.length, 2);
+  assert.equal(back.docs[0].body, '# Hello\n- one');
+  assert.deepEqual(back.docs[1].columns.map((c) => c.name), ['Name', 'Owner']);
+  assert.equal(back.docs[1].rows[0].cells[col.id], 'Allen');
+  assert.throws(() => { const one = d.addDoc(p, 'sheet'); d.removeColumn(p, one.id, one.columns[0].id); }, /at least one column/);
+});

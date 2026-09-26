@@ -1144,6 +1144,7 @@ export function planSummary(record) {
     workspaceId: project.workspaceId || null,
     colour: Number.isFinite(project.colour) ? project.colour : null,
     folderId: project.folderId || null,
+    docs: (Array.isArray(project.docs) ? project.docs : []).map((d) => ({ id: d.id, kind: d.kind, title: d.title })),
     sortOrder: Number.isFinite(project.sortOrder) ? project.sortOrder : null,
     archived: project.archived === true,
     archivedAt: project.archivedAt || null,

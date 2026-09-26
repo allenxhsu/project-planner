@@ -23,6 +23,7 @@ export const VIEWS = {
   kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
   alltasks: { label: 'All Tasks', short: 'All Tasks', glyph: '≣' },
   settings: { label: 'Settings', short: 'Settings', glyph: '⚙' },
+  doc: { label: 'Doc', short: 'Doc', glyph: '▤' },
   list: { label: 'Projects & Tasks — this project', short: 'Project tasks', glyph: '≣' },
   team: { label: 'Team Schedule', short: 'Team', glyph: '▥' },
   calendar: { label: 'Calendar', short: 'Calendar', glyph: '▦' },
@@ -56,6 +57,8 @@ export const store = {
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
     settingsPage: 'calendars',
+    projectTab: 'navigate',  // a project's page: 'navigate' (docs and sheets) or 'views'
+    docId: null,
     bottomTab: 'checks',
     rightOpen: true,
     bottomOpen: true,

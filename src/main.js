@@ -16,9 +16,10 @@ import { renderProjects, reloadPlans } from './ui/projects.js';
 import { renderPeople } from './ui/people.js';
 import { renderSchedules } from './ui/schedules.js';
 import { renderSettings } from './ui/settingspage.js';
+import { renderDoc } from './ui/docs.js';
 import { renderToday } from './ui/today.js';
 import { renderKanban } from './ui/kanban.js';
-import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
+import { renderAllTasks, reloadAllTasks, renderProjectTabs } from './ui/alltasks.js';
 import { renderTeamSchedule } from './ui/teamschedule.js';
 import { renderCalendar, renderCalendarSide, shiftWeek, showThisWeek } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
@@ -39,7 +40,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
+const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, doc: renderDoc, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 function render() {
   const { ui } = store;
@@ -50,6 +51,10 @@ function render() {
   // nothing else's: a task's and a project's details open in their windows.
   $('app').classList.toggle('no-right', !ui.rightOpen || ui.view !== 'calendar');
   $('app').classList.toggle('no-bottom', !ui.bottomOpen);
+  // A Microsoft Project view is a view of the open project: its tabs sit above it.
+  const mspView = ['gantt', 'sheet', 'kanban', 'network', 'resources', 'usage', 'priority'].includes(ui.view);
+  $('app').classList.toggle('has-project-tabs', mspView);
+  if (mspView) renderProjectTabs($('view-tabs'));
   VIEW_RENDERERS[ui.view]($('stage'));
   renderStatus($('statusbar'));
   tabs($('bottom-tabs'), 'bottomTab', [['checks', 'Checks', checkBadge()], ['stats', 'Statistics']]);
@@ -58,7 +63,7 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('view-calendar', calSide);
-  for (const v of ['team', 'today', 'alltasks', 'list', 'settings']) $('app').classList.toggle(`view-${v}`, ui.view === v);
+  for (const v of ['team', 'today', 'alltasks', 'list', 'settings', 'doc']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.

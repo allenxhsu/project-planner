@@ -14,6 +14,7 @@ import {
   setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
 } from '../model/model.js';
 import { workspaceNow } from './sync.js';
+import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
 import { taskDefaults } from '../ui/taskdefaults.js';
 import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, logProject, insertStage } from '../model/stages.js';
@@ -762,3 +763,19 @@ export function setCalendar(cal) {
   tryCommit('Working time', (p) => { p.calendar = { ...p.calendar, ...cal }; });
 }
 export { emit };
+
+// ---------------------------------------------------------------- docs and sheets
+
+export function createDoc(kind = 'doc') {
+  let made = null;
+  attempt(kind === 'sheet' ? 'New sheet' : 'New doc', (p) => { made = docsModel.addDoc(p, kind); });
+  return made;
+}
+export const editDoc = (id, patch) => attempt('Edit doc', (p) => docsModel.updateDoc(p, id, patch));
+export const deleteDoc = (id) => attempt('Delete doc', (p) => docsModel.removeDoc(p, id));
+export const sheetAddColumn = (id) => attempt('Add column', (p) => docsModel.addColumn(p, id, `Column ${docsModel.getDoc(p, id).columns.length + 1}`));
+export const sheetRenameColumn = (id, colId, name) => attempt('Rename column', (p) => docsModel.renameColumn(p, id, colId, name));
+export const sheetRemoveColumn = (id, colId) => attempt('Remove column', (p) => docsModel.removeColumn(p, id, colId));
+export const sheetAddRow = (id) => attempt('Add row', (p) => docsModel.addRow(p, id));
+export const sheetRemoveRow = (id, rowId) => attempt('Remove row', (p) => docsModel.removeRow(p, id, rowId));
+export const sheetSetCell = (id, rowId, colId, value) => attempt('Edit cell', (p) => docsModel.setCell(p, id, rowId, colId, value));

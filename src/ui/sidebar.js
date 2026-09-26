@@ -25,17 +25,6 @@ const PLACES = [
   { view: 'projects', icon: 'folder', label: 'Projects' },
   { view: 'people', icon: 'people', label: 'People' },
 ];
-const PLAN_VIEWS = [
-  // The open project, the way Microsoft Project shows one. Its task list in
-  // Motion's manner is Projects & Tasks narrowed to this project (view 'list').
-  { view: 'gantt', icon: 'timeline', label: 'Gantt Chart' },
-  { view: 'sheet', icon: 'sheet', label: 'Task Sheet' },
-  { view: 'kanban', icon: 'kanban', label: 'Task Board' },
-  { view: 'network', icon: 'network', label: 'Network Diagram' },
-  { view: 'resources', icon: 'resources', label: 'Resource Sheet' },
-  { view: 'usage', icon: 'usage', label: 'Resource Usage' },
-  { view: 'priority', icon: 'priority', label: 'Priority' },
-];
 
 const KEY = 'project-planner:sidebar';
 const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
@@ -108,7 +97,6 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
   });
   parts.now = el('button', { class: 'side-now', id: 'running-chip' });
   parts.places = el('div', { class: 'side-list' });
-  parts.views = el('div', { class: 'side-list' });
   parts.favorites = el('div', { class: 'side-list' });
   parts.workspaces = el('div', { class: 'side-list' });
   parts.settings = el('div', { class: 'side-settings' });
@@ -135,7 +123,6 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
     el('div', { class: 'side-search' }, find),
     el('div', { class: 'side-scroll' },
       parts.places,
-      section('views', 'Microsoft Project view', parts.views),
       section('favorites', 'Favorites', parts.favorites),
       section('workspaces', 'Workspaces', parts.workspaces,
         el('button', { class: 'side-icon side-add', text: '＋', title: 'New workspace', onclick: newWorkspace }))),
@@ -175,8 +162,9 @@ async function selectPlanFromSidebar(id) {
     const { openPlan } = await import('../state/sync.js');
     if (!(await openPlan(id))) return;
   }
-  // On Projects & Tasks, picking a project narrows the page to it.
-  if (store.ui.view === 'alltasks') set({ view: 'list' });
+  // A project clicked opens its page — Navigate, its docs and sheets — as
+  // Motion does; in one of the Microsoft Project views it stays in that view.
+  if (!['gantt', 'sheet', 'kanban', 'network', 'resources', 'usage', 'priority'].includes(store.ui.view)) set({ view: 'list', projectTab: 'navigate' });
   renderSidebar();
 }
 
@@ -438,10 +426,6 @@ export function renderSidebar() {
     }));
   }
 
-  clear(parts.views);
-  parts.views.append(el('button', { class: 'side-plan-name', title: 'Open the project — stages, dates and its tasks',
-    onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }, ic('project', projectColour(project.colour)), el('span', { text: project.name })));
-  for (const v of PLAN_VIEWS) parts.views.append(item({ ...v, icon: ic(v.icon), active: ui.view === v.view, onclick: () => set({ view: v.view }) }));
 
   clear(parts.favorites);
   const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));
@@ -464,6 +448,14 @@ export function renderSidebar() {
       title: `${p.tasks} tasks — double-click to open; drag to move`, onclick: () => { void selectPlanFromSidebar(p.id); },
       open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, siblings) });
     row.prepend(el('span', { class: 'side-grip', text: '⠿' }));
+    // Its docs and sheets, under it when opened.
+    const docs = p.docs || [];
+    const dKey = `docs:${p.id}`;
+    if (docs.length) {
+      row.querySelector('.side-item-label').after(el('button', { class: 'side-twist side-doc-twist', text: `${state.expanded.has(dKey) ? '▾' : '▸'}${docs.length}`, title: 'Its docs and sheets',
+        onclick: (e) => { e.stopPropagation(); if (state.expanded.has(dKey)) state.expanded.delete(dKey); else state.expanded.add(dKey); remember(); renderSidebar(); } }));
+    }
+
     draggable(row, { kind: 'plan', id: p.id, workspaceId: wsId });
     dropTarget(row, (e, what) => (what.kind === 'plan' && what.id !== p.id ? half(e) : null), (side, what) => {
       const ids = ordered(siblings).map((x) => x.id).filter((id) => id !== what.id);
@@ -472,6 +464,11 @@ export function renderSidebar() {
       ids.splice(i, 0, what.id);
       return arrange(ids, wsId || null, folderId);
     });
+    if (docs.length && state.expanded.has(dKey)) {
+      const kids = docs.map((d) => item({ icon: d.kind === 'sheet' ? '▦' : '▤', label: d.title, cls: `${cls} side-doc`, active: store.ui.view === 'doc' && store.ui.docId === d.id,
+        onclick: async () => { await selectPlanFromSidebar(p.id); set({ view: 'doc', docId: d.id }); } }));
+      return el('div', { class: 'side-doc-group' }, row, ...kids);
+    }
     return row;
   };
 

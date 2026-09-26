@@ -1,5 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
+import { cleanDocs } from '../model/docs.js';
 import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
@@ -75,6 +76,8 @@ export function parse(text) {
   p.folderId = p.workspaceId && typeof raw.folderId === 'string' && raw.folderId ? raw.folderId : null;
   p.sortOrder = Number.isFinite(raw.sortOrder) ? raw.sortOrder : null;
   p.pinned = raw.pinned === true;
+  // Its docs and sheets (the Navigate tab).
+  if (Array.isArray(raw.docs)) p.docs = cleanDocs(raw.docs);
   // The project's own saved views of its tasks (ui/alltasks.js reads them).
   if (Array.isArray(raw.views)) p.views = raw.views.filter((v) => v && typeof v === 'object' && typeof v.id === 'string');
   p.template = raw.template === true;

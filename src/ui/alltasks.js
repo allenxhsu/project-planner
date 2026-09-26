@@ -31,6 +31,7 @@ import { orderable } from './orderable.js';
 import { icon, projectColour } from './icons.js';
 import { showMenu, promptText, confirmDialog, open as openDialog, foot, button } from './dialog.js';
 import { renderResourceUsage } from './resources.js';
+import { renderNavigate } from './docs.js';
 
 /** planId → { updatedAt, plan, rows }. */
 const cache = new Map();
@@ -152,8 +153,22 @@ const SORTS = {
   duration: 'Duration', eta: 'ETA', completedAt: 'Completed at', project: 'Project',
 };
 /** Workload is the Resource Usage view: each person's hours a day against what they have. */
-const LAYOUTS = { list: ['☰', 'List'], kanban: ['▥', 'Kanban'], gantt: ['▤', 'Gantt'], workload: ['◔', 'Workload'] };
-const layoutsHere = () => Object.entries(LAYOUTS).filter(([k]) => scope === 'all' || k !== 'gantt');
+/**
+ * A project's page can also hold the Microsoft Project views of it — each a
+ * view like any other, which opens that view of the planner (its own toolbar
+ * and all) under the project's tabs.
+ */
+const MSP_LAYOUTS = {
+  'msp:gantt': ['▤', 'Gantt Chart', 'gantt'], 'msp:sheet': ['☰', 'Task Sheet', 'sheet'], 'msp:kanban': ['▥', 'Task Board', 'kanban'],
+  'msp:network': ['⬡', 'Network Diagram', 'network'], 'msp:resources': ['◧', 'Resource Sheet', 'resources'], 'msp:usage': ['▦', 'Resource Usage', 'usage'],
+  'msp:priority': ['⚑', 'Priority', 'priority'],
+};
+const LAYOUTS = { list: ['☰', 'List'], kanban: ['▥', 'Kanban'], gantt: ['▤', 'Gantt'], workload: ['◔', 'Workload'], ...MSP_LAYOUTS };
+/** The planner view a view opens, when it is one of Microsoft Project's. */
+export const mspViewOf = (layout) => MSP_LAYOUTS[layout]?.[2] || null;
+const layoutsHere = () => Object.entries(LAYOUTS).filter(([k]) => (scope === 'all' ? !MSP_LAYOUTS[k] : k !== 'gantt'));
+/** What the List / Kanban / … switch offers: the task layouts (a Microsoft Project view is its own view). */
+const switchable = () => layoutsHere().filter(([k]) => !MSP_LAYOUTS[k]);
 
 // ------------------------------------------------------------------- views
 
@@ -186,7 +201,8 @@ function defaultViews() {
   if (scope === 'project') {
     return [
       normal({ id: 'v_list', name: 'Task List', groups: ['stage'], columns: PROJECT_COLUMNS }),
-      normal({ id: 'v_status', name: 'By status', groups: ['status'], columns: PROJECT_COLUMNS }),
+      normal({ id: 'v_gantt', name: 'Gantt Chart', layout: 'msp:gantt' }),
+      normal({ id: 'v_board', name: 'Task Board', layout: 'msp:kanban' }),
     ];
   }
   // What the page was set to before it had views becomes its first view.
@@ -214,7 +230,16 @@ function activeId(list) {
   const id = readJson(ACTIVE_KEY, {})[scopeKey()];
   return list.some((v) => v.id === id) ? id : list[0].id;
 }
-function setActive(id) { writeJson(ACTIVE_KEY, { ...readJson(ACTIVE_KEY, {}), [scopeKey()]: id }); closePop(); redraw(); }
+function setActive(id) {
+  writeJson(ACTIVE_KEY, { ...readJson(ACTIVE_KEY, {}), [scopeKey()]: id });
+  closePop();
+  if (scope !== 'project') { redraw(); return; }
+  const v = savedViews().find((x) => x.id === id);
+  const msp = v && mspViewOf(v.layout);
+  set({ view: msp || 'list', projectTab: 'views' });
+}
+/** On a project's page, the Navigate tab (its docs and sheets) is showing. */
+const navOn = () => scope === 'project' && store.ui.projectTab === 'navigate';
 function current() {
   const list = savedViews();
   const base = list.find((v) => v.id === activeId(list)) || list[0];
@@ -642,7 +667,7 @@ function viewTabs(list, base, dirty) {
   };
   return list.map((v) => {
     const on = v.id === base.id;
-    const tab = el('span', { class: `pt-tab tl-tab${on ? ' is-on' : ''}`, draggable: true, title: 'Drag to reorder' },
+    const tab = el('span', { class: `pt-tab tl-tab${on && !navOn() ? ' is-on' : ''}`, draggable: true, title: 'Drag to reorder' },
       el('button', { class: 'tl-tab-name', onclick: () => setActive(v.id), text: `${v.name}${on && dirty ? ' *' : ''}` }),
       on ? el('button', { class: 'tl-tab-more', text: '⋮', title: 'View menu', onclick: tabMenu }) : null);
     // A tab dragged onto another goes before or after it.
@@ -680,20 +705,31 @@ function controls(count) {
     oninput: (e) => { page.query = e.target.value; redraw(); lastRoot?.querySelector('.tl-search')?.focus(); }, onkeydown: (e) => e.stopPropagation() });
 
   const tabs = el('div', { class: 'pt-tabs tl-tabs' },
-    // One page, two scopes: every project, or narrowed to the open one.
-    el('span', { class: 'pt-title tl-scope' },
-      el('button', { class: 'tl-crumb', title: 'Every project', onclick: () => set({ view: 'alltasks' }) }, icon('project'), el('span', { text: 'Projects & Tasks' })),
-      scope === 'project'
-        ? el('span', { class: 'tl-scope-chip' }, el('span', { class: 'sc-faint', text: '›' }), icon('project', projectColour(store.project.colour)), el('span', { text: store.project.name }),
-          el('button', { class: 'ord-btn', text: '↗', title: 'The project window: stages, dates and activity', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }),
-          el('button', { class: 'ord-btn', text: '×', title: 'Back to every project', onclick: () => set({ view: 'alltasks' }) }))
-        : el('button', { class: 'tl-pill tl-scope-pick', title: 'Narrow the page to one project', onclick: (e) => {
+    // A project's page is headed by the project, as Motion heads it: its name,
+    // the stage it is in, Open (its window) and its menu. Projects & Tasks is
+    // every project, with a switch to narrow it to one.
+    scope === 'project'
+      ? el('span', { class: 'pt-title tl-scope' },
+        icon('project', projectColour(store.project.colour)), el('span', { class: 'tl-project-name', text: store.project.name }),
+        (() => { const ph = store.project.currentPhaseId && phases(store.project).find((x) => x.id === store.project.currentPhaseId); return ph ? el('span', { class: 'ps-chip', style: { '--st': stageColour(store.project, ph) }, text: ph.name }) : null; })(),
+        el('button', { class: 'tl-pill', text: 'Open', title: 'The project window: stages, dates and activity', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }),
+        el('button', { class: 'ord-btn', text: '⋯', title: 'Project menu', onclick: async (e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          const { planMenu } = await import('./sidebar.js');
+          const sync = await import('../state/sync.js');
+          const me = (await sync.listPlans()).find((x) => x.id === store.project.id);
+          if (me) await planMenu(me, [])(r.left, r.bottom + 4);
+        } }))
+      : el('span', { class: 'pt-title tl-scope' },
+        el('button', { class: 'tl-crumb', title: 'Every project', onclick: () => set({ view: 'alltasks' }) }, icon('project'), el('span', { text: 'Projects & Tasks' })),
+        el('button', { class: 'tl-pill tl-scope-pick', title: 'Narrow the page to one project', onclick: (e) => {
           const r = e.currentTarget.getBoundingClientRect();
           showMenu(r.left, r.bottom + 4, [{ note: 'Show one project' },
-            { label: `▢ ${store.project.name} (open)`, run: () => set({ view: 'list' }) }, '-',
-            ...plans.filter((p) => !p.archived && p.id !== store.project.id).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40)
-              .map((p) => ({ label: p.name, run: async () => { if (await openPlan(p.id)) set({ view: 'list' }); } }))]);
+            { label: `▢ ${store.project.name} (open)`, run: () => set({ view: 'list', projectTab: 'navigate' }) }, '-',
+            ...plans.filter((p) => !p.archived && p.id !== store.project.id).sort((a2, b2) => a2.name.localeCompare(b2.name)).slice(0, 40)
+              .map((p) => ({ label: p.name, run: async () => { if (await openPlan(p.id)) set({ view: 'list', projectTab: 'navigate' }); } }))]);
         } }, 'All projects ▾')),
+    scope === 'project' ? el('button', { class: `pt-tab tl-nav-tab${navOn() ? ' is-on' : ''}`, onclick: () => { closePop(); set({ view: 'list', projectTab: 'navigate' }); } }, el('span', { text: '▭ Navigate' })) : null,
     ...viewTabs(list, base, dirty),
     scope === 'all' ? el('button', { class: 'pt-tab', text: 'Team Schedule', onclick: () => set({ view: 'team' }) }) : null,
     el('button', { class: 'tl-icon-btn tl-pop-btn', text: '✎', title: 'Edit views — order, rename, duplicate, delete', onclick: (e) => togglePop('views', e.currentTarget) }),
@@ -703,7 +739,8 @@ function controls(count) {
       el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Discard', onclick: discardView })) : null,
     el('span', { class: 'sc-spacer' }), search);
 
-  const layoutSeg = el('span', { class: 'tl-seg' }, ...layoutsHere().map(([k, [, label]]) => el('button', {
+  if (navOn()) return el('div', { class: 'tl-controls-wrap' }, tabs);
+  const layoutSeg = el('span', { class: 'tl-seg' }, ...switchable().map(([k, [, label]]) => el('button', {
     class: `tl-seg-btn${view.layout === k ? ' is-on' : ''}`, text: label, onclick: () => edit((x) => { x.layout = k; }) })));
   if (view.layout === 'workload') return el('div', { class: 'tl-controls-wrap' }, tabs, el('div', { class: 'tl-controls' }, el('div', { class: 'tl-row' }, layoutSeg)));
 
@@ -1117,6 +1154,17 @@ export function showArchived(workspaceId) {
   void reloadAllTasks();
 }
 
+/** The project's tabs (Navigate and its views), over one of the Microsoft Project views of it. */
+export function renderProjectTabs(root) {
+  scope = 'project';
+  const strip = controls(0).firstChild;
+  // The tab of the view on screen is the one lit, whatever was last chosen.
+  for (const t of strip.querySelectorAll('.tl-tab')) t.classList.remove('is-on');
+  const onScreen = savedViews().find((v) => mspViewOf(v.layout) === store.ui.view);
+  if (onScreen) [...strip.querySelectorAll('.tl-tab')].find((t) => t.querySelector('.tl-tab-name')?.textContent.replace(' *', '') === onScreen.name)?.classList.add('is-on');
+  root.replaceChildren(strip);
+}
+
 /** Projects & Tasks (`scope: 'all'`), or the open project's Task list (`scope: 'project'`). */
 export function renderAllTasks(root, { scope: s = 'all' } = {}) {
   if (s !== scope) { scope = s; closePop(); }
@@ -1131,6 +1179,9 @@ export function renderAllTasks(root, { scope: s = 'all' } = {}) {
   const list = visible(view, layout);
   const projectCount = ganttPlans(view).length;
   pane.append(controls(view.layout === 'gantt' ? projectCount : list.length));
+  if (navOn()) { renderNavigate(pane); return; }
+  // A Microsoft Project view opens that view of the planner, under these tabs.
+  if (scope === 'project' && mspViewOf(view.layout)) { queueMicrotask(() => set({ view: mspViewOf(view.layout) })); return; }
   if (view.layout === 'workload') {
     // Workload is Resource Usage: every person's hours by day, over every plan.
     const host = el('div', { class: 'tl-workload' });
