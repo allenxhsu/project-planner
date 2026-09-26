@@ -3,7 +3,8 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { formatPredecessors, formatAssignments, isSummary, taskIndex, CONSTRAINTS, stageOf, URGENCIES, urgencyOf } from '../model/model.js';
+import { formatPredecessors, formatAssignments, isSummary, taskIndex, CONSTRAINTS, stageOf, URGENCIES, urgencyOf, pinsOf } from '../model/model.js';
+import { lateness, lateSentence } from './calendar.js';
 import { formatDate, formatDuration } from '../model/calendar.js';
 import { formatMoney, formatHours, clear } from '../util.js';
 import { renderGrid } from './grid.js';
@@ -39,6 +40,11 @@ export const columnsForView = (view) => (view === 'sheet' ? SHEET_COLUMNS : GANT
 
 export const taskColumns = (keys) => keys.map((key) => ({ key, ...COLUMN_DEFS[key] }));
 
+/** The calendar's lateness for one task of the open plan, or null. */
+function lateFor(taskId) {
+  try { return lateness().find((l) => l.taskId === taskId && l.planId === store.project.id) || null; } catch { return null; }
+}
+
 /** Small glyphs in the indicator column. */
 function indicators(task, info) {
   const marks = [];
@@ -47,7 +53,13 @@ function indicators(task, info) {
   if (worst) marks.push(el('span', { class: `ind ind-${worst.level}`, text: worst.level === 'error' ? '⨂' : '⚠', title: issues.map((i) => i.text).join('\n') }));
   if (info.percent === 100) marks.push(el('span', { class: 'ind ind-done', text: '✓', title: 'Complete' }));
   if (task.constraint?.type !== 'ASAP') marks.push(el('span', { class: 'ind ind-pin', text: '⚑', title: `${CONSTRAINTS[task.constraint.type].label} ${formatDate(task.constraint.date)}` }));
-  if (task.deadline) marks.push(el('span', { class: `ind ${info.deadlineMissed ? 'ind-error' : 'ind-deadline'}`, text: '▽', title: `Deadline ${formatDate(task.deadline)}` }));
+  // The calendar's verdict, when it has one: the plan's dates can make a
+  // deadline that the week, laid out beside every other project, cannot.
+  const late = lateFor(task.id);
+  if (late) marks.push(el('span', { class: 'ind ind-error ind-late', text: '⏱', title: lateSentence(late) }));
+  else if (task.deadline) marks.push(el('span', { class: `ind ${info.deadlineMissed ? 'ind-error' : 'ind-deadline'}`, text: '▽', title: `Deadline ${formatDate(task.deadline)}` }));
+  const pins = pinsOf(task).length;
+  if (pins) marks.push(el('span', { class: 'ind ind-pinned', text: '⌖', title: `${pins} block${pins === 1 ? '' : 's'} pinned on the calendar` }));
   if (task.notes) marks.push(el('span', { class: 'ind ind-note', text: '≡', title: task.notes }));
   return el('span', { class: 'ind-wrap' }, ...marks);
 }

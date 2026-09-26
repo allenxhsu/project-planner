@@ -109,7 +109,7 @@ function expand(event, rule, from, to, cap = 400) {
 /**
  * Read an ICS document into events between `from` and `to` (milliseconds).
  *
- * @returns {{ events: Array<{uid, title, start, end, allDay, busy}>, name: string|null, skipped: number }}
+ * @returns {{ events: Array<{uid, title, start, end, allDay, busy, location?}>, name: string|null, skipped: number }}
  */
 export function parseIcs(text, { from = Date.now() - 7 * DAY_MS, to = Date.now() + 120 * DAY_MS } = {}) {
   const lines = unfold(text);
@@ -132,6 +132,7 @@ export function parseIcs(text, { from = Date.now() - 7 * DAY_MS, to = Date.now()
           events.push({
             uid: current.uid || `${at}`, title: current.title || '(no title)',
             start: at, end: at + span, allDay: !!current.allDay, busy: current.busy !== false,
+            ...(current.location ? { location: current.location } : {}),
           });
         }
       } else skipped++;
@@ -145,6 +146,8 @@ export function parseIcs(text, { from = Date.now() - 7 * DAY_MS, to = Date.now()
     switch (line.name) {
       case 'UID': current.uid = line.value; break;
       case 'SUMMARY': current.title = unescape(line.value); break;
+      case 'LOCATION': { const where = unescape(line.value).trim(); if (where) current.location = where; break; }
+      case 'DESCRIPTION': current.description = unescape(line.value); break;
       case 'DTSTART': { const d = parseDate(line.value, line.params); if (d) { current.start = d.ms; current.allDay = d.allDay; } break; }
       case 'DTEND': { const d = parseDate(line.value, line.params); if (d) current.end = d.ms; break; }
       case 'RRULE': current.rrule = line.value; break;
@@ -156,4 +159,116 @@ export function parseIcs(text, { from = Date.now() - 7 * DAY_MS, to = Date.now()
   }
   events.sort((a, b) => a.start - b.start);
   return { events, name, skipped };
+}
+
+// ------------------------------------------------------------------ writing
+//
+// The same format, the other way: the week the planner has laid out, as a
+// calendar a phone can subscribe to or Calendar.app can open, so the plan is
+// visible without the planner. No OAuth and no write-back over the network —
+// the reasoning is the read side's: an address and a file are things every
+// calendar understands, and a token is one more thing to keep.
+//
+// Times are written floating — no Z, no TZID — which RFC 5545 defines as "the
+// same wall-clock time wherever it is read". That is what the planner means by
+// 09:00, and it is how this module reads a floating time back.
+
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+/** Escape text for an ICS property value (RFC 5545 §3.3.11). */
+const escapeText = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+
+/** Fold a content line to 75 octets, continuation lines starting with a space. */
+function fold(line) {
+  const bytes = new TextEncoder().encode(line);
+  if (bytes.length <= 75) return line;
+  const out = [];
+  let chunk = '';
+  let size = 0;
+  for (const ch of line) {
+    const n = new TextEncoder().encode(ch).length;
+    if (size + n > (out.length ? 74 : 75)) { out.push(chunk); chunk = ''; size = 0; }
+    chunk += ch;
+    size += n;
+  }
+  out.push(chunk);
+  return out.join('\r\n ');
+}
+
+/** A local wall-clock time as a floating ICS date-time: 20260925T090000. */
+function floating(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function utcStamp(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+}
+
+/**
+ * Write events as an iCalendar document.
+ *
+ * @param {Array<{uid: string, title: string, start: number, end: number, description?: string, location?: string}>} events
+ * @param {{ name?: string, now?: number }} [opts]
+ */
+export function writeIcs(events, { name = 'Project Planner', now = Date.now() } = {}) {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Project Planner//Week//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeText(name)}`,
+  ];
+  for (const e of events) {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${e.uid}`,
+      `DTSTAMP:${utcStamp(now)}`,
+      `DTSTART:${floating(e.start)}`,
+      `DTEND:${floating(e.end)}`,
+      `SUMMARY:${escapeText(e.title)}`,
+      ...(e.description ? [`DESCRIPTION:${escapeText(e.description)}`] : []),
+      ...(e.location ? [`LOCATION:${escapeText(e.location)}`] : []),
+      // The planner's work is time the person has set aside, not a meeting;
+      // opaque so a phone's free/busy says so.
+      'TRANSP:OPAQUE',
+      'END:VEVENT',
+    );
+  }
+  lines.push('END:VCALENDAR');
+  return `${lines.map(fold).join('\r\n')}\r\n`;
+}
+
+/**
+ * The laid-out blocks as events.
+ *
+ * A UID is the task, the day and the block's place in that day. It is the same
+ * on every export while the plan holds still, which is what lets a calendar
+ * that re-imports the file replace an event rather than add a second copy —
+ * and a block that moves to another hour keeps its UID, so it moves there too.
+ *
+ * @param {Array} blocks as planBlocksAcross returns them
+ * @param {(taskId: string, planId: string) => {name: string, planName?: string}|null} describe
+ */
+export function blocksToEvents(blocks, describe) {
+  const seq = new Map();
+  const out = [];
+  for (const b of [...blocks].sort((x, y) => x.day - y.day || x.start - y.start)) {
+    const key = `${b.taskId}|${b.dateIso}`;
+    const n = (seq.get(key) || 0) + 1;
+    seq.set(key, n);
+    const info = describe(b.taskId, b.planId);
+    if (!info) continue;
+    const [y, m, d] = b.dateIso.split('-').map(Number);
+    const start = new Date(y, m - 1, d, Math.floor(b.start / 60), b.start % 60).getTime();
+    const end = new Date(y, m - 1, d, Math.floor(b.end / 60), b.end % 60).getTime();
+    out.push({
+      uid: `${b.taskId}-${b.dateIso}-${n}@project-planner`,
+      title: info.name,
+      start, end,
+      description: [info.planName, b.pinned ? 'Placed by hand' : null, b.late ? 'After its deadline' : null].filter(Boolean).join(' · '),
+    });
+  }
+  return out;
 }

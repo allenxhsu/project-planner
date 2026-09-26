@@ -21,7 +21,7 @@ import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, sa
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
-import { formatDate } from '../model/calendar.js';
+import { formatDate, fromDay } from '../model/calendar.js';
 import { hosted, post } from '../host.js';
 
 // ---------------------------------------------------------------- file commands
@@ -141,6 +141,36 @@ export async function openFile() {
 }
 
 /**
+ * The week on the calendar, as a calendar.
+ *
+ * One event per block, with a UID made of the task, the day and the block's
+ * place in it, so importing a newer export replaces rather than duplicates.
+ * The week is the one on screen, across every project the calendar covers —
+ * the same blocks the view draws, pins and all.
+ */
+async function exportWeekIcs() {
+  const { currentLayout, daysOnScreen } = await import('./calendar.js');
+  const { writeIcs, blocksToEvents } = await import('../io/ics.js');
+  const { entries, all } = currentLayout();
+  const { days } = daysOnScreen(store.project);
+  // A month's grid shows the edges of its neighbours; the export is the
+  // week (or day, or three days) on screen, and in month view the whole month.
+  const shown = new Set(days);
+  const blocks = all.blocks.filter((b) => shown.has(b.day));
+  if (!blocks.length) { showText('Nothing to export', 'There are no blocks on the calendar in the days on screen. Put some tasks on the calendar, or move to a week that has work in it.'); return; }
+  const describe = (taskId, planId) => {
+    const e = entries.find((x) => x.project.id === planId);
+    const t = e?.project.tasks.find((x) => x.id === taskId);
+    return t ? { name: t.name, planName: e.project.name } : null;
+  };
+  const events = blocksToEvents(blocks, describe);
+  const first = formatDate(fromDay(Math.min(...days)), 'day').replace(/\s+/g, '-');
+  downloadText(writeIcs(events, { name: `Project Planner — week of ${formatDate(fromDay(Math.min(...days)), 'long')}` }),
+    `planner-week-${fromDay(Math.min(...days))}.ics`, 'text/calendar');
+  act.hint(`Exported ${events.length} block${events.length === 1 ? '' : 's'} as a calendar, ${first} onward.`);
+}
+
+/**
  * Every record this app holds, tombstones included, as one file.
  *
  * A plan file is one plan. This is the whole shelf — plans, people, time
@@ -233,6 +263,7 @@ export const COMMANDS = {
   'file.new': newProject, 'file.open': openFile, 'file.sample': openSample, 'file.save': saveProject, 'file.saveAs': saveProjectAs,
   'file.exportXml': guarded(exportXml), 'file.exportCsv': guarded(exportCsvFile),
   'file.exportAll': guarded(exportEverything), 'file.importAll': importEverything,
+  'file.exportIcs': guarded(exportWeekIcs),
   'file.exportMpx': guarded(() => exportVia('mpx')), 'file.exportXer': guarded(() => exportVia('xer')), 'file.exportPmxml': guarded(() => exportVia('pmxml')), 'file.exportPlanner': guarded(() => exportVia('planner')),
   'edit.undo': undo, 'edit.redo': redo, 'edit.selectAll': act.selectAll, 'edit.delete': () => (['resources', 'usage'].includes(store.ui.view) ? act.deleteResource() : act.deleteSelection()),
   'task.new': act.newTaskBelow, 'task.newAbove': act.newTaskAbove, 'task.milestone': act.newMilestone, 'task.toggleMilestone': act.toggleMilestone,
@@ -276,7 +307,8 @@ const MENUS = {
     { label: 'Export Primavera XER', run: run('file.exportXer') },
     { label: 'Export Primavera PMXML', run: run('file.exportPmxml') },
     { label: 'Export GNOME Planner', run: run('file.exportPlanner') },
-    { label: 'Export task list as CSV', run: run('file.exportCsv') }, '-',
+    { label: 'Export task list as CSV', run: run('file.exportCsv') },
+    { label: 'Export week as calendar (.ics)', run: run('file.exportIcs') }, '-',
     { label: 'Export everything (every project, person and setting)…', run: run('file.exportAll') },
     { label: 'Import everything…', run: run('file.importAll') },
   ],

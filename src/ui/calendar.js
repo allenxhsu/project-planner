@@ -6,7 +6,7 @@
 // logging four hours or moving a task re-lays the week by itself.
 
 import { el, clear } from '../util.js';
-import { store, set } from '../state/store.js';
+import { store, set, revision } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAULT_AGENDA } from '../model/agenda.js';
 import { planRecords, isCurrentWork } from '../state/sync.js';
@@ -80,6 +80,27 @@ const HOUR_H = 46;
 const planCache = new Map();
 let others = [];
 let loadedPlans = false;
+/** Bumped whenever the shelf's plans are re-read, so a memo knows. */
+let othersVersion = 0;
+
+/**
+ * The week as the calendar lays it, for anything that needs to know — the
+ * checks panel says what will be late, the grid marks it. Memoised on the
+ * open plan's revision and the shelf, because the checks re-render on every
+ * keystroke and laying every plan's week on each one is waste.
+ */
+let layoutMemo = { key: '', value: null };
+export function currentLayout() {
+  const { project, schedule, ui } = store;
+  const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}`;
+  if (layoutMemo.key === key && layoutMemo.value) return layoutMemo.value;
+  const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
+  const value = { entries, all: planBlocksAcross(entries) };
+  layoutMemo = { key, value };
+  return value;
+}
+/** What will not make its deadline, across the plans the calendar covers. */
+export const lateness = () => currentLayout().all.late || [];
 
 export async function reloadCalendarPlans() {
   try {
@@ -100,6 +121,7 @@ export async function reloadCalendarPlans() {
       } catch { /* a plan that cannot be read simply is not on the calendar */ }
     }
     others = out;
+    othersVersion++;
   } catch {
     others = [];
   }
@@ -204,6 +226,77 @@ function sideBySide(dayBlocks) {
   return out;
 }
 
+/** Hours as a person says them: 12h, 1.5h, 30 min. */
+const hoursText = (minutes) => (minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 6) / 10}h`);
+
+/** One line of what will be late, readable on its own. */
+export function lateSentence(l) {
+  const by = formatDate(l.deadlineIso, 'day');
+  return l.finishIso
+    ? `${l.name} will not be finished by ${by}: ${hoursText(l.minutesShort)} lands after it, and at this rate it is done ${formatDate(l.finishIso, 'day')}.`
+    : `${l.name} will not be finished by ${by}: ${hoursText(l.minutesShort)} does not fit anywhere in the next six months at this rate.`;
+}
+
+function lateBanner(list) {
+  const box = el('div', { class: 'sc-alert sc-alert--danger cal-late', role: 'status' },
+    el('strong', { text: list.length === 1 ? 'One deadline will be missed.' : `${list.length} deadlines will be missed.` }));
+  const ul = el('ul', { class: 'cal-late-list' });
+  for (const l of list.slice(0, 5)) {
+    ul.append(el('li', {
+      class: 'clickable', title: `${l.planName} — click to open the task`,
+      onclick: () => {
+        if (l.planId !== store.project.id) { void openOther(l.planId, l.taskId); return; }
+        act.revealTask(l.taskId); act.selectTask(l.taskId); set({ rightOpen: true, rightTab: 'task' });
+      },
+    }, lateSentence(l)));
+  }
+  if (list.length > 5) ul.append(el('li', { class: 'sc-faint', text: `and ${list.length - 5} more — see Checks.` }));
+  box.append(ul);
+  return box;
+}
+
+/**
+ * Drag a block to pin it.
+ *
+ * Moving a computed block turns it into a pin at the spot it was dropped;
+ * moving a pinned one moves its pin. The drop snaps to a quarter of an hour
+ * and to whichever day column is under the pointer, and a drag of a few
+ * pixels is still a click, so selecting a block does not pin it by accident.
+ */
+function startDrag(e, b, { hourFrom }) {
+  if (e.button !== 0) return;
+  const block = e.currentTarget;
+  const x0 = e.clientX;
+  const y0 = e.clientY;
+  let dragging = false;
+  const move = (ev) => {
+    const dx = ev.clientX - x0;
+    const dy = ev.clientY - y0;
+    if (!dragging && Math.hypot(dx, dy) < 6) return;
+    dragging = true;
+    block.classList.add('is-dragging');
+    block.style.transform = `translate(${dx}px, ${dy}px)`;
+  };
+  const up = (ev) => {
+    removeEventListener('pointermove', move);
+    removeEventListener('pointerup', up);
+    if (!dragging) return;
+    block.dataset.dragged = '1';
+    block.classList.remove('is-dragging');
+    block.style.transform = '';
+    const col = document.elementsFromPoint(ev.clientX, ev.clientY)
+      .map((node) => node.closest?.('.cal-col[data-day]')).find(Boolean);
+    if (!col) return;
+    const rect = col.getBoundingClientRect();
+    const topPx = (ev.clientY - y0) + (block.getBoundingClientRect().top - rect.top) - 0;
+    const raw = hourFrom * 60 + (topPx / HOUR_H) * 60;
+    const start = Math.max(0, Math.min(24 * 60 - b.minutes, Math.round(raw / 15) * 15));
+    act.pinBlock(b.taskId, { day: col.dataset.day, start, minutes: b.minutes }, b.pinned ? b.pinIndex : null);
+  };
+  addEventListener('pointermove', move);
+  addEventListener('pointerup', up);
+}
+
 /** A block from another plan: open that plan, and land on the task. */
 async function openOther(planId, taskId) {
   const { openPlan } = await import('../state/sync.js');
@@ -228,8 +321,7 @@ export function renderCalendar(root) {
   // does not re-read it, so the newly opened plan would still be in there —
   // and every one of its tasks would be booked twice, which looks like a task
   // taking twice the time it asked for.
-  const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
-  const all = planBlocksAcross(entries);
+  const { entries, all } = currentLayout();
   // Whose week this is, by name — the same person is a different id in each plan.
   const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
@@ -296,6 +388,12 @@ export function renderCalendar(root) {
 
   const range = rangeOf();
   const screen = daysOnScreen(project);
+  // The most valuable sentence the view can say: "you cannot finish this by
+  // Friday". One line per task that will not make its deadline at this rate,
+  // with how much will not fit and when it would really be done.
+  const lateHere = (all.late || []).filter((l) => !who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who)));
+  if (lateHere.length) pane.append(lateBanner(lateHere));
+
   if (range === 'month') { renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount, colourMode, palette }); return; }
   const columns = screen.days;
 
@@ -304,7 +402,7 @@ export function renderCalendar(root) {
   let from = parseTime(base.from) ?? 540, to = parseTime(base.to) ?? 1020;
   for (const e of entries) for (const t of e.project.tasks) { if (!agendaOf(e.project, t).show) continue; const a = agendaOf(e.project, t); from = Math.min(from, a.from); to = Math.max(to, a.to); }
   for (const b of blocks) if (columns.includes(b.day)) { from = Math.min(from, b.start); to = Math.max(to, b.end); }
-  for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) { from = Math.min(from, m.start); to = Math.max(to, m.end); }
+  for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) { from = Math.min(from, m.start - (m.bufferBefore || 0)); to = Math.max(to, m.end + (m.bufferAfter || 0)); }
   const hourFrom = Math.floor(from / 60), hourTo = Math.ceil(to / 60);
   const y = (min) => ((min - hourFrom * 60) / 60) * HOUR_H;
 
@@ -325,15 +423,25 @@ export function renderCalendar(root) {
   body.append(gutter);
 
   for (const d of columns) {
-    const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
+    const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
     // Meetings from a connected calendar sit behind the work, because that is
     // what they are: hours already spoken for.
     for (const m of (meetings || []).filter((x) => x.day === d)) {
+      // Travel time, when the event is somewhere: booked as busy, drawn as a
+      // hatched edge so it is clear why no work sits right up against it.
+      if (m.bufferBefore) {
+        col.append(el('div', { class: 'cal-buffer', title: `${m.bufferBefore} minutes to get to ${m.location}`,
+          style: { top: `${y(m.start - m.bufferBefore)}px`, height: `${Math.max(3, y(m.start) - y(m.start - m.bufferBefore))}px` } }));
+      }
+      if (m.bufferAfter) {
+        col.append(el('div', { class: 'cal-buffer', title: `${m.bufferAfter} minutes back from ${m.location}`,
+          style: { top: `${y(m.end)}px`, height: `${Math.max(3, y(m.end + m.bufferAfter) - y(m.end))}px` } }));
+      }
       col.append(el('div', {
         class: `cal-meeting${m.allDay ? ' is-allday' : ''}`,
         style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 1)}px` },
-        title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}`,
+        title: `${m.title}\n${m.allDay ? 'All day' : `${formatClock(m.start)} – ${formatClock(m.end)}`}${m.location ? `\n${m.location}` : ''}${m.bufferBefore ? `\n${m.bufferBefore} minutes' travel either side` : ''}`,
       }, el('div', { class: 'cal-meeting-name', text: m.title })));
     }
     for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
@@ -360,13 +468,18 @@ export function renderCalendar(root) {
       // task's name and the day says the rest.
       const oneDay = range === 'day';
       col.append(el('div', {
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${!foreign ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
         },
-        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}`,
-        onclick: () => { if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); },
+        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
+        onclick: (e) => {
+          if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; }
+          if (foreign) { void openOther(b.planId, t.id); return; }
+          act.selectTask(t.id);
+        },
+        onpointerdown: foreign ? null : (e) => startDrag(e, b, { hourFrom, y }),
         ondblclick: () => set({ rightOpen: true, rightTab: 'task', selection: [t.id] }),
         oncontextmenu: (e) => {
           e.preventDefault();
@@ -381,11 +494,15 @@ export function renderCalendar(root) {
             '-',
             { label: 'Break into subtasks…', run: () => act.breakUpDialog(t.id) },
             '-',
+            ...(foreign ? [] : b.pinned
+              ? [{ label: 'Unpin — let the calendar place it', run: () => act.unpinBlock(t.id, b.pinIndex) }]
+              : [{ label: 'Pin it here', run: () => act.pinBlock(t.id, { day: b.dateIso, start: b.start, minutes: b.minutes }) }]),
             { label: 'Take off the calendar', run: () => act.editTask(t.id, 'calendarShow', false) },
           ]);
         },
       },
         el('div', { class: 'cal-block-time sc-mono' },
+          b.pinned ? el('span', { class: 'cal-pin', title: 'Pinned', text: '⌖' }) : null,
           oneDay ? `${formatClock(b.start)} – ${formatClock(b.end)}` : formatClock(b.start),
           person.initials ? el('span', { class: 'cal-who', text: person.initials }) : null),
         el('div', { class: 'cal-block-name' }, urgencyOf(t) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: URGENCIES[urgencyOf(t)].label }) : null, t.name),

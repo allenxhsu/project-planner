@@ -5,11 +5,28 @@ import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { RULES } from '../model/validate.js';
 import { formatDate } from '../model/calendar.js';
+import { lateness, lateSentence } from './calendar.js';
+
+/**
+ * What the calendar says will be late, as checks. These are not the plan's
+ * own arithmetic — the schedule can meet a deadline that a person's week, laid
+ * out beside every other project, cannot — so they come from the calendar's
+ * layout rather than from validate().
+ */
+function lateChecks() {
+  let list = [];
+  try { list = lateness(); } catch { list = []; }
+  return list.map((l) => ({
+    level: 'error', code: 'will-be-late', taskId: l.taskId, planId: l.planId,
+    text: `${lateSentence(l)}${l.planId !== store.project.id ? ` (${l.planName})` : ''}`,
+  }));
+}
 
 export function checkBadge() {
-  const n = store.issues.filter((i) => i.level !== 'info').length;
+  const late = lateChecks();
+  const n = store.issues.filter((i) => i.level !== 'info').length + late.length;
   if (!n) return null;
-  return { text: String(n), alert: store.issues.some((i) => i.level === 'error'), title: `${n} checks need attention` };
+  return { text: String(n), alert: late.length > 0 || store.issues.some((i) => i.level === 'error'), title: `${n} checks need attention` };
 }
 
 export function renderBottom(root) {
@@ -26,10 +43,15 @@ export function renderBottom(root) {
     root.append(el('table', { class: 'sc-table compact stats' }, el('tbody', {}, ...rows.map(([k, v]) => el('tr', {}, el('td', { class: 'sc-muted', text: k }), el('td', { text: v }))))));
     return;
   }
-  if (!issues.length) { root.append(el('p', { class: 'empty', text: 'No issues. The plan schedules cleanly.' })); return; }
-  root.append(el('table', { class: 'sc-table compact' }, el('tbody', {}, ...issues.map((i) => el('tr', {
-    class: 'clickable', title: RULES[i.code][1],
-    onclick: () => {
+  const all = [...lateChecks(), ...issues];
+  if (!all.length) { root.append(el('p', { class: 'empty', text: 'No issues. The plan schedules cleanly.' })); return; }
+  root.append(el('table', { class: 'sc-table compact' }, el('tbody', {}, ...all.map((i) => el('tr', {
+    class: 'clickable', title: i.code === 'will-be-late' ? 'At the rate the calendar can fit it in, this task finishes after its deadline.' : RULES[i.code][1],
+    onclick: async () => {
+      if (i.planId && i.planId !== store.project.id) {
+        const { openPlan } = await import('../state/sync.js');
+        if (!(await openPlan(i.planId))) return;
+      }
       if (i.taskId) { if (!['gantt', 'sheet', 'network'].includes(ui.view)) set({ view: 'gantt' }); act.revealTask(i.taskId); act.selectTask(i.taskId); set({ rightTab: 'task' }); }
       else if (i.resourceId) set({ resourceId: i.resourceId, rightTab: 'resource', view: ui.view === 'usage' ? 'usage' : 'resources' });
     },

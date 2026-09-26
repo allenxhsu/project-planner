@@ -259,6 +259,20 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .colour-chip.is-auto { width: auto; padding: 0 6px; font: inherit; font-size: 10.5px; color: var(--sc-text-2); }
 .colour-chip.is-on { outline: 2px solid var(--sc-app); outline-offset: 1px; }
 .cal-block.is-overdue { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--sc-danger) 22%, transparent) 6px 9px); }
+.cal-block.is-draggable { cursor: grab; touch-action: none; }
+.cal-block.is-dragging { cursor: grabbing; opacity: 0.85; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+.cal-block.is-pinned { box-shadow: inset 0 0 0 1px var(--who, var(--sc-app)); }
+.cal-block.is-late { outline: 1px dashed var(--sc-danger); outline-offset: -1px; }
+.cal-pin { margin-right: 4px; color: var(--who, var(--sc-app)); }
+.cal-buffer { position: absolute; left: 3px; right: 3px; opacity: 0.55; pointer-events: none;
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--sc-text-3) 45%, transparent) 4px 6px); }
+.cal-late { margin: 0 0 8px; }
+.cal-late-list { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+.cal-late-list li { margin: 2px 0; }
+.cal-late-list li.clickable { cursor: pointer; }
+.cal-late-list li.clickable:hover { text-decoration: underline; }
+.pin-row { align-items: center; gap: 8px; }
+.ind-pinned { color: var(--sc-app); }
 .cal-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 2px 0 6px; font-size: 11px; color: var(--sc-text-2); }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .cal-legend-item:hover { color: var(--sc-text-1); }
@@ -319,7 +333,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cal-meeting { position: absolute; left: 2px; right: 2px; padding: 2px 5px; overflow: hidden; background: repeating-linear-gradient(135deg, rgb(var(--sc-text-rgb) / 0.09) 0 6px, rgb(var(--sc-text-rgb) / 0.04) 6px 12px); border-left: 2px solid var(--sc-text-3); pointer-events: auto; }
 .cal-meeting.is-allday { border-left-color: var(--sc-accent-2); }
 .cal-meeting-name { font-size: 10.5px; color: var(--sc-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.feed-row { grid-template-columns: minmax(0, 1fr) 110px 26px 26px; }
+.feed-row { grid-template-columns: minmax(0, 1fr) 100px 104px 26px 26px; }
 
 .cal-block { position: absolute; left: 4px; right: 4px; display: grid; gap: 1px; align-content: start; padding: 4px 6px; overflow: hidden; cursor: pointer; background: rgb(var(--sc-accent-rgb) / 0.22); border-left: 3px solid var(--sc-accent); }
 .cal-block:hover { background: rgb(var(--sc-accent-rgb) / 0.34); }

@@ -10,6 +10,7 @@ import {
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
+  setPin, removePin, clearPins,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -325,6 +326,17 @@ export function setCurrentPhase(id) {
 
 // Time blocks are hours in a week, not properties of a project, so these go to
 // the shared set and are written back into every plan (state/sync.js).
+/**
+ * Pin a block where it was dragged. `index` moves a pin that is already there;
+ * without it a computed block becomes a new pin. Either way it is one undoable
+ * step, and the rest of the week re-lays around it on the next draw.
+ */
+export function pinBlock(taskId, pin, index = null) {
+  return attempt(index === null ? 'Pin a block' : 'Move a pinned block', (p) => { setPin(p, taskId, pin, index); });
+}
+export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }
+export function unpinAll(taskId) { return attempt('Unpin every block', (p) => clearPins(p, taskId)); }
+
 export function newPhase(name) { return commit('New phase', (p) => addPhase(p, name ? { name } : {})); }
 export function editPhase(id, name) { return attempt('Rename the phase', (p) => setPhaseField(p, id, 'name', name)); }
 export function deletePhase(id) { return attempt('Delete the phase', (p) => removePhase(p, id)); }

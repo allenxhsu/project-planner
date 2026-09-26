@@ -1,6 +1,6 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
-import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES } from '../model/model.js';
+import { FORMAT, VERSION, createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -116,7 +116,13 @@ export function parse(text) {
               : (t.calendar.timeBlockId ? [t.calendar.timeBlockId] : [])).filter((id) => blockIds.has(id)),
             ...(BLOCK_CHOICES.includes(+t.calendar.blockHours) ? { blockHours: +t.calendar.blockHours } : {}),
             ...(parseTime(t.calendar.from) !== null ? { from: t.calendar.from } : {}),
-            ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}) }
+            ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}),
+            // Only well-formed pins come back; a malformed one is not a
+            // decision anyone made, and keeping it would be a ghost.
+            ...(Array.isArray(t.calendar.pins) && t.calendar.pins.length ? { pins: t.calendar.pins
+              .filter((q) => q && /^\d{4}-\d{2}-\d{2}$/.test(String(q.day)) && Number.isFinite(+q.start) && Number.isFinite(+q.minutes)
+                && +q.start >= 0 && +q.minutes >= 5 && +q.start + +q.minutes <= 24 * 60)
+              .map((q) => ({ day: q.day, start: Math.round(+q.start), minutes: Math.round(+q.minutes) })) } : {}) }
         : { show: false, timeBlockIds: [] },
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
@@ -157,9 +163,11 @@ export function parse(text) {
         provider: ['google', 'outlook', 'ics'].includes(f.provider) ? f.provider : 'ics',
         resourceId: resIds.has(f.resourceId) ? f.resourceId : null,
         fetchedAt: Number.isFinite(+f.fetchedAt) ? +f.fetchedAt : null,
+        bufferMinutes: BUFFER_CHOICES.includes(+f.bufferMinutes) ? +f.bufferMinutes : DEFAULT_BUFFER_MINUTES,
         events: Array.isArray(f.events) ? f.events
           .filter((e) => e && Number.isFinite(+e.start) && Number.isFinite(+e.end) && +e.end > +e.start)
-          .map((e) => ({ uid: String(e.uid || ''), title: String(e.title || '(no title)'), start: +e.start, end: +e.end, allDay: !!e.allDay }))
+          .map((e) => ({ uid: String(e.uid || ''), title: String(e.title || '(no title)'), start: +e.start, end: +e.end, allDay: !!e.allDay,
+            ...(typeof e.location === 'string' && e.location.trim() ? { location: e.location.trim() } : {}) }))
           : [],
       }));
   }

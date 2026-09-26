@@ -367,6 +367,46 @@ toolbar and from **Edit time blocks…** beside a task's own time block. Each
 plan still carries a copy of the list, so a `*.project.json` opened on its own
 schedules exactly as it did here.
 
+### A calendar that commits
+
+The week is laid **earliest deadline first**. For work that can be cut into
+blocks and done in any order, on one person's time, that order meets every
+deadline any order could have met. Urgency breaks ties between equal
+deadlines, and a task with no deadline sorts after the dated ones, so a plan
+that sets none lays out as it always did. One exception, deliberately: **Do it
+now** still goes first, because it is a person saying in so many words that
+this beats the arithmetic. A task's daily share is worked out afresh each day
+against the days left before its deadline, so a day lost to something earlier
+raises its share of the days that remain.
+
+**What will be late is said plainly.** For each task with a deadline, the
+calendar works out how much of its work lands after it and the day it would
+really finish at this rate — *"FAT procedure will not be finished by 1 Oct:
+14h lands after it, and at this rate it is done 6 Oct."* That sentence heads
+the calendar, appears in Checks as `will-be-late`, and marks the task in the
+grid with ⏱ and its late blocks with a dashed edge. It is the calendar's
+verdict, not the schedule's: the plan's dates can make a deadline that a
+person's week, laid out beside every other project, cannot.
+
+**Drag a block to pin it.** Every block is computed and nothing about where
+it sits is stored, which is why logging four hours re-lays the week by itself.
+A pin is the one exception: the block stays at the hour it was dropped on,
+saved with the plan, and the layout books pins before anything else and lays
+the rest around them. A pin that can no longer happen — its day has gone, its
+task is done — is dropped rather than kept as a ghost. Unpin it from the
+block's menu, and the task's details count its pins, with Unpin all.
+
+**Travel time.** A connected calendar's event with a location books time to
+get there and back, 30 minutes either side by default, set per calendar and
+off with one choice. It is drawn as a hatched edge on the event, so it is
+clear why no work sits up against the dentist.
+
+**File ▸ Export week as calendar (.ics)** writes the week on screen as events,
+one per block, with a UID made of the task, the day and the block's place in
+it — so importing a newer export replaces events rather than duplicating
+them, and a block moved to another hour moves there. No OAuth and no
+write-back over the network, for the same reason the read side has none.
+
 ### Overdue work
 
 A calendar is about the days still ahead. A task the schedule says should have

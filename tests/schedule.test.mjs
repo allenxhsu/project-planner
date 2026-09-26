@@ -667,8 +667,10 @@ test('duration is how long a task is open; work is how much of it is spent', asy
   assert.equal(blocks.length, 12, 'twelve hours in one-hour blocks');
   const perDay = new Map();
   for (const b of blocks) perDay.set(b.dateIso, (perDay.get(b.dateIso) || 0) + 1);
-  assert.equal(perDay.size, 4, 'spread over the days it is open, three a day');
-  assert.ok([...perDay.values()].every((n) => n <= 3));
+  // Each day's share is worked out against the days left, so twelve hours
+  // over five open days is 3, 3, 2, 2, 2 — every day it is open, none full.
+  assert.equal(perDay.size, 5, 'spread over all five days it is open');
+  assert.ok([...perDay.values()].every((n) => n <= 3), 'never more than three hours a day');
 
   // Bigger blocks, same twelve hours: four-hour blocks land one a day.
   setTaskField(p, design.id, 'blockHours', 4);

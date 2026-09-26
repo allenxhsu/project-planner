@@ -420,12 +420,27 @@ export function addFeed(p, { name = 'My calendar', url = '', provider = 'ics', r
     url: String(url).trim().replace(/^webcal:/i, 'https:'),
     provider: PROVIDERS[provider] ? provider : 'ics',
     resourceId: resourceId || null, fetchedAt: null, events: [],
+    bufferMinutes: DEFAULT_BUFFER_MINUTES,
   };
   p.feeds.push(feed);
   return feed;
 }
 
 export const feeds = (p) => (Array.isArray(p.feeds) ? p.feeds : []);
+
+/**
+ * Travel time around an event that is somewhere.
+ *
+ * An appointment with a location needs getting to and getting back from, and
+ * a calendar that lays work up to the minute it starts has claimed the twenty
+ * minutes someone spends in the car. So an event with a location books this
+ * much either side of it as busy. Per feed, because a work calendar full of
+ * room numbers and a personal one full of addresses want different answers;
+ * 0 is off.
+ */
+export const DEFAULT_BUFFER_MINUTES = 30;
+export const BUFFER_CHOICES = [0, 10, 15, 30, 45, 60];
+export const bufferOf = (feed) => (BUFFER_CHOICES.includes(+feed?.bufferMinutes) ? +feed.bufferMinutes : DEFAULT_BUFFER_MINUTES);
 export const getFeed = (p, id) => feeds(p).find((f) => f.id === id) || null;
 export function removeFeed(p, id) { p.feeds = feeds(p).filter((f) => f.id !== id); }
 export function setFeedField(p, id, field, value) {
@@ -434,6 +449,7 @@ export function setFeedField(p, id, field, value) {
   if (field === 'name') f.name = String(value).trim() || f.name;
   else if (field === 'resourceId') { if (value && !getResource(p, value)) throw new Error('No such resource.'); f.resourceId = value || null; }
   else if (field === 'url') { if (!/^https?:\/\//i.test(String(value).trim())) throw new Error('A calendar address starts with https://.'); f.url = String(value).trim(); f.events = []; f.fetchedAt = null; }
+  else if (field === 'bufferMinutes') { const n = +value; if (!BUFFER_CHOICES.includes(n)) throw new Error(`Travel time is one of ${BUFFER_CHOICES.join(', ')} minutes.`); f.bufferMinutes = n; }
   else throw new Error(`“${field}” is not part of a calendar.`);
 }
 
@@ -444,9 +460,54 @@ export function setFeedEvents(p, id, events, at = Date.now()) {
   f.events = (events || []).filter((e) => e.busy !== false).map((e) => ({
     uid: String(e.uid || ''), title: String(e.title || '(no title)'),
     start: +e.start, end: +e.end, allDay: !!e.allDay,
+    ...(e.location ? { location: String(e.location) } : {}),
   })).filter((e) => Number.isFinite(e.start) && Number.isFinite(e.end) && e.end > e.start);
   f.fetchedAt = at;
   return f.events.length;
+}
+
+// ---------------------------------------------------------------- pins
+//
+// Every block the calendar shows is computed, and nothing about where it sits
+// is stored — which is why logging four hours re-lays the week by itself. A
+// pin is the one exception: a block someone dragged to a particular hour, kept
+// on the task as { day, start, minutes } and booked before anything else is
+// laid. A pin records a decision, so it outlives the layout that suggested it.
+
+export const pinsOf = (task) => (Array.isArray(task?.calendar?.pins) ? task.calendar.pins : []);
+
+function checkPin(pin) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(pin.day))) throw new Error('A pin needs a day like 2026-09-25.');
+  const start = Math.round(+pin.start);
+  const minutes = Math.round(+pin.minutes);
+  if (!Number.isFinite(start) || start < 0 || start >= 24 * 60) throw new Error('A pin starts within the day.');
+  if (!Number.isFinite(minutes) || minutes < 5 || start + minutes > 24 * 60) throw new Error('A pin has to fit inside its day.');
+  return { day: pin.day, start, minutes };
+}
+
+/** Pin a block, or move a pin that is already there when `index` names it. */
+export function setPin(p, taskId, pin, index = null) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  const clean = checkPin(pin);
+  const list = [...pinsOf(t)];
+  if (index !== null && index >= 0 && index < list.length) list[index] = clean; else list.push(clean);
+  list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.start - b.start));
+  t.calendar = { ...(t.calendar || { show: true, timeBlockIds: [] }), pins: list };
+  return clean;
+}
+
+export function removePin(p, taskId, index) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  const list = pinsOf(t).filter((_, i) => i !== index);
+  t.calendar = { ...t.calendar, pins: list };
+}
+
+export function clearPins(p, taskId) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  t.calendar = { ...t.calendar, pins: [] };
 }
 
 // ---------------------------------------------------------------- phases

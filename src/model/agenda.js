@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, inCurrentPhase, feeds, getResource, identityOf, URGENCIES, urgencyOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, inCurrentPhase, feeds, bufferOf, getResource, identityOf, pinsOf, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -215,19 +215,25 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     const days = filled.get(lane);
     days.set(day, (days.get(day) || 0) + minutes);
   };
+  const todayDay = toDay(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+  const floorOf = (project) => (project.statusDate ? toDay(project.statusDate) : todayDay);
 
   /**
    * A connected calendar's meetings are booked before any task is placed, so
    * work goes around them. A feed that names a resource books that person's
    * hours; one that names nobody books the unassigned lane.
+   *
+   * An event that is somewhere — it has a location — also books travel time
+   * either side of it, the feed's buffer, so the calendar does not lay work up
+   * to the minute someone has to be across town. All-day events have none.
    */
   const meetings = [];
   const seenMeetings = new Set();
   for (const { project } of entries) for (const feed of feeds(project)) {
     const owner = feed.resourceId ? getResource(project, feed.resourceId) : null;
     const lane = owner ? personKeyOf(owner) : '__unassigned';
+    const buffer = bufferOf(feed);
     for (const e of feed.events || []) {
-      const startDay = Math.floor(e.start / 86400000 - new Date(e.start).getTimezoneOffset() / 1440);
       const d = new Date(e.start);
       const day = toDay(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
       const startMin = e.allDay ? 0 : d.getHours() * 60 + d.getMinutes();
@@ -237,16 +243,23 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       const seal = `${lane}|${day}|${startMin}|${e.uid || e.title}`;
       if (seenMeetings.has(seal)) continue;
       seenMeetings.add(seal);
-      meetings.push({ lane, day, start: startMin, end: endMin, title: e.title, allDay: !!e.allDay });
-      void startDay;
+      const travels = !e.allDay && buffer > 0 && typeof e.location === 'string' && e.location.trim() !== '';
+      meetings.push({
+        lane, day, start: startMin, end: endMin, title: e.title, allDay: !!e.allDay,
+        location: e.location || null,
+        bufferBefore: travels ? Math.min(buffer, startMin) : 0,
+        bufferAfter: travels ? Math.min(buffer, 24 * 60 - endMin) : 0,
+      });
     }
   }
   const bookedOn = (lane, day) => {
     if (!booked.has(lane)) booked.set(lane, new Map());
     const days = booked.get(lane);
     if (!days.has(day)) {
-      // Seed the day with whatever the connected calendars already hold.
-      days.set(day, meetings.filter((m) => m.lane === lane && m.day === day).map((m) => ({ start: m.start, end: m.end })));
+      // Seed the day with whatever the connected calendars already hold,
+      // travel time included.
+      days.set(day, meetings.filter((m) => m.lane === lane && m.day === day)
+        .map((m) => ({ start: m.start - m.bufferBefore, end: m.end + m.bufferAfter })));
     }
     return days.get(day);
   };
@@ -257,21 +270,66 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       // Only the phase each plan says it is in. Work from a phase that has not
       // started yet is real, but it is not this week's business.
       .filter(({ t, i, info, project: pr }) => info && !info.cyclic && !isSummary(pr, i) && agendaOf(pr, t).show && inCurrentPhase(pr, t.id)))
-    // Urgency first, then the dates. Two tasks wanting the same morning is
-    // exactly where a person's judgement has to beat the arithmetic — and
-    // "do it now" jumps the queue outright.
+    .map((c) => ({ ...c, deadline: c.t.deadline ? toDay(c.t.deadline) : Infinity }))
+    // Earliest deadline first. For work that can be cut up and done in any
+    // order — which is what blocks make of it — on one person's time, that
+    // order meets every deadline any order could have met. Urgency breaks ties
+    // between equal deadlines, and a task with no deadline sorts after the
+    // dated ones, so a plan that sets none lays out exactly as it did.
+    //
+    // One exception, on purpose: "do it now" still goes first. It is a person
+    // saying, in so many words, that this beats the arithmetic.
     .sort((a, b) =>
-      (URGENCIES[urgencyOf(a.t)].rank - URGENCIES[urgencyOf(b.t)].rank)
+      ((urgencyOf(a.t) === 'now' ? 0 : 1) - (urgencyOf(b.t) === 'now' ? 0 : 1))
+      || (a.deadline - b.deadline || 0)
+      || (URGENCIES[urgencyOf(a.t)].rank - URGENCIES[urgencyOf(b.t)].rank)
       || (a.info.start - b.info.start)
       || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
 
+  // ---- pins first: a block someone put somewhere by hand is where it is.
+  const pinnedMinutes = new Map();
+  const droppedPins = [];
   for (const { t, info, project } of candidates) {
+    const pins = pinsOf(t);
+    if (!pins.length) continue;
+    const a = agendaOf(project, t);
+    const people = peopleOf(project, t);
+    const lanes = lanesOf(t);
+    const floor = floorOf(project);
+    let left = Math.round(hoursLeft(project, info, t) * 60);
+    let used = 0;
+    pins.forEach((pin, index) => {
+      const day = toDay(pin.day);
+      // A pin that can no longer happen is dropped, not drawn as a ghost:
+      // its day has gone, its task is done, or it asks for time the task no
+      // longer needs.
+      const reason = day < floor ? 'past' : left <= 0 ? 'done' : null;
+      if (reason) { droppedPins.push({ taskId: t.id, planId: project.id, index, reason, pin }); return; }
+      const minutes = Math.min(pin.minutes, left);
+      const block = {
+        taskId: t.id, planId: project.id, planName: project.name,
+        day, start: pin.start, end: pin.start + minutes, minutes,
+        lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day),
+        overdue: info.start < floor, pinned: true, pinIndex: index,
+      };
+      blocks.push(block);
+      if (!byTask.has(t.id)) byTask.set(t.id, []);
+      byTask.get(t.id).push(block);
+      for (const lane of people) { bookedOn(lane, day).push({ start: pin.start, end: pin.start + minutes + a.gap }); fill(lane, day, minutes); }
+      left -= minutes;
+      used += minutes;
+    });
+    pinnedMinutes.set(t.id, used);
+  }
+
+  // ---- then everything else, around them.
+  for (const { t, info, project, deadline } of candidates) {
     const a = agendaOf(project, t);
     // The longest window is what decides whether a block can fit at all.
     const windowMinutes = Math.max(0, ...a.windows.map((w) => w.to - w.from));
     const size = Math.round(a.blockHours * 60);
-    let left = Math.round(hoursLeft(project, info, t) * 60);
-    const mine = [];
+    let left = Math.round(hoursLeft(project, info, t) * 60) - (pinnedMinutes.get(t.id) || 0);
+    const mine = byTask.get(t.id) || [];
     if (left <= 0 || size <= 0 || windowMinutes < size) {
       if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });
       byTask.set(t.id, mine);
@@ -279,12 +337,6 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     }
     const lanes = lanesOf(t);
     const people = peopleOf(project, t);
-    // Duration is how long the task is open; work is how much of that time is
-    // spent on it. A five-day design task of twelve hours is three hours a day,
-    // not three full days and two idle ones — so each day takes its share,
-    // rounded up to a whole block.
-    const spanDays = Math.max(1, cal.between(info.start, info.finish));
-    const perDayBlocks = Math.max(1, Math.ceil(Math.ceil(left / size) / spanDays));
     // A calendar is about the days still ahead. Work the schedule says should
     // have started already, and is not finished, is overdue — and overdue
     // work is done from today on, not written into a May that has gone, where
@@ -294,10 +346,23 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     //
     // "Do it now" means today, not the day the schedule would have started it.
     const urgency = urgencyOf(t);
-    const todayDay = toDay(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
-    const floor = project.statusDate ? toDay(project.statusDate) : todayDay;
-    let day = cal.next(urgency === 'now' ? Math.min(Math.max(info.start, floor), floor) : Math.max(info.start, floor));
+    const floor = floorOf(project);
+    const firstDay = cal.next(urgency === 'now' ? floor : Math.max(info.start, floor));
     const overdue = info.start < floor;
+    // Duration is how long the task is open; work is how much of that time is
+    // spent on it. A five-day design task of twelve hours is three hours a day,
+    // not three full days and two idle ones — so each day takes its share,
+    // rounded up to a whole block. The days are the ones before the deadline
+    // when there is one: spreading work past the day it is due is how a plan
+    // with room to spare still misses.
+    //
+    // The share is worked out again every day, against the days that are
+    // left. Fixed once at the start, a day lost to something else — Monday
+    // taken by an earlier deadline — shrinks the room for this task without
+    // raising its share of what is left, and a deadline the week could have
+    // met is missed. Once the deadline has passed, every day is the last one.
+    const lastDay = Number.isFinite(deadline) ? Math.min(info.finish, deadline) : info.finish;
+    let day = firstDay;
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
       // A time block says which days it covers; a day outside every one of
@@ -305,19 +370,21 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
       const today = a.windows.filter((w) => !w.days || w.days.includes(weekday(day)));
       if (!today.length) { day = cal.next(day + 1); continue; }
       let placedToday = 0;
+      const daysLeft = day > lastDay ? 1 : Math.max(1, cal.between(day, lastDay));
+      const perDayBlocks = Math.max(1, Math.ceil(Math.ceil(left / size) / daysLeft));
       // Nobody's day is filled wall to wall. The cap is what is left of the
       // day's allowance for the person who has the least of it left, because a
       // block belongs to everyone on the task.
       const capMinutes = Math.round(a.dailyCap * 60);
       const roomToday = Math.min(...people.map((lane) => capMinutes - filledOn(lane, day)));
-      if (roomToday < size) { day = cal.next(day + 1); continue; }
+      if (roomToday < Math.min(size, left)) { day = cal.next(day + 1); continue; }
       let usedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
       const busyForAll = people.flatMap((lane) => bookedOn(lane, day));
       const slots = today.flatMap((w) => freeSlots(busyForAll, w.from, w.to)).sort((x, y) => x[0] - y[0]);
       for (const [from, to] of slots) {
         let at = from;
-        while (left > 0 && at + size <= to && placedToday < perDayBlocks && usedToday + size <= roomToday) {
+        while (left > 0 && at + Math.min(size, left) <= to && placedToday < perDayBlocks && usedToday + Math.min(size, left) <= roomToday) {
           const minutes = Math.min(size, left);
           const block = {
             taskId: t.id, planId: project.id, planName: project.name,
@@ -338,7 +405,7 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
           usedToday += minutes;
           placedToday++;
         }
-        if (left <= 0 || placedToday >= perDayBlocks || usedToday + size > roomToday) break;
+        if (left <= 0 || placedToday >= perDayBlocks || usedToday + Math.min(size, left) > roomToday) break;
       }
       day = cal.next(day + 1);
     }
@@ -346,9 +413,30 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     byTask.set(t.id, mine);
   }
 
+  // ---- what will be late. The sentence worth saying is "you cannot finish
+  // this by Friday": for each task with a deadline, how much of its work lands
+  // after it, and the day it would really finish at this rate.
+  const late = [];
+  for (const { t, project, deadline } of candidates) {
+    if (!Number.isFinite(deadline)) continue;
+    const mine = byTask.get(t.id) || [];
+    let after = 0;
+    for (const b of mine) if (b.day > deadline) { b.late = true; after += b.minutes; }
+    const unplaced = overflow.filter((o) => o.taskId === t.id && o.planId === project.id).reduce((n, o) => n + o.minutes, 0);
+    if (after + unplaced <= 0) continue;
+    const finishDay = unplaced > 0 ? null : Math.max(...mine.map((b) => b.day));
+    late.push({
+      taskId: t.id, planId: project.id, planName: project.name, name: t.name,
+      deadline, deadlineIso: fromDay(deadline),
+      minutesShort: after + unplaced,
+      finishDay, finishIso: finishDay === null ? null : fromDay(finishDay),
+    });
+  }
+  late.sort((a, b) => a.deadline - b.deadline);
+
   blocks.sort((x, y) => x.day - y.day || x.start - y.start);
   meetings.sort((x, y) => x.day - y.day || x.start - y.start);
-  return { blocks, byTask, overflow, meetings };
+  return { blocks, byTask, overflow, meetings, late, droppedPins };
 }
 
 /** The blocks that fall in one week, keyed by day number. */

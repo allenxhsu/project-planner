@@ -7,7 +7,8 @@ import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkErr
 import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
 import { hueColour } from './calendar.js';
-import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf } from '../model/model.js';
+import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf, pinsOf, bufferOf, BUFFER_CHOICES } from '../model/model.js';
+import { currentLayout } from './calendar.js';
 import { tryCommit } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
@@ -88,6 +89,18 @@ function renderTask(root) {
     cal.append(el('label', { class: 'row check-row' },
       el('input', { class: 'sc-check', type: 'checkbox', checked: a.show, onchange: (e) => act.editTask(id, 'calendarShow', e.target.checked) }),
       el('span', { text: 'Show in calendar' })));
+    // Pins: blocks dragged to a particular hour. Counted here so a plan full
+    // of them is visible, with the ones that can no longer happen said apart.
+    const pins = pinsOf(t);
+    if (pins.length) {
+      let dropped = [];
+      try { dropped = currentLayout().all.droppedPins.filter((d) => d.taskId === id && d.planId === project.id); } catch { dropped = []; }
+      const live = pins.length - dropped.length;
+      cal.append(el('div', { class: 'row pin-row' },
+        el('span', { class: 'sc-mono small', text: `⌖ ${live} pinned block${live === 1 ? '' : 's'}${dropped.length ? ` · ${dropped.length} no longer possible` : ''}` }),
+        el('span', { class: 'sc-spacer' }),
+        el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Unpin all', title: 'Let the calendar place every block of this task', onclick: () => act.unpinAll(id) })));
+    }
     if (a.show) {
       cal.append(el('div', { class: 'two' },
         field('Block size', select(String(a.blockHours), BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.editTask(id, 'blockHours', v)),
@@ -313,9 +326,10 @@ function renderProject(root) {
       el('div', { class: 'tb-row feed-row' },
         text(f.name, (v) => act.editCalendar(f.id, 'name', v)),
         select(f.resourceId || '', [{ value: '', label: 'Me / unassigned' }, ...project.resources.map((r) => ({ value: r.id, label: r.name }))], (v) => act.editCalendar(f.id, 'resourceId', v)),
+        select(String(bufferOf(f)), BUFFER_CHOICES.map((m) => ({ value: String(m), label: m === 0 ? 'No travel time' : `${m} min travel` })), (v) => act.editCalendar(f.id, 'bufferMinutes', +v)),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↻', title: 'Read it again', onclick: () => act.refreshCalendar(f.id) }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Disconnect', onclick: () => act.disconnectCalendar(f.id) })),
-      el('div', { class: 'sc-faint small', text: `${PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
+      el('div', { class: 'sc-faint small', text: `${PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.events.some((e) => e.location) ? `, ${f.events.filter((e) => e.location).length} with a place to get to` : ''}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
   }
   list.append(el('button', { class: 'sc-button sc-button--sm', text: '+ Connect a calendar…', onclick: () => act.connectCalendarDialog() }));
   root.append(list);
