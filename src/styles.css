@@ -687,15 +687,15 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 
 /* ================================================================ frame
    Motion's layout: a sidebar on the left, the page, and a right panel. */
-#body { grid-template-columns: var(--side-w, 224px) minmax(0, 1fr) 330px; }
+#body { grid-template-columns: var(--side-w, 224px) minmax(0, 1fr) var(--right-w, 330px); }
 #app.no-right #body { grid-template-columns: var(--side-w, 224px) minmax(0, 1fr); }
-#app.no-side #body { grid-template-columns: 34px minmax(0, 1fr) 330px; }
+#app.no-side #body { grid-template-columns: 34px minmax(0, 1fr) var(--right-w, 330px); }
 #app.no-side.no-right #body { grid-template-columns: 34px minmax(0, 1fr); }
 .side-rail { display: none; }
 #app.no-side #sidebar > :not(.side-rail) { display: none; }
 #app.no-side .side-rail { display: block; border: 0; background: none; color: var(--sc-text-2); font-size: 16px; cursor: pointer; padding: 12px 0; width: 100%; }
 #app.no-side .side-rail:hover { color: var(--sc-text-1); }
-@media (max-width: 1100px) { #body { grid-template-columns: var(--side-w, 200px) minmax(0, 1fr) 280px; } #app.no-right #body { grid-template-columns: var(--side-w, 200px) minmax(0, 1fr); } }
+@media (max-width: 1100px) { #body { grid-template-columns: var(--side-w, 200px) minmax(0, 1fr) var(--right-w, 280px); } #app.no-right #body { grid-template-columns: var(--side-w, 200px) minmax(0, 1fr); } }
 #view-tabs { display: none; }
 .side-show { display: none; }
 #app.no-side .side-show { display: inline-flex; }
@@ -1085,3 +1085,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .side-item-icon { width: 18px; display: inline-flex; justify-content: center; color: var(--sc-text-2); }
 .side-item.is-on .side-item-icon { color: var(--sc-text-1); }
 .side-plan-name { display: inline-flex; align-items: center; gap: 6px; }
+/* The right panel's left edge: drag to resize. */
+#right { position: relative; }
+.right-resize { position: absolute; top: 0; left: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+.right-resize:hover, .right-resize.is-on { background: color-mix(in srgb, var(--sc-accent) 55%, transparent); }

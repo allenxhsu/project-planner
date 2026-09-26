@@ -144,6 +144,40 @@ initSidebar($('sidebar'), {
     ]);
   },
 });
+// The right panel's left edge drags to resize it, between a minimum and a
+// maximum width, kept on this device; a double-click puts it back.
+(() => {
+  const KEY = 'project-planner:right-width';
+  const MIN = 240;
+  const MAX = 480;
+  const app = $('app');
+  const apply = (w) => (w ? app.style.setProperty('--right-w', `${w}px`) : app.style.removeProperty('--right-w'));
+  let width = null;
+  try { width = +localStorage.getItem(KEY) || null; } catch { width = null; }
+  apply(width);
+  const handle = document.createElement('div');
+  handle.className = 'right-resize';
+  handle.title = 'Drag to resize · double-click to reset';
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('is-on');
+    document.body.classList.add('is-resizing');
+    const right = $('right').getBoundingClientRect().right;
+    const move = (ev) => { width = Math.round(Math.max(MIN, Math.min(MAX, right - ev.clientX))); apply(width); };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.classList.remove('is-on');
+      document.body.classList.remove('is-resizing');
+      try { localStorage.setItem(KEY, String(width || '')); } catch { /* private mode */ }
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up, { once: true });
+    handle.addEventListener('pointercancel', up, { once: true });
+  });
+  handle.addEventListener('dblclick', () => { width = null; apply(null); try { localStorage.removeItem(KEY); } catch { /* private mode */ } });
+  $('right').append(handle);
+})();
 subscribe(render);
 document.addEventListener('keydown', onKey);
 initHosting();
