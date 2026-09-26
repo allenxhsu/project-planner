@@ -76,6 +76,9 @@ export function parse(text) {
   p.template = raw.template === true;
   p.archived = raw.archived === true;
   p.archivedAt = typeof raw.archivedAt === 'string' ? raw.archivedAt : null;
+  // Where a plan came from when it was imported (a Motion project's id), so a
+  // second import updates it instead of making a copy.
+  if (typeof raw.motionId === 'string' && raw.motionId) p.motionId = raw.motionId;
 
 
   // The plan's calendar defaults, which every task inherits.

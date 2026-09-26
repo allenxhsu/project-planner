@@ -199,3 +199,39 @@ test('Motion statuses replace the old default columns, and priority and inactive
   assert.deepEqual(round.tasks.map((t) => [t.name, t.urgency, !!t.archived]), [['Urgent', 'now', false], ['Dropped', 'low', true]]);
   assert.equal(round.tasks[0].work, 3);
 });
+
+test('a Motion export becomes plans: workspaces, projects, tasks, worked time', async () => {
+  const { motionToPlans, htmlToText } = await import('../src/io/motion.js');
+  const ws = { id: 'w1', name: 'School' };
+  const projects = [
+    { id: 'p1', name: 'Course', status: { name: 'Todo' }, workspace: ws, createdTime: '2026-09-01T10:00:00Z' },
+    { id: 'p2', name: 'Old course', status: { name: 'Completed' }, workspace: ws, createdTime: '2025-01-01T10:00:00Z', updatedTime: '2025-06-01T10:00:00Z' },
+  ];
+  const tasks = [
+    { id: 't1', name: 'Essay', project: { id: 'p1' }, workspace: ws, duration: 120, minimumDuration: 60, priorityLevel: 'HIGH', deadlineType: 'HARD',
+      startDate: '2026-09-28T00:00:00.000Z', dueDate: '2026-10-03T06:59:59.999Z', isAutoScheduled: true, description: '<p>Draft</p><ul><li>outline</li></ul>',
+      labels: [{ label: { name: 'Writing' } }], assignee: { name: 'Allen X', email: 'a@example.com' }, chunks: [], comments: [], createdTime: '2026-09-20T10:00:00Z' },
+    { id: 't2', name: 'Quiz', project: { id: 'p1' }, workspace: ws, duration: 30, minimumDuration: null, priorityLevel: 'ASAP', deadlineType: 'SOFT',
+      startDate: '2026-09-20T00:00:00.000Z', dueDate: null, completedTime: '2026-09-21T17:00:00Z', archivedTime: '2026-09-25T00:00:00Z', isAutoScheduled: false,
+      chunks: [{ completedTime: '2026-09-21T17:00:00Z', scheduledStart: '2026-09-21T16:30:00Z', duration: 30 }], labels: [], comments: [], createdTime: '2026-09-19T10:00:00Z' },
+    { id: 't3', name: 'Loose', workspace: ws, duration: 60, priorityLevel: 'MEDIUM', chunks: [], labels: [], comments: [], createdTime: '2026-09-19T10:00:00Z' },
+  ];
+  const { plans, workspaces, counts } = motionToPlans({ projects, tasks });
+  assert.deepEqual(workspaces, ['School']);
+  assert.deepEqual(plans.map((p) => [p.name, p.archived, p.workspaceName]), [['Course', false, 'School'], ['Old course', true, 'School'], ['School — tasks without a project', false, 'School']]);
+  assert.deepEqual(counts, { projects: 2, tasks: 3, open: 2, completed: 1, archived: 1, worked: 1 });
+  const course = plans[0];
+  const essay = course.tasks.find((t) => t.name === 'Essay');
+  assert.deepEqual([essay.work, essay.urgency, essay.hardDeadline, essay.labels, essay.calendar.show, essay.calendar.blockHours, essay.constraint], [2, 'high', true, ['Writing'], true, 1, { type: 'SNET', date: '2026-09-28' }]);
+  assert.equal(essay.notes, 'Draft\n\n- outline');
+  const quiz = course.tasks.find((t) => t.name === 'Quiz');
+  assert.deepEqual([quiz.percent, quiz.archived, quiz.urgency, quiz.calendar.whole, quiz.deadline], [100, true, 'now', true, null]);
+  assert.equal(course.timesheets.length, 1);
+  assert.equal(course.timesheets[0].hours, 0.5);
+  assert.equal(course.resources[0].name, 'Allen X');
+  // Survives a save.
+  const back = parse(serialize(course)).project;
+  assert.equal(back.timesheets[0].start, course.timesheets[0].start);
+  assert.equal(back.tasks.find((t) => t.name === 'Essay').hardDeadline, true);
+  assert.equal(htmlToText('<p>a &amp; b</p><p>c</p>'), 'a & b\nc');
+});

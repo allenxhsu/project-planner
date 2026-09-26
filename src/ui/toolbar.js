@@ -313,6 +313,7 @@ const MENUS = {
     { label: 'Export week as calendar (.ics)', run: run('file.exportIcs') }, '-',
     { label: 'Export everything (every project, person and setting)…', run: run('file.exportAll') },
     { label: 'Import everything…', run: run('file.importAll') },
+    { label: 'Import from Motion (export ZIP)…', run: () => { void import('./motionimport.js').then((m) => m.importMotion()); } },
   ],
   Edit: () => [
     { label: `Undo${canUndo() ? ` ${store._undo[store._undo.length - 1].label.toLowerCase()}` : ''}`, key: '⌘Z', disabled: !canUndo(), run: undo },

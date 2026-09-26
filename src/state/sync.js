@@ -1010,7 +1010,8 @@ export async function readPlan(id) {
   try { return parse(record.body).project; } catch { return null; }
 }
 
-/** Put a plan on the shelf without opening it — a template made from a task. */
+/** Put a plan on the shelf without opening it — a template, or an imported project. */
+export async function storePlan(project) { return saveTemplatePlan(project); }
 export async function saveTemplatePlan(project) {
   if (!recordStore) { set({ hint: 'Templates live on the shelf, which is not open yet.' }); return false; }
   const at = Date.now();
