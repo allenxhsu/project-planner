@@ -26,15 +26,15 @@ const PLACES = [
   { view: 'people', icon: 'people', label: 'People' },
 ];
 const PLAN_VIEWS = [
-  { view: 'list', icon: 'list', label: 'Task list' },
-  { view: 'gantt', icon: 'timeline', label: 'Gantt' },
-  { view: 'kanban', icon: 'kanban', label: 'Kanban' },
-  { view: 'sheet', icon: 'sheet', label: 'Task sheet' },
+  // The open project, the way Microsoft Project shows one. Its task list in
+  // Motion's manner is Projects & Tasks narrowed to this project (view 'list').
+  { view: 'gantt', icon: 'timeline', label: 'Gantt Chart' },
+  { view: 'sheet', icon: 'sheet', label: 'Task Sheet' },
+  { view: 'kanban', icon: 'kanban', label: 'Task Board' },
+  { view: 'network', icon: 'network', label: 'Network Diagram' },
+  { view: 'resources', icon: 'resources', label: 'Resource Sheet' },
+  { view: 'usage', icon: 'usage', label: 'Resource Usage' },
   { view: 'priority', icon: 'priority', label: 'Priority' },
-  { view: 'resources', icon: 'resources', label: 'Resources' },
-  { view: 'usage', icon: 'usage', label: 'Usage' },
-  { view: 'network', icon: 'network', label: 'Network' },
-  { view: 'schedules', icon: 'clock', label: 'Schedules' },
 ];
 
 const KEY = 'project-planner:sidebar';
@@ -133,7 +133,7 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
     el('div', { class: 'side-search' }, find),
     el('div', { class: 'side-scroll' },
       parts.places,
-      section('views', 'Views of this project', parts.views),
+      section('views', 'Microsoft Project view', parts.views),
       section('favorites', 'Favorites', parts.favorites),
       section('workspaces', 'Workspaces', parts.workspaces,
         el('button', { class: 'side-icon side-add', text: '＋', title: 'New workspace', onclick: newWorkspace }))),
@@ -173,6 +173,8 @@ async function selectPlanFromSidebar(id) {
     const { openPlan } = await import('../state/sync.js');
     if (!(await openPlan(id))) return;
   }
+  // On Projects & Tasks, picking a project narrows the page to it.
+  if (store.ui.view === 'alltasks') set({ view: 'list' });
   renderSidebar();
 }
 
@@ -397,7 +399,7 @@ export function renderSidebar() {
   clear(parts.places);
   for (const p of PLACES) {
     parts.places.append(item({
-      ...p, icon: ic(p.icon), active: ui.view === p.view || (p.view === 'alltasks' && ui.view === 'team'),
+      ...p, icon: ic(p.icon), active: ui.view === p.view || (p.view === 'alltasks' && ['team', 'list'].includes(ui.view)),
       badge: p.view === 'today' && late ? late : null,
       aside: p.view === 'calendar' ? dayLabel : null,
       onclick: () => set({ view: p.view }),

@@ -1120,3 +1120,6 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .pg-chip-text strong, .pg-chip-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-chip-text span { color: var(--sc-text-3); font-size: 11px; }
 .pg-chip-arrow { color: var(--sc-text-3); }
+.tl-crumb { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+.tl-scope-chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.tl-scope-pick { font-weight: 400; margin-left: 4px; }

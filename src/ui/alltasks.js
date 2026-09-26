@@ -677,10 +677,20 @@ function controls(count) {
     oninput: (e) => { page.query = e.target.value; redraw(); lastRoot?.querySelector('.tl-search')?.focus(); }, onkeydown: (e) => e.stopPropagation() });
 
   const tabs = el('div', { class: 'pt-tabs tl-tabs' },
-    scope === 'project'
-      ? el('span', { class: 'pt-title tl-scope' }, icon('project', projectColour(store.project.colour)), el('span', { text: store.project.name }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', title: 'The project window: stages, dates and activity', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }))
-      : el('span', { class: 'pt-title tl-scope' }, icon('project'), el('span', { text: 'Projects & Tasks' })),
+    // One page, two scopes: every project, or narrowed to the open one.
+    el('span', { class: 'pt-title tl-scope' },
+      el('button', { class: 'tl-crumb', title: 'Every project', onclick: () => set({ view: 'alltasks' }) }, icon('project'), el('span', { text: 'Projects & Tasks' })),
+      scope === 'project'
+        ? el('span', { class: 'tl-scope-chip' }, el('span', { class: 'sc-faint', text: '›' }), icon('project', projectColour(store.project.colour)), el('span', { text: store.project.name }),
+          el('button', { class: 'ord-btn', text: '↗', title: 'The project window: stages, dates and activity', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }),
+          el('button', { class: 'ord-btn', text: '×', title: 'Back to every project', onclick: () => set({ view: 'alltasks' }) }))
+        : el('button', { class: 'tl-pill tl-scope-pick', title: 'Narrow the page to one project', onclick: (e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          showMenu(r.left, r.bottom + 4, [{ note: 'Show one project' },
+            { label: `▢ ${store.project.name} (open)`, run: () => set({ view: 'list' }) }, '-',
+            ...plans.filter((p) => !p.archived && p.id !== store.project.id).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40)
+              .map((p) => ({ label: p.name, run: async () => { if (await openPlan(p.id)) set({ view: 'list' }); } }))]);
+        } }, 'All projects ▾')),
     ...viewTabs(list, base, dirty),
     scope === 'all' ? el('button', { class: 'pt-tab', text: 'Team Schedule', onclick: () => set({ view: 'team' }) }) : null,
     el('button', { class: 'tl-icon-btn tl-pop-btn', text: '✎', title: 'Edit views — order, rename, duplicate, delete', onclick: (e) => togglePop('views', e.currentTarget) }),

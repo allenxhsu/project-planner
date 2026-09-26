@@ -22,7 +22,7 @@ export const VIEWS = {
   gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },
   kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
   alltasks: { label: 'All Tasks', short: 'All Tasks', glyph: '≣' },
-  list: { label: 'Task list', short: 'Task list', glyph: '≣' },
+  list: { label: 'Projects & Tasks — this project', short: 'Project tasks', glyph: '≣' },
   team: { label: 'Team Schedule', short: 'Team', glyph: '▥' },
   calendar: { label: 'Calendar', short: 'Calendar', glyph: '▦' },
   priority: { label: 'Priority', short: 'Priority', glyph: '⚑' },

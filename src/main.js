@@ -140,7 +140,7 @@ initSidebar($('sidebar'), {
       { label: 'Sync…', run: () => COMMANDS['view.sync']() },
       { label: 'Appearance…', run: () => COMMANDS['view.appearance']() },
       { label: 'Custom fields…', run: () => { void import('./ui/newproject.js').then((m) => m.editFieldsDialog()); } },
-      { label: 'Schedules', run: () => set({ view: 'schedules' }) },
+      { label: 'Schedules — working hours and time blocks', run: () => set({ view: 'schedules' }) },
     ]);
   },
 });
