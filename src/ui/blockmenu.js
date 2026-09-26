@@ -16,8 +16,8 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, TRAVEL_CHOICES } from '../model/model.js';
-import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected } from '../model/agenda.js';
+import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, TRAVEL_CHOICES, timeBlocks, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase } from '../model/model.js';
+import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
 import { datePanel, quickDates } from './datepick.js';
@@ -347,13 +347,28 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
     const hard = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!t.hardDeadline });
+    // How it is laid: the pieces it is cut into, and the hours it may use.
+    const a0 = agendaOf(project, t);
+    const chunk = el('select', { class: 'sc-select' },
+      ...BLOCK_CHOICES.map((h) => el('option', { value: String(h), text: h < 1 ? `${h * 60} min` : `${h} hour${h === 1 ? '' : 's'}`, selected: !t.calendar?.whole && a0.blockHours === h })),
+      el('option', { value: 'whole', text: 'No chunks — one sitting', selected: !!t.calendar?.whole }));
+    const status = el('select', { class: 'sc-select' }, ...stages(project).map((st) => el('option', { value: st.id, text: st.name, selected: stageOf(project, t).id === st.id })));
+    const inherited = phaseOf(project, t.id);
+    const stage = el('select', { class: 'sc-select' },
+      el('option', { value: '', text: inherited && inherited !== t.phaseId ? `From its heading — ${getPhase(project, inherited)?.name}` : 'No stage', selected: !t.phaseId }),
+      ...phases(project).map((ph) => el('option', { value: ph.id, text: ph.name, selected: t.phaseId === ph.id })));
+    const ownBlocks = timeBlockIdsOf(t);
+    const schedule = el('select', { class: 'sc-select' },
+      el('option', { value: '', text: 'Any — the plan’s default hours', selected: !ownBlocks.length }),
+      ...(ownBlocks.length > 1 ? [el('option', { value: '__keep', text: `${ownBlocks.length} schedules (as set)`, selected: true })] : []),
+      ...timeBlocks(project).map((tb) => el('option', { value: tb.id, text: tb.name, selected: ownBlocks.length === 1 && ownBlocks[0] === tb.id })));
     const labels = el('input', { class: 'sc-input', type: 'text', value: (t.labels || []).join(', '), placeholder: 'None — comma-separated' });
     const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
-      hard: hard.checked, labels: labels.value,
+      hard: hard.checked, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
     setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
@@ -425,13 +440,17 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
           fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
           fact('Assignee', list(who)),
-          fact('Urgency', urgency),
+          fact('Status', status),
+          phases(project).length ? fact('Stage', stage) : null,
+          fact('Priority', urgency),
           fact('Duration', el('span', { class: 'sc-mono', title: `${info?.duration ?? 0} day(s) open in the plan · ${info?.percent ?? 0}% complete`,
             text: `${minText(spentMin)} of ${minText(expectedMin)} done · ${minText(leftMin)} left` })),
           fact('Start date', start),
           fact('Deadline', el('div', { class: 'tp-deadline' }, deadline,
             el('label', { class: 'tp-hard', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' })))),
           fact('Labels', labels),
+          fact('Min chunk', chunk),
+          fact('Schedule', schedule),
           ...custom.map((c) => fact(c.field.name, c.node)),
           fact('Auto-schedule', el('span', { text: agendaOf(project, t).show ? `On${pins.length ? `, ${pins.length} fixed` : ''}` : 'Off' })),
           fact('Blocked by', list(blockedBy)),
@@ -454,6 +473,17 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
   if (saved.hard !== !!t.hardDeadline) act.editTask(t.id, 'hardDeadline', saved.hard);
+  if (saved.status && saved.status !== stageOf(store.project, t).id) act.setTaskStage(t.id, saved.status);
+  if ((saved.stage || null) !== (t.phaseId || null)) act.setTaskPhase(t.id, saved.stage || null);
+  if (saved.chunk === 'whole' && !t.calendar?.whole) act.editTask(t.id, 'wholeBlock', true);
+  else if (saved.chunk !== 'whole') {
+    if (t.calendar?.whole) act.editTask(t.id, 'wholeBlock', false);
+    if (+saved.chunk !== agendaOf(store.project, t).blockHours) act.editTask(t.id, 'blockHours', saved.chunk);
+  }
+  if (saved.schedule !== '__keep') {
+    const want = saved.schedule ? [saved.schedule] : [];
+    if (want.join() !== timeBlockIdsOf(t).join()) act.setTaskTimeBlock(t.id, want);
+  }
   const newLabels = saved.labels.split(',').map((x) => x.trim()).filter(Boolean);
   if (newLabels.join('|') !== (t.labels || []).join('|')) act.editTask(t.id, 'labels', newLabels);
   for (const c of saved.custom) {

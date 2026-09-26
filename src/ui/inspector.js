@@ -44,31 +44,20 @@ function renderTask(root) {
     el('div', { class: 'row insp-pills' },
       s.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : el('span', { class: 'sc-pill', text: `Slack ${s.slack}d` }),
       s.percent === 100 ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-success)' }, text: 'Complete' }) : null,
-      s.deadlineMissed ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Deadline missed' }) : null)));
+      s.deadlineMissed ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Deadline missed' }) : null),
+    // Name, priority, status, stage, dates, notes, auto-scheduling and who is
+    // on it live in the task's own window; this panel is the scheduling a
+    // Microsoft Project plan needs besides.
+    el('button', { class: 'sc-button sc-button--sm insp-open', text: 'Open task…', title: 'Name, status, priority, dates, auto-scheduling, notes and activity', onclick: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); } })));
 
   const form = el('div', { class: 'insp-form' });
-  form.append(field('Name', text(t.name, setF('name'))));
   if (!s.summary) {
     form.append(el('div', { class: 'two' },
       field('Duration', text(formatDuration(t.duration), setF('duration')), 'how long it is open: 5d · 2w'),
       field('Work', text(t.work == null ? '' : String(t.work), setF('work')),
         t.work == null ? `${formatHours(s.work)} implied by the assignment` : `${Math.round((s.work / Math.max(1, s.duration)) * 10) / 10}h a day over ${formatDuration(s.duration)}`)));
-    form.append(el('div', { class: 'two' },
-      field('% complete', text(String(t.percent), setF('percent'))),
-      field('Urgency', select(urgencyOf(t), Object.entries(URGENCIES).map(([value, u]) => ({ value, label: u.label })), setF('urgency')),
-        'who gets the earliest hours')));
+    form.append(field('% complete', text(String(t.percent), setF('percent'))));
     form.append(el('label', { class: 'row check-row' }, el('input', { class: 'sc-check', type: 'checkbox', checked: !!t.milestone, onchange: (e) => act.editTask(id, 'milestone', e.target.checked) }), el('span', { text: 'Milestone (zero duration)' })));
-    const phaseList = phases(project);
-  if (phaseList.length) {
-    const inherited = phaseOf(project, id);
-    form.append(field('Stage',
-      select(t.phaseId || '', [
-        { value: '', label: inherited && inherited !== t.phaseId ? `Inherited — ${phaseList.find((ph) => ph.id === inherited)?.name}` : 'None — always released' },
-        ...phaseList.map((ph) => ({ value: ph.id, label: ph.name }))],
-        (v) => act.setTaskPhase(id, v)),
-      'everything under this task inherits it'));
-  }
-  form.append(field('Status', select(stageOf(project, t).id, stages(project).map((st) => ({ value: st.id, label: st.name })), (v) => act.setTaskStage(id, v)), 'Backlog, Todo, In Progress, Blocked, Completed or Cancelled — the Kanban column'));
   } else form.append(el('p', { class: 'sc-muted small', text: `Summary of ${s.children.length} subtasks: ${formatDuration(s.duration)}, ${s.percent}% complete. Its dates come from them.` }));
   form.append(el('div', { class: 'two' },
     field('Start', date(s.startIso, setF('start')), s.summary ? 'from subtasks' : 'typing a date pins it'),
@@ -78,20 +67,14 @@ function renderTask(root) {
       field('Constraint', select(t.constraint?.type || 'ASAP', Object.entries(CONSTRAINTS).map(([value, c]) => ({ value, label: c.label })), setF('constraintType'))),
       CONSTRAINTS[t.constraint?.type || 'ASAP'].dated ? field('Constraint date', date(t.constraint.date, setF('constraintDate'))) : el('span')));
   }
-  form.append(el('div', { class: 'two' }, field('Deadline', date(t.deadline, setF('deadline'))), field('Fixed cost', text(String(t.fixedCost || 0), setF('fixedCost')))));
-  form.append(field('Notes', stopKeys(el('textarea', { class: 'sc-textarea', rows: 3, value: t.notes, onchange: (e) => act.editTask(id, 'notes', e.target.value) }))));
+  form.append(field('Fixed cost', text(String(t.fixedCost || 0), setF('fixedCost'))));
   root.append(form);
 
-  // ---- calendar: whether this task gets hours in the week, and which
+  // ---- the calendar: auto-scheduling, block size and schedules are in the
+  // task's window; fixed blocks and cutting a task up are here.
   if (!s.summary && !s.milestone) {
-    const a = agendaOf(project, t);
     root.append(el('div', { class: 'sc-section-title', text: 'Calendar' }));
     const cal = el('div', { class: 'insp-form' });
-    cal.append(el('label', { class: 'row check-row' },
-      el('input', { class: 'sc-check', type: 'checkbox', checked: a.show, onchange: (e) => act.editTask(id, 'calendarShow', e.target.checked) }),
-      el('span', { text: 'Auto-schedule — the calendar places it' })));
-    // Pins: blocks dragged to a particular hour. Counted here so a plan full
-    // of them is visible, with the ones that can no longer happen said apart.
     const pins = pinsOf(t);
     if (pins.length) {
       let dropped = [];
@@ -102,39 +85,8 @@ function renderTask(root) {
         el('span', { class: 'sc-spacer' }),
         el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Unpin all', title: 'Let the calendar place every block of this task', onclick: () => act.unpinAll(id) })));
     }
-    if (a.show) {
-      cal.append(el('div', { class: 'two' },
-        field('Block size', select(String(a.blockHours), BLOCK_CHOICES.map((h) => ({ value: String(h), label: h === 0.5 ? 'Half an hour' : `${h} hour${h === 1 ? '' : 's'}` })), (v) => act.editTask(id, 'blockHours', v)),
-          `${Math.ceil((hoursLeft(project, s, t) || 0) / a.blockHours)} block(s) to place`),
-        el('span')));
-      cal.append(el('button', {
-        class: 'sc-button sc-button--ghost sc-button--sm tb-edit-link',
-        text: 'Edit schedules…',
-        title: 'The hours each kind of work may use',
-        onclick: () => set({ view: 'schedules' }),
-      }));
-      // A task may be in several blocks — late evenings *and* the weekend — and
-      // is placed in whichever has room first, so this is a set of choices
-      // rather than one.
-      const chosen = timeBlockIdsOf(t);
-      const picker = el('div', { class: 'tb-pick' });
-      for (const b of timeBlocks(project)) {
-        picker.append(el('label', { class: 'row check-row tb-pick-row' },
-          el('input', {
-            class: 'sc-check', type: 'checkbox', checked: chosen.includes(b.id),
-            onchange: (e) => {
-              const next = e.target.checked ? [...chosen, b.id] : chosen.filter((x) => x !== b.id);
-              if (!act.setTaskTimeBlock(id, next)) e.target.checked = !e.target.checked;
-            },
-          }),
-          el('span', { text: `${b.name} · ${b.from}–${b.to}` }),
-          el('span', { class: 'sc-faint small', text: dayNames(b.days?.length ? b.days : null) })));
-      }
-      cal.append(field('Time blocks', picker, chosen.length
-        ? a.windows.map((w) => `${formatTime(w.from)}–${formatTime(w.to)} on ${dayNames(w.days)}`).join(' · ')
-        : `Plan default — ${a.timeBlock ? a.timeBlock.name : 'working hours'}. Tick more than one and the task uses whichever has room first.`));
-      cal.append(el('button', { class: 'sc-button sc-button--sm', text: 'Break into subtasks…', onclick: () => act.breakUpDialog(id) }));
-    }
+    cal.append(el('p', { class: 'sc-faint small', text: agendaOf(project, t).show ? 'Auto-scheduled. Block size and schedule are in the task’s window.' : 'Not auto-scheduled — switch it on in the task’s window.' }));
+    cal.append(el('button', { class: 'sc-button sc-button--sm', text: 'Break into subtasks…', onclick: () => act.breakUpDialog(id) }));
     root.append(cal);
   }
 
@@ -244,12 +196,12 @@ function renderResource(root) {
 
 function renderProject(root) {
   const { project, schedule } = store;
-  root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project' }), el('div', { class: 'sc-display insp-title', text: project.name })));
+  // The project itself — name, dates, stages, status, colour — is in its
+  // window; this is how it is scheduled: working time and the calendar.
+  root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project settings' }), el('div', { class: 'sc-display insp-title', text: project.name }),
+    el('button', { class: 'sc-button sc-button--sm insp-open', text: 'Open the project…', title: 'Name, stages, dates, status, colour, labels and its tasks', onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } })));
   const form = el('div', { class: 'insp-form' });
-  form.append(field('Name', text(project.name, (v) => act.setProjectInfo({ name: v }))));
-  form.append(el('div', { class: 'two' },
-    field('Start date', date(project.start, (v) => { if (v) act.setProjectInfo({ start: v }); }), 'tasks with no links start here'),
-    field('Status date', date(project.statusDate, (v) => act.setProjectInfo({ statusDate: v })), 'blank = today')));
+  form.append(field('Status date', date(project.statusDate, (v) => act.setProjectInfo({ statusDate: v })), 'what “today” is for progress — blank is today'));
   form.append(el('div', { class: 'two' },
     field('Currency symbol', text(project.currency, (v) => act.setProjectInfo({ currency: v }))),
     field('Hours per day', text(String(project.calendar.hoursPerDay), (v) => { const n = parseFloat(v); if (n > 0 && n <= 24) act.setCalendar({ hoursPerDay: n }); else act.hint('Hours per day is a number from 1 to 24.'); }))));
@@ -273,22 +225,7 @@ function renderProject(root) {
       'per person, so a day is never filled wall to wall')));
   form.append(field('When a task does not say its hours', select(String((project.agenda || {}).assumedLoad ?? DEFAULT_AGENDA.assumedLoad),
     LOAD_CHOICES.map((n) => ({ value: String(n), label: n === 100 ? 'All of its duration — full time' : `${n}% of its duration` })), (v) => act.setAgenda({ assumedLoad: +v })),
-    'a five-day task is rarely five days of doing it; state a task’s work to override this'));
-  // The colour this project wears on a shared calendar.
-  const swatches = el('div', { class: 'colour-row' });
-  const own = project.colour !== null && project.colour !== undefined && Number.isFinite(+project.colour) ? Math.round(+project.colour) : null;
-  swatches.append(el('button', {
-    class: `colour-chip is-auto${own === null ? ' is-on' : ''}`, title: 'Let the calendar choose, spaced away from the other projects',
-    text: 'Auto', onclick: () => act.setProjectInfo({ colour: null }),
-  }));
-  for (let h = 0; h < 360; h += 30) {
-    swatches.append(el('button', {
-      class: `colour-chip${own === h ? ' is-on' : ''}`, title: `Hue ${h}`,
-      style: { background: hueColour(h).fill, borderColor: hueColour(h).line },
-      onclick: () => act.setProjectInfo({ colour: h }),
-    }));
-  }
-  form.append(field('Calendar colour', swatches, 'what this project is drawn in when the calendar colours by project'));
+    'Microsoft Project counts a task’s days in full; a task’s own duration (its hours) always wins'));
   form.append(field('Holidays', stopKeys(el('textarea', { class: 'sc-textarea sc-mono', rows: 4, value: project.calendar.holidays.join('\n'), onchange: (e) => {
     const list = e.target.value.split(/[\n,;\s]+/).map((x) => x.trim()).filter(Boolean);
     const bad = list.filter((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x));
@@ -296,29 +233,6 @@ function renderProject(root) {
     act.setCalendar({ holidays: [...new Set(list)].sort() });
   } })), 'one date per line, YYYY-MM-DD'));
   root.append(form);
-  // ---- the phases this plan runs through, and which one it is in
-  const phaseList = phases(project);
-  root.append(el('div', { class: 'sc-section-title', text: 'Stages' }));
-  root.append(el('p', { class: 'sc-muted small', text: 'The stages the project runs through — design, build, launch — each with a deadline. Put a task or a heading in one; with a stage chosen below, only its tasks are auto-scheduled. A task in no stage always is.' }));
-  const phaseBox = el('div', { class: 'link-list' });
-  phaseList.forEach((ph, i) => {
-    phaseBox.append(el('div', { class: 'tb-card sc-card' },
-      el('div', { class: 'tb-row phase-row' },
-        text(ph.name, (v) => act.editPhase(ph.id, v)),
-        el('input', { class: 'sc-input phase-due', type: 'date', value: ph.deadline || '', title: 'When this stage is due', onchange: (e) => act.setPhaseDeadline(ph.id, e.target.value) }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↑', title: 'Earlier', disabled: i === 0, onclick: () => act.movePhaseBy(ph.id, -1) }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '↓', title: 'Later', disabled: i === phaseList.length - 1, onclick: () => act.movePhaseBy(ph.id, 1) }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Delete this stage', onclick: () => act.deletePhase(ph.id) }))));
-  });
-  phaseBox.append(el('button', { class: 'sc-button sc-button--sm', text: '+ New stage', onclick: () => act.newPhase() }));
-  root.append(phaseBox);
-  if (phaseList.length) {
-    root.append(field('Working on',
-      select(project.currentPhaseId || '', [{ value: '', label: 'Every stage' }, ...phaseList.map((ph) => ({ value: ph.id, label: ph.name }))],
-        (v) => act.setCurrentPhase(v)),
-      'only this stage’s tasks are auto-scheduled'));
-  }
-
   // ---- connected calendars: real meetings, so work goes around them
   root.append(el('div', { class: 'sc-section-title', text: 'Connected calendars' }));
   root.append(el('p', { class: 'sc-muted small', text: 'Google and Outlook each hand out a private iCalendar address for a calendar. Paste one here and its meetings become busy hours the calendar schedules around.' }));

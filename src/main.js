@@ -55,7 +55,13 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('cal-side', calSide);
-  tabs($('right-tabs'), 'rightTab', [['task', 'Task'], ['resource', 'Resource'], ['project', 'Project']]);
+  // One place for each thing: the task's and the project's own windows hold
+  // what they are; this panel holds how they are scheduled. The resource tab
+  // is only where resources are the subject.
+  const resourceView = ['resources', 'usage'].includes(ui.view);
+  if (ui.rightTab === 'resource' && !resourceView) ui.rightTab = 'task';
+  if (ui.rightTab === 'task' && resourceView) ui.rightTab = 'resource';
+  tabs($('right-tabs'), 'rightTab', resourceView ? [['resource', 'Resource'], ['project', 'Settings']] : [['task', 'Scheduling'], ['project', 'Settings']]);
   if (ui.rightOpen) { if (calSide) renderCalendarSide($('inspector')); else renderInspector($('inspector')); }
 }
 
