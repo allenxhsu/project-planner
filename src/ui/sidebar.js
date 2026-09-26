@@ -134,15 +134,91 @@ async function openPlanFromSidebar(id) {
   renderSidebar();
 }
 
-function planMenu(p) {
-  return (x, y) => showMenu(x, y, [
-    { label: 'Open', run: () => { void openPlanFromSidebar(p.id); } },
-    { label: p.pinned ? 'Remove from Favorites' : 'Add to Favorites', run: async () => {
-      const sync = await import('../state/sync.js');
-      await sync.setPlanPinned(p.id, !p.pinned);
+const ORDER_KEY = 'project-planner:sidebar-order';
+const readOrder = () => { try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'); } catch { return []; } };
+const writeOrder = (ids) => { try { localStorage.setItem(ORDER_KEY, JSON.stringify(ids)); } catch { /* private mode */ } };
+/** Projects in the order they were put in by hand, then by name. */
+function ordered(plans) {
+  const order = readOrder();
+  const at = (id) => { const i = order.indexOf(id); return i < 0 ? Infinity : i; };
+  return [...plans].sort((a, b) => at(a.id) - at(b.id) || a.name.localeCompare(b.name));
+}
+function move(p, siblings, by) {
+  const list = ordered(siblings).map((x) => x.id);
+  const i = list.indexOf(p.id);
+  const j = i + by;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const rest = readOrder().filter((id) => !list.includes(id));
+  writeOrder([...list, ...rest]);
+  renderSidebar();
+}
+
+const HUE_GRID = [0, 30, 55, 90, 150, 185, 205, 240, 280, 320, 10, 45, 75, 120, 170, 195, 220, 260, 300, 340];
+
+/**
+ * A project's right-click menu, as Motion's sidebar has it: its colour, then
+ * open, complete or cancel it, copy a link, favourite it, move it to another
+ * workspace or up and down the list, and delete it.
+ */
+function planMenu(p, siblings = []) {
+  return async (x, y) => {
+    const sync = await import('../state/sync.js');
+    const spaces = cache.spaces;
+    const status = async (value) => {
+      await sync.patchPlan(p.id, (project) => {
+        project.status = value;
+        project.archived = value === 'Completed' || value === 'Cancelled';
+        project.archivedAt = project.archived ? new Date().toISOString().slice(0, 10) : null;
+        if (value === 'Cancelled') for (const t of project.tasks) if (t.calendar?.show) t.calendar = { ...t.calendar, show: false };
+      }, value === 'Completed' ? 'Complete the project' : 'Cancel the project');
       await refreshSidebar();
-    } },
-  ]);
+      set({});
+    };
+    showMenu(x, y, [
+      { panel: null, note: 'Colour' },
+      { label: 'colours', panel: null, render: true },
+      '-',
+      { icon: '↗', label: 'Open project', run: () => { void openPlanFromSidebar(p.id); } },
+      { icon: '✓', label: 'Complete project', run: () => { void status('Completed'); } },
+      { icon: '⊘', label: 'Cancel project', run: () => { void status('Cancelled'); } },
+      { icon: '⧉', label: 'Copy link', run: () => { const url = `${location.origin}${location.pathname}#plan=${encodeURIComponent(p.id)}`; navigator.clipboard?.writeText(url).then(() => act.hint('Link copied.'), () => act.hint(url)); } },
+      { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Remove from Favorites' : 'Add to Favorites', run: async () => { await sync.setPlanPinned(p.id, !p.pinned); await refreshSidebar(); } },
+      { icon: '↪', label: 'Move to', submenu: [
+        ...spaces.map((w) => ({ label: `${(p.workspaceId || '') === w.id ? '✓ ' : ''}${w.name}`, run: async () => { await sync.setPlanWorkspace(p.id, w.id); await refreshSidebar(); set({}); } })),
+        { label: `${p.workspaceId ? '' : '✓ '}No workspace`, run: async () => { await sync.setPlanWorkspace(p.id, null); await refreshSidebar(); set({}); } },
+      ] },
+      '-',
+      { icon: '↑', label: 'Move up', run: () => move(p, siblings, -1) },
+      { icon: '↓', label: 'Move down', run: () => move(p, siblings, 1) },
+      '-',
+      { icon: '🗑', label: 'Delete', danger: true, run: async () => {
+        const { confirmDialog } = await import('./dialog.js');
+        if (!(await confirmDialog(`Delete “${p.name}”?`, 'It goes from this device and, on the next sync, from every other one. A file you saved with File ▸ Save As is not touched.'))) return;
+        await sync.deletePlan(p.id);
+        await refreshSidebar();
+        set({});
+      } },
+    ].filter((it) => !it.render && !(it.note === 'Colour')));
+    // The colour grid sits above the items, as in Motion.
+    const menu = document.querySelector('.pop-menu:last-of-type');
+    if (menu) {
+      const grid = el('div', { class: 'side-colours' }, ...[null, ...HUE_GRID].map((h) => el('button', {
+        class: `side-colour${(p.colour ?? null) === h ? ' is-on' : ''}`, title: h === null ? 'Automatic' : `Hue ${h}`,
+        style: { background: h === null ? 'var(--sc-text-3)' : `hsl(${h} 65% 55%)` }, text: h === null ? 'A' : '',
+        onclick: async () => {
+          const { closeMenu } = await import('./dialog.js');
+          closeMenu();
+          await sync.patchPlan(p.id, (project) => { project.colour = h; }, 'Project colour');
+          set({});
+        },
+      })));
+      menu.prepend(grid, el('div', { class: 'sc-menu-sep' }));
+      // Taller now: keep it on the screen.
+      const r = menu.getBoundingClientRect();
+      if (r.bottom > window.innerHeight - 4) menu.style.top = `${Math.max(4, window.innerHeight - r.height - 4)}px`;
+    }
+  };
 }
 
 /** What is happening now — a started task, the block or meeting on now — or what is next today. */
@@ -193,7 +269,7 @@ export function renderSidebar() {
   clear(parts.places);
   for (const p of PLACES) {
     parts.places.append(item({
-      ...p, active: ui.view === p.view,
+      ...p, active: ui.view === p.view || (p.view === 'alltasks' && ui.view === 'team'),
       badge: p.view === 'today' && late ? late : null,
       aside: p.view === 'calendar' ? dayLabel : null,
       onclick: () => set({ view: p.view }),
@@ -206,17 +282,17 @@ export function renderSidebar() {
   for (const v of PLAN_VIEWS) parts.views.append(item({ ...v, active: ui.view === v.view, onclick: () => set({ view: v.view }) }));
 
   clear(parts.favorites);
-  const pinned = cache.plans.filter((p) => p.pinned && !p.archived);
+  const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));
   if (!pinned.length) parts.favorites.append(el('div', { class: 'side-empty', text: 'Right-click a project below to add it here.' }));
   for (const p of pinned) {
-    parts.favorites.append(item({ icon: '◈', label: p.name, active: p.id === project.id, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p) }));
+    parts.favorites.append(item({ icon: '◈', label: p.name, active: p.id === project.id, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, pinned) }));
   }
 
   clear(parts.workspaces);
   const live = cache.plans.filter((p) => !p.archived);
   const groups = [...cache.spaces.map((w) => ({ id: w.id, name: w.name })), { id: '', name: 'No workspace' }];
   for (const w of groups) {
-    const plans = live.filter((p) => (p.workspaceId || '') === w.id).sort((a, b) => a.name.localeCompare(b.name));
+    const plans = ordered(live.filter((p) => (p.workspaceId || '') === w.id));
     if (!w.id && !plans.length) continue;
     const key = w.id || 'none';
     const open = state.expanded.has(key);
@@ -240,7 +316,7 @@ export function renderSidebar() {
     if (open) {
       for (const p of plans) {
         parts.workspaces.append(item({ icon: p.pinned ? '◈' : '▢', label: p.name, cls: 'side-child', active: p.id === project.id,
-          title: `${p.tasks} tasks`, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p) }));
+          title: `${p.tasks} tasks`, onclick: () => { void openPlanFromSidebar(p.id); }, menu: planMenu(p, plans) }));
       }
       if (!plans.length) parts.workspaces.append(el('div', { class: 'side-empty side-child', text: 'No projects yet' }));
     }

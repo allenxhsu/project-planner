@@ -13,6 +13,7 @@ import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { planRecords, openPlan, isCurrentWork } from '../state/sync.js';
+import { projectsTasksTabs } from './teamschedule.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { isSummary, formatAssignments, phaseOf, getPhase, phases } from '../model/model.js';
@@ -184,6 +185,7 @@ export function renderAllTasks(root) {
   if (!loaded && !loading) void reloadAllTasks();
   const pane = el('div', { class: 'alltasks-pane' });
   root.append(pane);
+  pane.append(projectsTasksTabs('alltasks'));
 
   const search = el('input', {
     class: 'sc-input', type: 'search', placeholder: 'Search every plan', value: query,

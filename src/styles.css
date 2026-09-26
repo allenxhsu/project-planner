@@ -880,3 +880,37 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .cs { display: flex; flex-direction: column; gap: 12px; min-width: 420px; }
 .cs .sc-field { display: flex; flex-direction: column; gap: 4px; }
 .cs-dur { display: grid; grid-template-columns: 80px 1fr; gap: 6px; }
+
+/* ---- Projects & Tasks tabs, and Team Schedule */
+.pt-tabs { display: flex; align-items: center; gap: 4px; padding: 10px 14px 0; border-bottom: 1px solid var(--sc-line); }
+.pt-title { font-weight: 700; font-size: 15px; margin-right: 14px; padding-bottom: 8px; }
+.pt-tab { border: 0; background: none; color: var(--sc-text-2); font: inherit; font-size: 13px; padding: 6px 10px 9px; cursor: pointer; border-bottom: 2px solid transparent; }
+.pt-tab:hover { color: var(--sc-text-1); }
+.pt-tab.is-on { color: var(--sc-text-1); border-bottom-color: var(--sc-text-1); }
+.ts-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.ts-days { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 1px solid var(--sc-line); overflow-x: auto; }
+.ts-day { display: flex; align-items: center; gap: 8px; border: 1px solid transparent; border-bottom: 0; background: none; color: var(--sc-text-2); font: inherit; font-size: 13px; padding: 7px 12px; cursor: pointer; border-radius: 6px 6px 0 0; white-space: nowrap; }
+.ts-day.is-on { background: color-mix(in srgb, var(--sc-line) 45%, transparent); border-color: var(--sc-line); color: var(--sc-text-1); }
+.ts-current { background: var(--sc-accent); color: var(--sc-bg); font-size: 10.5px; padding: 0 6px; border-radius: 4px; }
+.ts-board { display: flex; gap: 14px; padding: 16px 14px; overflow: auto; flex: 1; align-items: flex-start; }
+.ts-col { width: 290px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.ts-col-head { display: flex; align-items: center; gap: 7px; padding: 2px 4px; }
+.ts-card { background: var(--sc-panel); border: 1px solid var(--sc-line); border-radius: 7px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
+.ts-card:hover { border-color: var(--sc-line-strong); }
+.ts-card.is-done { opacity: .6; }
+.ts-card-project { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: -8px -10px 0; padding: 5px 10px; background: color-mix(in srgb, var(--sc-line) 35%, transparent); border-radius: 7px 7px 0 0; overflow: hidden; white-space: nowrap; }
+.ts-health { color: var(--sc-success); font-weight: 700; }
+.ts-health.is-late { color: var(--sc-danger); }
+.ts-card-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.ts-card-row > span:last-child { margin-left: auto; }
+.ts-flag { font-size: 13px; }
+.ts-when { color: #b48cff; }
+.ts-card-title { font-weight: 600; font-size: 13.5px; }
+.ts-due.is-late { color: var(--sc-danger); }
+.ts-labels { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ts-add-label { border: 0; background: none; color: var(--sc-text-3); font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; }
+.ts-add-label:hover { color: var(--sc-text-1); }
+.side-colours { display: grid; grid-template-columns: repeat(7, 18px); gap: 6px; padding: 10px 12px 8px; }
+.side-colour { width: 18px; height: 18px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; padding: 0; font-size: 10px; color: #fff; line-height: 1; }
+.side-colour.is-on { border-color: var(--sc-text-1); }
+#app.view-team #bottom, #app.view-today #bottom { display: none; }

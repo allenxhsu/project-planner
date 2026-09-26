@@ -1098,7 +1098,7 @@ export async function setPlanArchived(id, on) {
  * Change a plan wherever it is: the open one through the store so the screen
  * follows, any other through its record on the shelf.
  */
-async function patchPlan(id, change, label) {
+export async function patchPlan(id, change, label) {
   if (!recordStore) return false;
   if (id === store.project.id) {
     tryCommit(label, (p) => change(p));

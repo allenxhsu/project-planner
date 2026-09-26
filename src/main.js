@@ -18,6 +18,7 @@ import { renderSchedules } from './ui/schedules.js';
 import { renderToday } from './ui/today.js';
 import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
+import { renderTeamSchedule } from './ui/teamschedule.js';
 import { renderCalendar, renderCalendarSide, shiftWeek, showThisWeek } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
 import { renderInspector } from './ui/inspector.js';
@@ -38,7 +39,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
+const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 function render() {
   const { ui } = store;
@@ -55,6 +56,7 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('cal-side', calSide);
+  for (const v of ['team', 'today']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.
