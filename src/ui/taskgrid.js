@@ -3,7 +3,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { formatPredecessors, formatAssignments, isSummary, taskIndex, CONSTRAINTS, stageOf, URGENCIES, urgencyOf, pinsOf } from '../model/model.js';
+import { formatPredecessors, formatAssignments, isSummary, taskIndex, descendants, CONSTRAINTS, stageOf, URGENCIES, urgencyOf, pinsOf } from '../model/model.js';
 import { lateness, lateSentence } from './calendar.js';
 import { formatDate, formatDuration } from '../model/calendar.js';
 import { formatMoney, formatHours, clear } from '../util.js';
@@ -128,6 +128,25 @@ export function gridHandlers(columnKeys = columnsForView(store.ui.view)) {
     onContext: (id, e) => {
       if (!store.ui.selection.includes(id)) act.selectTask(id);
       const t = act.activeTask();
+      // A summary is not a task: it groups tasks, and its dates, work and
+      // progress are theirs. Its menu is about the group.
+      const i = t ? taskIndex(store.project, t.id) : -1;
+      if (t && i >= 0 && isSummary(store.project, i) && store.ui.selection.length === 1) {
+        const n = descendants(store.project, i).length;
+        const shut = !!store.ui.collapsed[t.id];
+        showMenu(e.clientX, e.clientY, [
+          { note: 'Summary' },
+          { label: 'Summary information…', key: '⌘I', run: () => { void import('./blockmenu.js').then((m) => m.summarySheet(t.id)); } },
+          { label: 'Add a task to this summary', run: () => act.newSubtask(t.id) }, '-',
+          { label: 'Insert task below', key: 'Ins', run: act.newTaskBelow }, { label: 'Insert task above', run: act.newTaskAbove }, '-',
+          { label: shut ? 'Expand' : 'Collapse', run: () => act.toggleCollapse(t.id) },
+          { label: 'Indent', key: '⌥⇧→', run: act.indentSelection }, { label: 'Outdent', key: '⌥⇧←', run: act.outdentSelection },
+          { label: 'Move up', key: '⌥⇧↑', run: () => act.moveSelection(-1) }, { label: 'Move down', key: '⌥⇧↓', run: () => act.moveSelection(1) }, '-',
+          { label: 'Unlink', key: '⇧⌘L', run: act.unlinkSelection }, '-',
+          { label: `Delete summary and its ${n} task${n === 1 ? '' : 's'}`, key: 'Del', danger: true, run: act.deleteSelection },
+        ]);
+        return;
+      }
       showMenu(e.clientX, e.clientY, [
         { label: 'Open task…', key: '⌘I', run: () => { const id = act.activeId(); if (id) void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); } }, '-',
         { label: 'Insert task below', key: 'Ins', run: act.newTaskBelow }, { label: 'Insert task above', run: act.newTaskAbove }, { label: 'Insert milestone', run: act.newMilestone }, '-',

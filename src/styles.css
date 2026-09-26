@@ -1157,3 +1157,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .typed-ask { margin: 0 0 8px; }
 .typed-word { color: var(--sc-danger); }
 .mw-choice { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.sum-list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.sum-item { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 5px 6px; border-radius: 5px; cursor: pointer; }
+.sum-item:hover { background: color-mix(in srgb, var(--sc-line) 55%, transparent); }
+.sum-item > span:nth-child(2) { flex: 1; }

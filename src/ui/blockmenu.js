@@ -340,9 +340,49 @@ export function fieldInput(project, field, value) {
  * due, what it is waiting on and what is waiting on it. An archived task says
  * so across the top and offers to restore or delete it.
  */
+/**
+ * A summary's window. A summary is not a task: it is a heading over tasks,
+ * and what it shows — start, finish, work, progress — is rolled up from them.
+ * Its name can change; everything else is changed in its tasks, listed here.
+ */
+export async function summarySheet(taskId) {
+  const project = store.project;
+  const i = project.tasks.findIndex((x) => x.id === taskId);
+  if (i < 0) return;
+  const t = project.tasks[i];
+  const info = store.schedule.tasks[t.id] || {};
+  const { descendants: under } = await import('../model/model.js');
+  const kids = under(project, i).map((j) => project.tasks[j]).filter((k) => k.level === t.level + 1);
+  const all = under(project, i).map((j) => project.tasks[j]);
+  const hours = (h) => (h ? `${Math.round(h * 10) / 10}h` : '0h');
+  await open(`Summary — ${t.name}`, (close) => {
+    const name = el('input', { class: 'sc-input', type: 'text', value: t.name,
+      onchange: (e) => { if (e.target.value.trim()) act.editTask(t.id, 'name', e.target.value.trim()); } });
+    const row = (label, value) => el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), el('span', { class: 'sc-mono', text: value }));
+    return [
+      el('p', { class: 'sc-muted small', text: 'A summary groups tasks. Its dates, work and progress come from them; change them in the tasks.' }),
+      el('div', { class: 'facts' },
+        el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: 'Name' }), name),
+        row('Start', info.startIso ? formatDate(info.startIso, 'long') : '—'),
+        row('Finish', info.finishIso ? formatDate(info.finishIso, 'long') : '—'),
+        row('Duration', `${info.duration ?? 0} day${info.duration === 1 ? '' : 's'}`),
+        row('Work', hours(info.work)),
+        row('Complete', `${info.percent ?? 0}%`),
+        row('Tasks', `${all.length}`)),
+      el('div', { class: 'sc-section-title', text: 'Its tasks' }),
+      el('div', { class: 'sum-list' }, ...kids.map((k) => el('button', { class: 'sum-item', onclick: () => { close(null); void taskSheet({ taskId: k.id }); } },
+        el('span', { class: `tl-ring${(store.schedule.tasks[k.id]?.percent ?? 0) === 100 ? ' is-done' : ''}` }), el('span', { text: k.name }),
+        el('span', { class: 'sc-faint small', text: `${store.schedule.tasks[k.id]?.percent ?? 0}%` })))),
+      foot(button('Add a task', () => { close(null); act.newSubtask(t.id); }), el('span', { class: 'sc-spacer' }), button('Close', () => close(null), 'sc-button--primary')),
+    ];
+  });
+}
+
 export async function taskSheet({ planId = store.project.id, taskId, block: b = null, late = null }) {
   const t = await withTask(planId, taskId);
   if (!t) return;
+  // A summary opens as what it is.
+  { const i = store.project.tasks.findIndex((x) => x.id === t.id); if (i >= 0 && isSummary(store.project, i)) { await summarySheet(t.id); return; } }
   const project = store.project;
   const info = store.schedule.tasks[t.id];
   const nameOfTask = (id) => project.tasks.find((x) => x.id === id)?.name || '(gone)';

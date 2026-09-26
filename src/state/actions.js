@@ -94,6 +94,17 @@ export function newTaskBelow() {
   set({ selection: [t.id], activeCol: 'name', editing: { kind: 'task', id: t.id, col: 'name' } });
   return t;
 }
+/** A new task at the end of a summary's tasks, one level in. */
+export function newSubtask(summaryId) {
+  const { project } = store;
+  const i = taskIndex(project, summaryId);
+  if (i < 0) return null;
+  const at = i + 1 + descendants(project, i).length;
+  const t = commit('Insert task', (p) => insertTask(p, at, { level: getTask(p, summaryId).level + 1 }));
+  if (store.ui.collapsed[summaryId]) toggleCollapse(summaryId);
+  set({ selection: [t.id], activeCol: 'name', editing: { kind: 'task', id: t.id, col: 'name' } });
+  return t;
+}
 export function newTaskAbove() {
   const { project } = store;
   const id = activeId();
@@ -153,9 +164,16 @@ export function linkTasks(fromId, toId, type = 'FS', lag = 0) {
 }
 export function unlinkTasks(fromId, toId) { tryCommit('Unlink', (p) => unlink(p, fromId, toId)); }
 
+/** A summary is a heading over tasks: it is not done, or a milestone, on its own. */
+const summaryNo = (id, what) => {
+  const i = taskIndex(store.project, id);
+  if (i >= 0 && isSummary(store.project, i)) { hint(`A summary is not a task — ${what}`); return true; }
+  return false;
+};
 export function toggleMilestone() {
   const t = activeTask();
   if (!t) return;
+  if (summaryNo(t.id, 'make one of its tasks a milestone instead.')) return;
   tryCommit(t.milestone ? 'Not a milestone' : 'Milestone', (p) => setTaskField(p, t.id, 'milestone', !t.milestone));
 }
 
@@ -178,7 +196,7 @@ export function editTask(id, field, value) {
 async function linkNewResources() {
   for (const r of [...store.project.resources]) if (!r.personId) await rememberResource(r.id);
 }
-export function setPercent(id, percent) { return editTask(id, 'percent', percent); }
+export function setPercent(id, percent) { if (summaryNo(id, 'its progress comes from its tasks.')) return false; return editTask(id, 'percent', percent); }
 /** Drag a bar: pin the task to a new start with a Start No Earlier Than constraint. */
 export function pinStart(id, iso) {
   return attempt('Move task', (p) => { const t = getTask(p, id); t.constraint = { type: t.constraint.type === 'MSO' ? 'MSO' : 'SNET', date: iso }; });
