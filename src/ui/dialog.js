@@ -6,9 +6,27 @@ let openCount = 0;
 export const modalOpen = () => openCount > 0;
 
 /** `build(close)` returns the dialog body; the promise resolves with whatever `close` is given. */
+/**
+ * Dialogs that save — a task's sheet, the event window, the new-task panel —
+ * say so by setting `close.onSave`. ⌘S is then theirs: in a browser their
+ * own key handler takes it, and in the Mac app, where ⌘S belongs to the menu
+ * bar's Save and never reaches the page, the menu command is handed here
+ * first (main.js), so it saves the dialog rather than the document.
+ */
+const saving = [];
+export function saveOpenDialog() {
+  for (let i = saving.length - 1; i >= 0; i--) {
+    const fn = saving[i].onSave;
+    if (typeof fn === 'function') { fn(); return true; }
+  }
+  return false;
+}
+
 export function open(title, build, { dismissable = true, wide = false } = {}) {
   return new Promise((resolve) => {
     const close = (value) => {
+      const at = saving.indexOf(close);
+      if (at >= 0) saving.splice(at, 1);
       overlay.remove();
       document.removeEventListener('keydown', onKey, true);
       openCount--;
@@ -19,6 +37,7 @@ export function open(title, build, { dismissable = true, wide = false } = {}) {
       el('div', { class: `sc-dialog sc-brackets${wide ? ' dialog-wide' : ''}`, role: 'dialog', 'aria-label': title },
         el('div', { class: 'sc-dialog-head' }, el('span', { class: 'sc-display', text: title })),
         el('div', { class: 'sc-dialog-body' }, build(close))));
+    saving.push(close);
     openCount++;
     document.addEventListener('keydown', onKey, true);
     document.getElementById('modal-root').append(overlay);

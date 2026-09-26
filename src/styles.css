@@ -677,3 +677,5 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .tp-switch-box:focus-visible + .tp-switch { outline: 2px solid var(--sc-accent); outline-offset: 2px; }
 .tp-fields-hint { padding-left: 104px; }
 @media (max-width: 760px) { .tp-sheet { grid-template-columns: 1fr; } .tp-side { border-left: 0; padding-left: 0; } }
+.cal-block.is-flash { animation: cal-flash 0.7s ease-in-out 3; z-index: 4; }
+@keyframes cal-flash { 50% { box-shadow: 0 0 0 3px var(--sc-accent), 0 0 18px color-mix(in srgb, var(--sc-accent) 60%, transparent); } }

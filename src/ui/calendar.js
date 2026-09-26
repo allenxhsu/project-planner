@@ -103,6 +103,15 @@ export function currentLayout() {
   layoutMemo = { key, value };
   return value;
 }
+/** Pick out a task's blocks for a moment, and bring the first into view. */
+export function flashTask(taskId) {
+  setTimeout(() => {
+    const nodes = [...document.querySelectorAll(`.cal-block[data-task="${CSS.escape(taskId)}"]`)];
+    nodes[0]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    for (const n of nodes) { n.classList.add('is-flash'); setTimeout(() => n.classList.remove('is-flash'), 2200); }
+  }, 60);
+}
+
 /** What will not make its deadline, across the plans the calendar covers. */
 export const lateness = () => currentLayout().all.late || [];
 
@@ -522,6 +531,7 @@ export function renderCalendar(root) {
       // task's name and the day says the rest.
       const oneDay = range === 'day';
       col.append(el('div', {
+        'data-task': b.taskId,
         class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',

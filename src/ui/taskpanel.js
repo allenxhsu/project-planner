@@ -149,7 +149,9 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
     };
     setTimeout(() => document.querySelector('.tp-sheet')?.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); save(); }
+      if (e.key === 'Enter' && e.target === name) { e.preventDefault(); save(); }
     }), 0);
+    close.onSave = save;
 
     return [
       el('div', { class: 'tp-sheet' },
@@ -166,10 +168,9 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
 
   // A task in another project is made there: that plan is opened first.
   if (answer.planId !== store.project.id && !(await sync.openPlan(answer.planId))) return null;
-  // Time that has gone cannot be booked; a fixed task put there happened.
-  const d = new Date();
-  const past = answer.fixed && (answer.fixed.day < nowIso()
-    || (answer.fixed.day === nowIso() && answer.fixed.start + answer.fixed.minutes <= d.getHours() * 60 + d.getMinutes()));
+  // A day that has gone cannot be booked; a fixed task put there happened.
+  // Earlier today is still today: it stays a task at that hour, as placed.
+  const past = answer.fixed && answer.fixed.day < nowIso();
   const t = past
     ? act.newTaskDoneAt({ name: answer.name, day: answer.fixed.day, start: answer.fixed.start, minutes: answer.fixed.minutes, notes: answer.notes })
     : act.createTask(answer);
@@ -178,5 +179,11 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
     : answer.fixed ? `“${t.name}” is fixed at ${formatClock(answer.fixed.start)} on ${formatDate(answer.fixed.day, 'day')}.`
       : `“${t.name}” is on the calendar, placed by it${answer.deadline ? ` to finish by ${formatDate(answer.deadline, 'day')}${answer.hardDeadline ? ' (hard)' : ''}` : ''}.`);
   set({});
+  // Show where it went: the week it landed in, with the block picked out.
+  // At eleven at night an auto-scheduled task is tomorrow's, not where the
+  // click was, and a task that appears somewhere else looks like no task.
+  const cal = await import('./calendar.js');
+  const first = cal.currentLayout().all.blocks.filter((b) => b.taskId === t.id && b.planId === store.project.id).sort((a, b) => a.day - b.day || a.start - b.start)[0];
+  if (first && store.ui.view === 'calendar') { cal.goToWeek(first.day); set({}); cal.flashTask(t.id); }
   return t;
 }

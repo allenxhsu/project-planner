@@ -363,6 +363,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       if (k === 'l') { e.preventDefault(); e.stopPropagation(); void copy(taskLink(project.id, t.id)); }
       if (k === 'd') { e.preventDefault(); e.stopPropagation(); close(null); act.duplicateTask(t.id); }
     }), 0);
+    close.onSave = save;
     const more = (e) => {
       const r = e.currentTarget.getBoundingClientRect();
       showMenu(r.left - 180, r.bottom + 4, [
@@ -580,6 +581,7 @@ export async function eventDialog({ day, start, end, ev = null }) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); save(); }
       if (e.key === 'Enter' && e.target === title) save();
     }), 0);
+    close.onSave = save;
 
     head.append(
       el('div', { class: 'ev-head-row' },

@@ -6,6 +6,7 @@ import * as act from './state/actions.js';
 import { sampleProject } from './model/sample.js';
 import { parse, serialize } from './io/json.js';
 import { hosted, post, initHost } from './host.js';
+import { saveOpenDialog } from './ui/dialog.js';
 import { renderGantt, zoomGantt, scrollToToday } from './ui/gantt.js';
 import { renderTaskSheet, editActiveCell, moveActiveCol } from './ui/taskgrid.js';
 import { renderResourceSheet, renderResourceUsage } from './ui/resources.js';
@@ -97,7 +98,8 @@ function initHosting() {
   initHost({
     name: 'project',
     load: (text, name) => loadText(text, name),
-    command: (id) => { COMMANDS[id]?.(); },
+    // ⌘S is the menu bar's on the Mac; with a dialog open that saves, it is the dialog's.
+    command: (id) => { if (id === 'file.save' && saveOpenDialog()) return; COMMANDS[id]?.(); },
     saved: (name) => { markSaved(name); syncAfterSave(); },
     // The Mac app can pair with the toolkit Portal and keep the device token in
     // the Keychain; when it does, it hands the page the same two values the Sync
