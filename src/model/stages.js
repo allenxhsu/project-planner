@@ -238,3 +238,36 @@ export function insertStage(p, { name, afterId = null, days = 7, colour = null }
   logProject(p, { kind: 'change', field: 'stages', from: '', to: `added ${clean}` });
   return { stage: ph, deadlineFrom, deadlineTo: p.deadline || null };
 }
+
+/**
+ * Move a whole project by some calendar days, as dragging its bar on the
+ * projects' Gantt does: its start, its deadline, every stage's deadline, and
+ * every date a task was given (its start constraint and its deadline) go
+ * with it, so the plan keeps its shape. Finished tasks keep the dates they
+ * had; history does not move.
+ */
+export function shiftProject(p, days) {
+  if (!Number.isInteger(days) || !days) return;
+  const mv = (iso) => (isoValid(iso) ? fromDay(toDay(iso) + days) : iso);
+  const was = { start: p.start, deadline: p.deadline };
+  p.start = mv(p.start);
+  if (p.deadline) p.deadline = mv(p.deadline);
+  for (const ph of phases(p)) if (ph.deadline) ph.deadline = mv(ph.deadline);
+  for (const t of p.tasks) {
+    if ((t.percent ?? 0) >= 100) continue;
+    if (t.constraint?.date) t.constraint = { ...t.constraint, date: mv(t.constraint.date) };
+    if (t.deadline) t.deadline = mv(t.deadline);
+  }
+  logProject(p, { kind: 'change', field: 'dates', from: `${was.start}${was.deadline ? ` – ${was.deadline}` : ''}`, to: `${p.start}${p.deadline ? ` – ${p.deadline}` : ''}` });
+}
+
+/** A project's start or deadline, as dragging an end of its bar sets it; the start never passes the deadline. */
+export function setProjectDates(p, { start = null, deadline = null } = {}) {
+  if (start && !isoValid(start)) throw new Error('A start is a date.');
+  if (deadline && !isoValid(deadline)) throw new Error('A deadline is a date.');
+  const s = start || p.start;
+  const d = deadline || p.deadline;
+  if (d && toDay(d) < toDay(s)) throw new Error('A project cannot end before it starts.');
+  if (start && start !== p.start) { logProject(p, { kind: 'change', field: 'start', from: p.start, to: start }); p.start = start; }
+  if (deadline && deadline !== p.deadline) { logProject(p, { kind: 'change', field: 'deadline', from: p.deadline || 'none', to: deadline }); p.deadline = deadline; }
+}

@@ -311,3 +311,29 @@ test('a new stage goes where it is put and moves what follows by its length', as
   assert.equal(p.phases[0].deadline, '2026-09-28');
   assert.equal(p.phases[1].deadline, '2026-10-13');
 });
+
+test('moving a project on the Gantt moves its start, deadline, stages and open tasks together', async () => {
+  const { createProject, insertTask } = await import('../src/model/model.js');
+  const { shiftProject, setProjectDates, insertStage } = await import('../src/model/stages.js');
+  const { toDay, fromDay } = await import('../src/model/calendar.js');
+  const p = createProject('Move me', '2026-10-05');
+  p.deadline = '2026-10-30';
+  const open = insertTask(p, 0, { name: 'Open', duration: 2, level: 1 });
+  open.deadline = '2026-10-20';
+  open.constraint = { type: 'SNET', date: '2026-10-07' };
+  const done = insertTask(p, 1, { name: 'Done', duration: 1, level: 1 });
+  done.percent = 100; done.deadline = '2026-10-06';
+  insertStage(p, { name: 'Build', days: 5 });
+  const stageWas = p.phases[0].deadline;
+  const deadlineWas = p.deadline;
+  shiftProject(p, 7);
+  assert.equal(p.start, '2026-10-12');
+  assert.equal(p.deadline, fromDay(toDay(deadlineWas) + 7));
+  assert.equal(open.deadline, '2026-10-27');
+  assert.equal(open.constraint.date, '2026-10-14');
+  assert.equal(done.deadline, '2026-10-06', 'finished work keeps its dates');
+  assert.notEqual(p.phases[0].deadline, stageWas);
+  setProjectDates(p, { deadline: '2026-11-20' });
+  assert.equal(p.deadline, '2026-11-20');
+  assert.throws(() => setProjectDates(p, { start: '2026-12-01' }), /before it starts/);
+});

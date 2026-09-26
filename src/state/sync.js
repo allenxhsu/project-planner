@@ -636,7 +636,22 @@ export async function listWorkspaces() {
   const all = await recordStore.all();
   return all
     .filter((r) => r && r.type === WORKSPACE_TYPE && !r.deletedAt && r.name)
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    // In the order they were dragged into, then by name.
+    .sort((a, b) => (Number.isFinite(a.order) ? a.order : Infinity) - (Number.isFinite(b.order) ? b.order : Infinity) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** Workspaces in a new order, top to bottom — kept in their records, so every device shows it. */
+export async function arrangeWorkspaces(ids) {
+  if (!recordStore) return;
+  const at = Date.now();
+  const changed = [];
+  for (const [i, id] of ids.entries()) {
+    const record = await recordStore.get(id);
+    if (!record || record.type !== WORKSPACE_TYPE || record.order === (i + 1) * 10) continue;
+    changed.push({ ...record, order: (i + 1) * 10, updatedAt: Math.max(at, record.updatedAt + 1), origin: deviceId() });
+  }
+  if (changed.length) await recordStore.put(changed);
+  if (syncConfigured()) void syncNow();
 }
 
 export async function createWorkspace(name) {

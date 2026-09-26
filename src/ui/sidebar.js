@@ -279,7 +279,7 @@ const HUE_GRID = [0, 30, 55, 90, 150, 185, 205, 240, 280, 320, 10, 45, 75, 120, 
  * open, complete or cancel it, copy a link, favourite it, move it to another
  * workspace or up and down the list, and delete it.
  */
-function planMenu(p, siblings = []) {
+export function planMenu(p, siblings = []) {
   return async (x, y) => {
     const sync = await import('../state/sync.js');
     const spaces = cache.spaces;
@@ -452,6 +452,17 @@ export function renderSidebar() {
       { icon: '▢', label: 'New project…', run: () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: w.id || null })); } },
       w.id ? { icon: '▭', label: 'New folder…', run: () => { void newFolder(w); } } : null,
       w.id ? '-' : null,
+      ...(w.id ? ['up', 'down'].map((dir) => {
+        const ids = cache.spaces.map((x) => x.id);
+        const i = ids.indexOf(w.id);
+        const j = dir === 'up' ? i - 1 : i + 1;
+        return { icon: dir === 'up' ? '↑' : '↓', label: dir === 'up' ? 'Move up' : 'Move down', disabled: j < 0 || j >= ids.length, run: async () => {
+          [ids[i], ids[j]] = [ids[j], ids[i]];
+          const sync = await import('../state/sync.js');
+          await sync.arrangeWorkspaces(ids);
+          await refreshSidebar();
+        } };
+      }) : []),
       w.id ? { icon: '✎', label: 'Rename workspace…', run: async () => {
         const name = await promptText('Rename the workspace', '', w.name);
         if (!name?.trim()) return;
@@ -462,6 +473,7 @@ export function renderSidebar() {
     ]);
     const row = el('div', { class: `side-item side-ws${active ? ' is-on' : ''}`, title: w.id ? (active ? 'Showing only this workspace — click to show all' : 'Show only this workspace in lists') : 'Projects not filed under a workspace',
       oncontextmenu: (e) => { e.preventDefault(); wsMenu(e.clientX, e.clientY); } },
+      w.id ? el('span', { class: 'side-grip', text: '⠿' }) : null,
       el('button', { class: 'side-twist', text: open ? '▾' : '▸', onclick: (e) => { e.stopPropagation(); toggle(key); } }),
       el('span', { class: 'side-item-icon' }, ic('workspace')),
       el('span', { class: 'side-item-label', text: w.name }),
@@ -478,9 +490,17 @@ export function renderSidebar() {
         set({});
       };
     } else row.onclick = () => toggle(key);
-    // A project dropped on the workspace goes in it, outside any folder, at the end.
-    dropTarget(row, (e, what) => (what.kind === 'plan' ? 'into' : null), (_, what) =>
-      arrange([...loose.map((x) => x.id).filter((id) => id !== what.id), what.id], w.id || null, null));
+    // A project dropped on the workspace goes in it, outside any folder, at the
+    // end; a workspace dropped on another goes above or below it.
+    if (w.id) draggable(row, { kind: 'workspace', id: w.id });
+    dropTarget(row, (e, what) => (what.kind === 'plan' ? 'into' : what.kind === 'workspace' && w.id && what.id !== w.id ? half(e) : null), async (side, what) => {
+      if (what.kind === 'plan') return arrange([...loose.map((x) => x.id).filter((id) => id !== what.id), what.id], w.id || null, null);
+      const ids = cache.spaces.map((x) => x.id).filter((id) => id !== what.id);
+      ids.splice(ids.indexOf(w.id) + (side === 'after' ? 1 : 0), 0, what.id);
+      const sync = await import('../state/sync.js');
+      await sync.arrangeWorkspaces(ids);
+      await refreshSidebar();
+    });
     parts.workspaces.append(row);
     if (!open) continue;
 

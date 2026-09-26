@@ -85,7 +85,8 @@ function readPlan(record) {
         start: schedule.startIso, finish: project.deadline || schedule.finishIso, deadline: project.deadline || null,
         stageName: current?.name || null, stageColour: current ? stageColour(project, current) : null,
         colour: project.colour, status: project.status || (project.archived ? 'Completed' : 'Todo'), tasks: out.length,
-        stageList: phases(project).map((ph) => ({ id: ph.id, name: ph.name, colour: stageColour(project, ph) })),
+        stageList: phases(project).map((ph) => ({ id: ph.id, name: ph.name, colour: stageColour(project, ph), deadline: ph.deadline || null, status: ph.status || 'open' })),
+        pinned: project.pinned === true, percent: schedule.percent ?? 0, projectStart: project.start,
         statusList: stages(project).map((st) => ({ id: st.id, name: st.name })),
       },
     };
@@ -158,7 +159,7 @@ const layoutsHere = () => Object.entries(LAYOUTS).filter(([k]) => scope === 'all
 
 let scope = 'all';              // 'all' — Projects & Tasks — or 'project' — the open plan's Task list
 let lastRoot = null;
-const page = { query: '', ganttFrom: null, ganttSpan: 'quarter' };
+const page = { query: '', ganttZoom: readJsonSafe('project-planner:gantt-zoom', 'quarter'), ganttScroll: null };
 const folded = new Set();
 const working = new Map();      // `${scopeKey}|${viewId}` → the view as edited, not yet saved
 const scopeKey = () => (scope === 'project' ? `plan:${store.project.id}` : 'all');
@@ -166,6 +167,7 @@ const ALL_KEY = 'project-planner:views:all';
 const ACTIVE_KEY = 'project-planner:view-active';
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 const writeJson = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } };
+function readJsonSafe(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
 const newId = () => `v_${Math.random().toString(36).slice(2, 10)}`;
 
 function normal(v) {
@@ -491,7 +493,9 @@ function drawPop() {
 }
 const popHead = (title, ...extra) => el('div', { class: 'tl-pop-head' }, el('strong', { text: title }), el('span', { class: 'sc-spacer' }), ...extra);
 const linkButton = (text, run, title = '') => el('button', { class: 'tl-link', text, title, onclick: run });
-const fieldsFor = () => Object.entries(FIELDS).filter(([k]) => scope === 'all' || k !== 'workspace');
+/** Projects on the Gantt group by what a project has; tasks by all of it. */
+const GANTT_FIELDS = ['workspace', 'stage', 'status', 'deadline', 'start'];
+const fieldsFor = () => Object.entries(FIELDS).filter(([k]) => (scope === 'all' || k !== 'workspace') && (current().view.layout !== 'gantt' || GANTT_FIELDS.includes(k)));
 
 const PANELS = {
   /** Group by: the levels, dragged into order; each a choice of field. */
@@ -504,7 +508,7 @@ const PANELS = {
         ...fieldsFor().filter(([k]) => k === f || !used.includes(k)).map(([k, label]) => el('option', { value: k, text: label, selected: k === f }))),
       el('button', { class: 'ord-btn', text: '×', title: 'Remove this level', onclick: () => edit((x) => { x.groups.splice(i, 1); }) }));
     return [
-      popHead('Groups', linkButton('Reset', () => edit((x) => { x.groups = defaultViews()[0].groups; x.groupOrder = {}; }))),
+      popHead('Groups', linkButton('Reset', () => edit((x) => { x.groups = x.layout === 'gantt' ? ['workspace', 'stage'] : defaultViews()[0].groups; x.groupOrder = {}; }))),
       used.length ? orderable(used.map((f, i) => ({ key: f, node: level(f, i) })), (keys) => edit((x) => { x.groups = keys; }), { buttons: false })
         : el('p', { class: 'sc-faint small tl-pop-note', text: 'No grouping: one list of tasks.' }),
       free.length ? linkButton(used.length ? '＋ Add nested row' : '＋ Add a group', () => edit((x) => { x.groups.push(free[0][0]); })) : null,
@@ -517,12 +521,14 @@ const PANELS = {
   sortGroups() {
     const { view } = current();
     if (!view.groups.length) return [popHead('Sort groups'), el('p', { class: 'sc-faint small tl-pop-note', text: 'Group by something first: then its groups can be put in any order here.' })];
-    const list = scopeRows(view);
-    return [el('div', { class: 'tl-sg' }, ...view.groups.map((field) => {
-      const keys = new Set(list.map((r) => keyOf(field, r)));
+    const gantt = view.layout === 'gantt';
+    const list = gantt ? ganttPlans(view) : scopeRows(view);
+    const key = (field, x) => (gantt ? ganttKey(field, x) : keyOf(field, x));
+    return [el('div', { class: 'tl-sg' }, ...(gantt ? view.groups.filter((g) => GANTT_FIELDS.includes(g)) : view.groups).map((field) => {
+      const keys = new Set(list.map((r) => key(field, r)));
       for (const k of domainOf(field, view)) keys.add(k);
       const sample = new Map();
-      for (const r of list) { const k = keyOf(field, r); if (!sample.has(k)) sample.set(k, r); }
+      for (const r of list) { const k = key(field, r); if (!sample.has(k)) sample.set(k, gantt ? { phaseColour: r.stageColour } : r); }
       const ordered = orderKeys(field, [...keys], view);
       return el('div', { class: 'tl-sg-col' },
         popHead(FIELDS[field], view.groupOrder[field]
@@ -689,19 +695,21 @@ function controls(count) {
   if (view.layout === 'workload') return el('div', { class: 'tl-controls-wrap' }, tabs, el('div', { class: 'tl-controls' }, el('div', { class: 'tl-row' }, layoutSeg)));
 
   const gantt = view.layout === 'gantt';
-  const groupText = gantt ? 'Group by: Workspace › Stage › Project'
-    : `Group by: ${[...view.groups.map((g) => FIELDS[g].replace(/ \(week\)/, '')), 'Task'].join(' › ')}`;
+  const levels = gantt ? view.groups.filter((g) => GANTT_FIELDS.includes(g)) : view.groups;
+  const groupText = `Group by: ${[...levels.map((g) => FIELDS[g].replace(/ \(week\)/, '')), gantt ? 'Project' : 'Task'].join(' › ')}`;
   const nFilters = filterCount(view);
   return el('div', { class: 'tl-controls-wrap' }, tabs,
     el('div', { class: 'tl-controls' },
       el('div', { class: 'tl-row' },
-        gantt ? el('span', { class: 'tl-group-pill', text: groupText }) : popButton('group', groupText, 'tl-group-pill'),
-        gantt ? null : popButton('sortGroups', 'Sort Groups'),
+        popButton('group', groupText, 'tl-group-pill'),
+        popButton('sortGroups', 'Sort Groups'),
         layoutSeg,
         gantt ? null : popButton('sortTasks', view.sort.length ? `Sort Tasks (${view.sort.length})` : 'Sort Tasks'),
         popButton('filters', `▸ Filters (${nFilters})`, nFilters ? 'is-active' : ''),
         nFilters ? el('button', { class: 'ord-btn', text: '×', title: 'Clear filters', onclick: () => edit((x) => { x.filters = {}; }) }) : null,
-        el('span', { class: 'sc-faint small', text: gantt ? `PROJECTS: ${count}` : `TASKS: ${count}` })),
+        el('span', { class: 'sc-faint small', text: gantt ? `PROJECTS: ${count}` : `TASKS: ${count}` }),
+        gantt ? el('span', { class: 'sc-spacer' }) : null,
+        gantt ? ganttNav() : null),
       el('div', { class: 'tl-row' },
         gantt ? check('Show completed projects', 'completedProjects')
           : [check('Only show scheduled past deadline', 'pastOnly'), check('Show resolved tasks', 'resolved')])));
@@ -856,62 +864,226 @@ function kanbanLayout(list, view, layout) {
 
 // ---------------------------------------------------------------- gantt
 
+/** A project's value for a grouping field, on the projects' Gantt. */
+function ganttKey(field, p) {
+  switch (field) {
+    case 'workspace': return p.workspaceId;
+    case 'stage': return p.stageName || '';
+    case 'status': return p.status || '';
+    case 'deadline': return p.deadline ? fromDay(weekStart(toDay(p.deadline))) : '';
+    case 'start': return p.start ? fromDay(weekStart(toDay(p.start))) : '';
+    default: return '';
+  }
+}
+const ganttPlans = (view) => plans.filter((p) => (view.completedProjects || !p.archived) && (!view.filters.workspace || p.workspaceId === view.filters.workspace))
+  .filter((p) => !page.query.trim() || p.name.toLowerCase().includes(page.query.trim().toLowerCase()));
+const ZOOMS = { month: ['Month', 36], quarter: ['Quarter', 14], year: ['Year', 4] };
+const pxDay = () => (ZOOMS[page.ganttZoom] || ZOOMS.quarter)[1];
+const LABEL_W = 220;
+
+/** Month / Quarter / Year, back and forward a third of a screen, Jump to date, Today. */
+function ganttNav() {
+  const scroller = () => document.querySelector('.pg-scroll');
+  const by = (sign) => { const sc = scroller(); if (sc) sc.scrollBy({ left: sign * (sc.clientWidth - LABEL_W) / 3, behavior: 'smooth' }); };
+  const jump = el('input', { class: 'sc-input sc-input--sm pg-jump', type: 'date', title: 'Jump to date',
+    onchange: (e) => { if (e.target.value) scrollToDay(toDay(e.target.value), true); } });
+  return el('span', { class: 'pg-nav' },
+    el('button', { class: 'tl-icon-btn', text: '‹', title: 'Earlier', onclick: () => by(-1) }),
+    el('button', { class: 'tl-icon-btn', text: '›', title: 'Later', onclick: () => by(1) }),
+    el('select', { class: 'sc-select sc-select--sm', title: 'Zoom', onchange: (e) => {
+      const day = centreDay();
+      page.ganttZoom = e.target.value;
+      try { localStorage.setItem('project-planner:gantt-zoom', JSON.stringify(page.ganttZoom)); } catch { /* private mode */ }
+      page.ganttScroll = null;
+      redraw();
+      if (day !== null) scrollToDay(day);
+    } }, ...Object.entries(ZOOMS).map(([k, [label]]) => el('option', { value: k, text: label, selected: page.ganttZoom === k }))),
+    el('label', { class: 'tl-pill pg-jump-wrap', title: 'Jump to date' }, el('span', { text: 'Jump to date' }), jump),
+    el('button', { class: 'tl-pill', text: 'Today', onclick: () => scrollToDay(toDay(today()), true) }));
+}
+let ganttFrom = 0;   // the first day the scroll area draws
+function scrollToDay(day, smooth = false) {
+  const sc = document.querySelector('.pg-scroll');
+  if (!sc) return;
+  sc.scrollTo({ left: Math.max(0, (day - ganttFrom) * pxDay() - (sc.clientWidth - LABEL_W) / 2), behavior: smooth ? 'smooth' : 'auto' });
+}
+function centreDay() {
+  const sc = document.querySelector('.pg-scroll');
+  return sc ? ganttFrom + Math.round((sc.scrollLeft + (sc.clientWidth - LABEL_W) / 2) / pxDay()) : null;
+}
+
+/**
+ * Projects on a line of dates, scrolled left and right, grouped by the view:
+ * each project a bar from its start to its deadline (or its finish), its
+ * stages as dots along it, how much is done as a line under it. A bar drags
+ * — the whole project moves, stages and dated tasks with it; its ends drag
+ * its start or its deadline; Shift while dragging moves only the deadline.
+ * A click opens the project; ⋯ (or a right-click) is its menu.
+ */
 function ganttLayout(view) {
   const todayDay = toDay(today());
-  const list = plans.filter((p) => (view.completedProjects || !p.archived) && (!view.filters.workspace || p.workspaceId === view.filters.workspace));
-  const spanDays = { month: 35, quarter: 91, year: 365 }[page.ganttSpan] || 91;
-  const from = page.ganttFrom ?? weekStart(todayDay - 28);
-  const to = from + spanDays;
-  const x = (d) => ((d - from) / (to - from)) * 100;
-  const scale = el('div', { class: 'pg-scale' });
+  const list = ganttPlans(view);
+  const px = pxDay();
+  const days = list.flatMap((p) => [toDay(p.start), toDay(p.finish || p.start)]);
+  const from = weekStart(Math.min(todayDay - 60, ...days) - 14);
+  const to = Math.max(todayDay + 240, ...days) + 30;
+  ganttFrom = from;
+  const x = (d) => (d - from) * px;
+  const width = (to - from) * px;
+
+  // The scale: months, and weeks (or months alone when zoomed out).
+  const scale = el('div', { class: 'pg-scale', style: { width: `${width}px` } });
   for (let m = monthStart(from); m < to; m = addMonths(m, 1)) {
-    if (m >= from) scale.append(el('span', { class: 'pg-month', style: { left: `${x(m)}%` }, text: `${MONTH_NAMES[+fromDay(m).slice(5, 7) - 1].slice(0, 3)} ${fromDay(m).slice(0, 4)}` }));
+    scale.append(el('span', { class: 'pg-month', style: { left: `${x(m)}px` }, text: `${MONTH_NAMES[+fromDay(m).slice(5, 7) - 1].slice(0, 3)} ${fromDay(m).slice(0, 4)}` }));
   }
-  for (let w = weekStart(from); w < to; w += 7) if (w >= from) scale.append(el('span', { class: 'pg-week', style: { left: `${x(w)}%` }, text: String(+fromDay(w).slice(8, 10)) }));
-  const nav = el('div', { class: 'pg-nav' },
-    el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '‹', onclick: () => { page.ganttFrom = from - Math.round(spanDays / 3); redraw(); } }),
-    el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '›', onclick: () => { page.ganttFrom = from + Math.round(spanDays / 3); redraw(); } }),
-    el('select', { class: 'sc-select sc-select--sm', onchange: (e) => { page.ganttSpan = e.target.value; redraw(); } },
-      ...[['month', 'Month'], ['quarter', 'Quarter'], ['year', 'Year']].map(([k, t]) => el('option', { value: k, text: t, selected: page.ganttSpan === k }))),
-    el('button', { class: 'sc-button sc-button--sm', text: 'Today', onclick: () => { page.ganttFrom = null; redraw(); } }));
+  if (px >= 8) for (let w = weekStart(from); w < to; w += 7) scale.append(el('span', { class: 'pg-week', style: { left: `${x(w)}px` }, text: String(+fromDay(w).slice(8, 10)) }));
+  const grid = () => {
+    const g = el('div', { class: 'pg-grid', style: { width: `${width}px` } });
+    if (px >= 8) for (let w = weekStart(from); w < to; w += 7) g.append(el('span', { class: 'pg-gridline', style: { left: `${x(w)}px` } }));
+    g.append(el('span', { class: 'pg-today', style: { left: `${x(todayDay)}px` } }));
+    return g;
+  };
+
+  const bar = (p) => {
+    const s = toDay(p.start);
+    const f = Math.max(s, toDay(p.finish || p.start));
+    const late = p.deadline && !p.archived && toDay(p.deadline) < todayDay && (p.percent ?? 0) < 100;
+    const colour = projectColour(p.colour) || p.stageColour || 'var(--sc-text-3)';
+    const tip = el('span', { class: 'pg-tip' });
+    const node = el('div', {
+      class: `pg-bar${p.archived ? ' is-done' : ''}${late ? ' is-late' : ''}`,
+      style: { left: `${x(s)}px`, width: `${Math.max(px, (f - s + 1) * px)}px`, '--pc': colour },
+    },
+      el('span', { class: 'pg-edge is-start', title: 'Drag to change the start' }),
+      el('span', { class: 'pg-bar-name', text: p.name }),
+      el('span', { class: 'pg-bar-flags' }, p.stageName ? el('span', { class: 'pg-stage-dot', style: { background: p.stageColour }, title: `Stage: ${p.stageName}` }) : null,
+        late ? el('span', { class: 'ps-late', title: `Past its deadline, ${formatDate(p.deadline, 'long')}`, text: '!' }) : null),
+      el('span', { class: 'pg-progress', style: { width: `${Math.max(0, Math.min(100, p.percent || 0))}%` } }),
+      ...p.stageList.filter((ph) => ph.deadline).map((ph) => el('span', {
+        class: `pg-stage-mark${ph.status === 'done' ? ' is-done' : ''}`, style: { left: `${Math.max(0, Math.min(100, ((toDay(ph.deadline) - s + 1) / (f - s + 1)) * 100))}%`, background: ph.colour },
+        title: `${ph.name} · due ${formatDate(ph.deadline, 'long')}`,
+      })),
+      el('span', { class: 'pg-edge is-end', title: 'Drag to change the deadline' }),
+      el('button', { class: 'pg-more', text: '⋯', title: 'Project menu', onclick: (e) => { e.stopPropagation(); void projectMenuAt(p, e.clientX, e.clientY); } }),
+      tip);
+    const say = (a, b) => { tip.textContent = `${formatDate(fromDay(a), 'long')} – ${formatDate(fromDay(b), 'long')} (${b - a + 1} days)`; };
+    say(s, f);
+    node.addEventListener('contextmenu', (e) => { e.preventDefault(); void projectMenuAt(p, e.clientX, e.clientY); });
+    node.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.pg-more')) return;
+      e.preventDefault();
+      const mode = e.target.classList.contains('is-start') ? 'start' : e.target.classList.contains('is-end') ? 'end' : 'move';
+      const x0 = e.clientX;
+      let delta = 0;
+      let moved = false;
+      let shift = e.shiftKey;
+      try { node.setPointerCapture(e.pointerId); } catch { /* a pointer that cannot be captured still drags */ }
+      node.classList.add('is-dragging');
+      const shape = () => {
+        const onlyEnd = mode === 'end' || (mode === 'move' && shift);
+        const a = mode === 'start' ? Math.min(f, s + delta) : onlyEnd ? s : s + delta;
+        const b = mode === 'start' ? f : Math.max(a, f + delta);
+        return { a, b, onlyEnd };
+      };
+      const move = (ev) => {
+        shift = shift || ev.shiftKey;
+        delta = Math.round((ev.clientX - x0) / px);
+        if (Math.abs(ev.clientX - x0) > 3) moved = true;
+        const { a, b } = shape();
+        node.style.left = `${x(a)}px`;
+        node.style.width = `${Math.max(px, (b - a + 1) * px)}px`;
+        say(a, b);
+      };
+      const up = async () => {
+        node.removeEventListener('pointermove', move);
+        node.classList.remove('is-dragging');
+        if (!moved) { void import('./projectsheet.js').then((m) => m.projectSheet({ planId: p.id })); return; }
+        if (!delta) return;
+        const { a, b, onlyEnd } = shape();
+        const sync = await import('../state/sync.js');
+        const stages = await import('../model/stages.js');
+        try {
+          if (mode === 'move' && !onlyEnd) await sync.patchPlan(p.id, (proj) => stages.shiftProject(proj, delta), 'Move project');
+          else if (mode === 'start') await sync.patchPlan(p.id, (proj) => stages.setProjectDates(proj, { start: fromDay(a) }), 'Project start');
+          else await sync.patchPlan(p.id, (proj) => stages.setProjectDates(proj, { deadline: fromDay(b) }), 'Project deadline');
+        } catch (err) { act.hint(err.message); }
+        await reloadAllTasks();
+      };
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', () => { void up(); }, { once: true });
+    });
+    return node;
+  };
+
   const body = el('div', { class: 'pg-body' });
-  const byWs = new Map();
-  for (const p of list) { if (!byWs.has(p.workspaceId)) byWs.set(p.workspaceId, []); byWs.get(p.workspaceId).push(p); }
-  for (const [w, ps] of [...byWs].sort((a, b) => wsName(a[0]).localeCompare(wsName(b[0])))) {
-    const key = `g|${w}`;
-    const shut = folded.has(key);
-    body.append(el('div', { class: 'pg-ws', onclick: () => { if (shut) folded.delete(key); else folded.add(key); redraw(); } },
-      el('span', { class: 'at-twist', text: shut ? '▸' : '▾' }), el('span', { class: 'tl-value' }, icon('workspace'), el('strong', { text: wsName(w) })), el('span', { class: 'sc-faint', text: ` ${ps.length}` })));
-    if (shut) continue;
-    const byStage = new Map();
-    for (const p of ps) { const k = p.stageName || ''; if (!byStage.has(k)) byStage.set(k, []); byStage.get(k).push(p); }
-    for (const [stage, sp] of [...byStage].sort((a, b) => (a[0] === '') - (b[0] === '') || a[0].localeCompare(b[0]))) {
-      const lane = el('div', { class: 'pg-lane' });
-      for (const p of sp.sort((a, b) => a.start.localeCompare(b.start))) {
-        const s = toDay(p.start);
-        const f = Math.max(s, toDay(p.finish || p.start));
-        const offLeft = f < from;
-        const offRight = s > to;
-        const left = Math.max(0, Math.min(100, x(s)));
-        const right = Math.max(0, Math.min(100, x(f + 1)));
-        lane.append(el('button', {
-          class: `pg-bar${offLeft ? ' is-before' : ''}${offRight ? ' is-after' : ''}${p.archived ? ' is-done' : ''}`,
-          style: offLeft ? { left: '0%' } : offRight ? { right: '0%' } : { left: `${left}%`, width: `max(${Math.max(0.8, right - left)}%, 150px)` },
-          title: `${p.name} · ${formatDate(p.start, 'long')} – ${formatDate(p.finish, 'long')}`,
-          onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet({ planId: p.id })); },
-        }, offLeft ? el('span', { class: 'pg-arrow', text: '‹' }) : null,
-          el('span', { class: 'pg-bar-text' }, el('strong', { text: p.name }), el('span', { text: `${formatDate(p.start, 'day')} – ${formatDate(p.finish, 'day')}` })),
-          offRight ? el('span', { class: 'pg-arrow', text: '›' }) : null));
-      }
-      body.append(el('div', { class: 'pg-row' },
-        el('div', { class: 'pg-label' }, stage ? el('span', { class: 'ps-chip', style: { '--st': sp[0].stageColour }, text: stage }) : el('span', { class: 'ps-chip is-none', text: 'No stage' }), el('span', { class: 'sc-faint', text: String(sp.length) })),
-        el('div', { class: 'pg-track' }, todayDay >= from && todayDay <= to ? el('div', { class: 'pg-today', style: { left: `${x(todayDay)}%` } }) : null, lane)));
+  const levels = view.groups.filter((g) => GANTT_FIELDS.includes(g));
+  // A bar out of sight shows as a chip at the edge it is past; a click brings it into view.
+  const chip = (p, side) => el('button', { class: `pg-chip is-${side}`, onclick: () => scrollToDay(Math.round((toDay(p.start) + toDay(p.finish || p.start)) / 2), true) },
+    side === 'left' ? el('span', { class: 'pg-chip-arrow', text: '‹' }) : null,
+    el('span', { class: 'pg-chip-text' }, el('strong', { text: p.name }), el('span', { text: `${formatDate(p.start, 'day')} – ${formatDate(p.finish || p.start, 'day')}` })),
+    side === 'right' ? el('span', { class: 'pg-chip-arrow', text: '›' }) : null);
+  const lanes = (ps) => el('div', { class: 'pg-lanes', style: { width: `${width}px` } }, grid(),
+    ...[...ps].sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name)).map((p) => el('div', {
+      class: 'pg-lane', 'data-from': String(x(toDay(p.start))), 'data-to': String(x(Math.max(toDay(p.start), toDay(p.finish || p.start)) + 1)),
+    }, bar(p), chip(p, 'left'), chip(p, 'right'))));
+  const walk = (ps, level, prefix) => {
+    if (level >= levels.length) return;
+    const field = levels[level];
+    const map = new Map();
+    for (const p of ps) { const k = ganttKey(field, p); if (!map.has(k)) map.set(k, []); map.get(k).push(p); }
+    for (const k of orderKeys(field, [...map.keys()], view)) {
+      const group = map.get(k);
+      const key = `${prefix}/${field}:${k}`;
+      const shut = folded.has(key);
+      const sample = field === 'stage' ? { phaseColour: group[0].stageColour } : null;
+      const label = el('div', { class: 'pg-label', style: { paddingLeft: `${10 + level * 14}px` } },
+        el('span', { class: 'at-twist', text: shut ? '▸' : '▾' }), valueNode(field, k, nameOf(field, k, null), sample), el('span', { class: 'sc-faint', text: String(group.length) }));
+      const last = level === levels.length - 1;
+      const row = el('div', { class: `pg-row${last ? '' : ' is-head'}` }, label, last && !shut ? lanes(group) : el('div', { class: 'pg-lanes pg-head-lane', style: { width: `${width}px` } }, grid()));
+      label.addEventListener('click', () => { if (shut) folded.delete(key); else folded.add(key); redraw(); });
+      body.append(row);
+      if (!shut && !last) walk(group, level + 1, key);
     }
-  }
-  return el('div', { class: 'pg' },
-    el('div', { class: 'pg-head' }, el('div', { class: 'pg-label' }, nav), el('div', { class: 'pg-track' }, scale,
-      todayDay >= from && todayDay <= to ? el('span', { class: 'pg-today-tag', style: { left: `${x(todayDay)}%` }, text: `${WEEKDAY_NAMES[weekday(todayDay)].slice(0, 3)} ${formatDate(today(), 'day')}` }) : null)),
-    body);
+  };
+  if (levels.length) walk(list, 0, 'g');
+  else body.append(el('div', { class: 'pg-row' }, el('div', { class: 'pg-label' }, el('span', { class: 'sc-faint', text: `${list.length} projects` })), lanes(list)));
+
+  const scroller = el('div', { class: 'pg-scroll' },
+    el('div', { class: 'pg-canvas', style: { width: `${LABEL_W + width}px` } },
+      el('div', { class: 'pg-head' }, el('div', { class: 'pg-label' }),
+        el('div', { class: 'pg-track', style: { width: `${width}px` } }, scale,
+          el('span', { class: 'pg-today-tag', style: { left: `${x(todayDay)}px` }, text: `${WEEKDAY_NAMES[weekday(todayDay)].slice(0, 3)} ${formatDate(today(), 'day')}` }))),
+      body));
+  let pending = false;
+  const edges = () => {
+    pending = false;
+    const a = scroller.scrollLeft;
+    const b = a + scroller.clientWidth - LABEL_W;
+    for (const lane of scroller.querySelectorAll('.pg-lane')) {
+      const l = +lane.dataset.from;
+      const r = +lane.dataset.to;
+      const [left, right] = lane.querySelectorAll('.pg-chip');
+      left.hidden = !(r < a + 8);
+      right.hidden = !(l > b - 8);
+      if (!left.hidden) left.style.left = `${a + 6}px`;
+      if (!right.hidden) right.style.left = `${b - right.offsetWidth - 6}px`;
+    }
+  };
+  scroller.addEventListener('scroll', () => { page.ganttScroll = scroller.scrollLeft; if (!pending) { pending = true; requestAnimationFrame(edges); } });
+  // Where it was, or today in the middle.
+  requestAnimationFrame(() => { if (page.ganttScroll !== null) scroller.scrollLeft = page.ganttScroll; else scrollToDay(todayDay); edges(); });
+  return el('div', { class: 'pg' }, scroller);
+}
+
+/** The sidebar's menu for a project — colour, open, complete, cancel, link, favourites, move, delete. */
+async function projectMenuAt(p, x, y) {
+  const { planMenu, refreshSidebar } = await import('./sidebar.js');
+  const sync = await import('../state/sync.js');
+  const summary = (await sync.listPlans()).find((s) => s.id === p.id) || p;
+  await planMenu(summary, [])(x, y);
+  // The menu changes plans behind this view's back: read them again when it closes.
+  const again = () => { void reloadAllTasks(); void refreshSidebar(); };
+  setTimeout(() => addEventListener('pointerdown', () => setTimeout(again, 400), { once: true, capture: true }), 0);
 }
 
 // ---------------------------------------------------------------- page
@@ -933,7 +1105,7 @@ export function renderAllTasks(root, { scope: s = 'all' } = {}) {
   let layout = null;
   try { layout = currentLayout(); } catch { layout = null; }
   const list = visible(view, layout);
-  const projectCount = plans.filter((p) => (view.completedProjects || !p.archived) && (!view.filters.workspace || p.workspaceId === view.filters.workspace)).length;
+  const projectCount = ganttPlans(view).length;
   pane.append(controls(view.layout === 'gantt' ? projectCount : list.length));
   if (view.layout === 'workload') {
     // Workload is Resource Usage: every person's hours by day, over every plan.
