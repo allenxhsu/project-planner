@@ -11,7 +11,7 @@
       "index.html",
       "src/**",
       "ui-kit/**",
-      "sync-kit/**"
+      "sync-kit/js/**"
     ]
   },
   "entry": "index.html",
