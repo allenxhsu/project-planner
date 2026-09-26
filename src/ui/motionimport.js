@@ -45,9 +45,21 @@ async function readExport(files) {
   return { projects: out.projects || [], tasks: out.tasks || [] };
 }
 
+/**
+ * A first step with a button to choose the file: a file chooser opens only
+ * from a click in the page (the Mac app's menu commands are not one).
+ */
+function chooseFiles() {
+  return open('Import from Motion', (close) => [
+    el('p', { text: 'Choose the ZIP from Motion’s Settings ▸ Export data (or its projects.json and tasks.json).' }),
+    foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)),
+      button('Choose the export ZIP…', async () => close(await pickFiles()), 'sc-button--primary')),
+  ]);
+}
+
 export async function importMotion(picked = null) {
-  const files = picked || await pickFiles();
-  if (!files.length) return;
+  const files = picked || await chooseFiles();
+  if (!files?.length) return;
   let data;
   try { data = await readExport(files); } catch (err) { act.hint(err.message); return; }
   const result = motionToPlans(data);

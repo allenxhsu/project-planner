@@ -13,6 +13,7 @@ enum MainMenu {
             ],
             menus: [
                 ShellMenu.submenu("File", ShellMenu.documentItems() + [
+                    ShellMenu.web("New Project…", "file.newProject", "n", [.command, .shift]),
                     ShellMenu.web("Open the Sample Plan", "file.sample"),
                     .separator(),
                 ] + [
@@ -24,7 +25,11 @@ enum MainMenu {
                     ShellMenu.item("Revert to Saved", #selector(NSDocument.revertToSaved(_:))),
                 ] + [
                     .separator(),
+                    ShellMenu.web("Import from Motion (Export ZIP)…", "file.importMotion"),
                     ShellMenu.item("Import Microsoft Project or CSV…", #selector(NSDocumentController.openDocument(_:)), "i", [.command, .shift]),
+                    ShellMenu.web("Import Everything…", "file.importAll"),
+                    ShellMenu.web("Export Everything…", "file.exportAll"),
+                    ShellMenu.web("Export This Week as Calendar (.ics)…", "file.exportIcs"),
                     ShellMenu.submenu("Export", [
                         ShellMenu.web("Microsoft Project XML…", "file.exportXml"),
                         ShellMenu.web("Microsoft Project MPX…", "file.exportMpx"),
@@ -78,6 +83,8 @@ enum MainMenu {
                     ShellMenu.web("Kanban", "view.kanban", "3"),
                     ShellMenu.web("All Tasks", "view.alltasks", "4"),
                     ShellMenu.web("Calendar", "view.calendar", "5"),
+                    ShellMenu.web("Team Schedule", "view.team"),
+                    ShellMenu.web("People", "view.people"),
                     ShellMenu.web("Priority", "view.priority", "6"),
                     ShellMenu.web("Task Sheet", "view.sheet", "7"),
                     ShellMenu.web("Resource Sheet", "view.resources", "8"),
@@ -91,13 +98,15 @@ enum MainMenu {
                     ShellMenu.web("Expand All", "view.expandAll"),
                     ShellMenu.web("Collapse All", "view.collapseAll"),
                     .separator(),
-                    ShellMenu.web("Details Panel", "view.inspector"),
                     ShellMenu.web("Checks Panel", "view.checks"),
                     .separator(),
                     ShellMenu.fullScreenItem(),
                 ]),
                 ShellMenu.submenu("Project", [
-                    ShellMenu.web("Project Information & Working Time…", "project.info"),
+                    ShellMenu.web("Project…", "project.sheet"),
+                    ShellMenu.web("Project Settings — Working Time & Scheduling…", "project.info"),
+                    ShellMenu.web("Custom Fields…", "project.fields"),
+                    ShellMenu.web("Archive Project", "project.archive"),
                     ShellMenu.web("Statistics", "project.stats"),
                 ]),
             ],

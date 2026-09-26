@@ -294,6 +294,10 @@ export const COMMANDS = {
   },
   'project.info': () => { void import('./inspector.js').then((m) => m.projectSettingsDialog()); }, 'project.stats': () => set({ bottomOpen: true, bottomTab: 'stats' }),
   'export.svg': guarded(exportSvg), 'export.png': guarded(exportPng), 'export.pdf': guarded(exportPdf),
+  'file.importMotion': () => { void import('./motionimport.js').then((m) => m.importMotion()); },
+  'file.newProject': () => { void newProjectWizard(); },
+  'project.sheet': () => { void import('./projectsheet.js').then((m) => m.projectSheet()); },
+  'project.fields': () => { void editFieldsDialog(); },
   'help.guide': help,
 };
 const run = (id) => COMMANDS[id];
@@ -313,7 +317,7 @@ const MENUS = {
     { label: 'Export week as calendar (.ics)', run: run('file.exportIcs') }, '-',
     { label: 'Export everything (every project, person and setting)…', run: run('file.exportAll') },
     { label: 'Import everything…', run: run('file.importAll') },
-    { label: 'Import from Motion (export ZIP)…', run: () => { void import('./motionimport.js').then((m) => m.importMotion()); } },
+    { label: 'Import from Motion (export ZIP)…', run: run('file.importMotion') },
   ],
   Edit: () => [
     { label: `Undo${canUndo() ? ` ${store._undo[store._undo.length - 1].label.toLowerCase()}` : ''}`, key: '⌘Z', disabled: !canUndo(), run: undo },
