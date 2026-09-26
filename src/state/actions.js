@@ -4,7 +4,7 @@ import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
 import {
-  insertTask, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
+  insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
   setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
@@ -13,6 +13,8 @@ import {
   cleanField, fieldsOf, getField, removeField, setFieldValue, getResource,
   setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
 } from '../model/model.js';
+import { workspaceNow } from './sync.js';
+import { taskDefaults } from '../ui/taskdefaults.js';
 import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, logProject, insertStage } from '../model/stages.js';
 
 export const hint = (text) => set({ hint: text });
@@ -82,6 +84,32 @@ export function moveCursor(delta, { extend = false } = {}) {
   const cur = rows.findIndex((t) => t.id === activeId());
   const next = rows[Math.max(0, Math.min(rows.length - 1, (cur < 0 ? (delta > 0 ? -1 : rows.length) : cur) + delta))];
   selectTask(next.id, { range: extend });
+}
+
+/**
+ * Who a new task goes to when nobody is named: the workspace's default
+ * assignee (Workspace settings), else the one in Task defaults. They join the
+ * plan as a resource if they are not on it yet.
+ */
+export function defaultAssigneeFor(p) {
+  const w = workspaceNow(p.workspaceId);
+  if (w?.defaultAssignee?.name) return w.defaultAssignee;
+  const d = taskDefaults();
+  return d.assigneeName ? { personId: d.assigneeId || null, name: d.assigneeName } : null;
+}
+export function applyDefaultAssignee(p, t) {
+  if (!t || t.assignments.length || t.milestone) return;
+  const who = defaultAssigneeFor(p);
+  if (!who) return;
+  const same = (r) => (who.personId && r.personId === who.personId) || String(r.name).trim().toLowerCase() === String(who.name).trim().toLowerCase();
+  const r = p.resources.find((x) => x.type !== 'material' && x.type !== 'cost' && same(x)) || addResource(p, { name: who.name, personId: who.personId || null });
+  assign(p, t.id, r.id, 1);
+}
+/** A task inserted by the planner: as the model makes it, then given its default assignee. */
+function insertTask(p, at, props = {}) {
+  const t = insertTaskRaw(p, at, props);
+  applyDefaultAssignee(p, t);
+  return t;
 }
 
 // ---------------------------------------------------------------- tasks

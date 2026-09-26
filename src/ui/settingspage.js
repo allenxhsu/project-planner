@@ -56,6 +56,20 @@ const minText = (m) => (m < 60 ? `${m} min` : `${m / 60} hour${m === 60 ? '' : '
 
 async function command(id) { const { COMMANDS } = await import('./toolbar.js'); COMMANDS[id]?.(); }
 
+/** Task defaults ▸ Assignee: someone from People, or nobody. Filled once the directory is read. */
+function peopleSelect(d) {
+  const sel = el('select', { class: 'sc-select', onchange: async (e) => {
+    const { listPeople } = await import('../state/sync.js');
+    const p = (await listPeople()).find((x) => x.id === e.target.value);
+    setTaskDefaults({ assigneeId: p?.id || '', assigneeName: p?.name || '' });
+    act.hint(p ? `New tasks go to ${p.name} unless their workspace says otherwise.` : 'New tasks start with nobody on them.');
+  } }, el('option', { value: '', text: 'Nobody' }));
+  void import('../state/sync.js').then((s) => s.listPeople()).then((people) => {
+    for (const p of people) sel.append(el('option', { value: p.id, text: p.name, selected: p.id === d.assigneeId || (!d.assigneeId && p.name === d.assigneeName) }));
+  });
+  return sel;
+}
+
 const PAGES = {
   calendars() {
     const host = el('div');
@@ -77,6 +91,7 @@ const PAGES = {
     return page('Task defaults',
       note('These are used when a task is made with ＋ New task.'),
       section(null,
+        row('Assignee', peopleSelect(d), 'unless the workspace has its own default'),
         row('Priority', select(d.urgency, Object.entries(URGENCIES).map(([k, u]) => [k, u.label]), change('urgency'))),
         row('Duration', select(d.minutes, [15, 30, 45, 60, 90, 120, 180, 240, 480].map((m) => [m, minText(m)]), (v) => change('minutes')(+v))),
         row('Min chunk duration', select(d.chunk, [['', 'The plan’s block size'], ...BLOCK_CHOICES.map((h) => [h, minText(h * 60)]), ['whole', 'No chunks']], change('chunk'))),
@@ -287,8 +302,23 @@ async function workspacePage(id) {
     const name = el('input', { class: 'sc-input st-wide', type: 'text', value: w.name, onchange: async (e) => { if (e.target.value.trim()) { await sync.renameWorkspace(id, e.target.value); await refresh(); } } });
     const members = new Map();
     for (const p of open) for (const r of p.resources.filter((x) => x.type !== 'material' && x.type !== 'cost')) members.set(r.personId || r.name.toLowerCase(), r.name);
+    const people = await sync.listPeople().catch(() => []);
+    const current = w.defaultAssignee || null;
+    const assignee = el('select', { class: 'sc-select', onchange: async (e) => {
+      const p = people.find((x) => x.id === e.target.value);
+      await sync.setWorkspaceAssignee(id, p ? { personId: p.id, name: p.name } : null);
+      redraw();
+    } }, el('option', { value: '', text: 'Nobody — the Task defaults decide', selected: !current }),
+      ...people.map((p) => el('option', { value: p.id, text: p.name, selected: !!current && (current.personId === p.id || (!current.personId && current.name === p.name)) })));
+    const unassigned = open.reduce((n, p) => n + p.tasks.filter((t) => !t.milestone && !t.archived && (t.percent ?? 0) < 100 && !t.assignments.length && !p.tasks.some((c, j) => j === p.tasks.indexOf(t) + 1 && c.level > t.level)).length, 0);
     body = el('div', { class: 'st-body' },
       section('Workspace name', name),
+      section('Default assignee', note(`New tasks in ${w.name}’s projects go to this person when nobody else is named.`), assignee,
+        current && unassigned ? button(`Assign ${unassigned} unassigned open task${unassigned === 1 ? '' : 's'} to ${current.name}`, async () => {
+          const n = await sync.assignUnassigned(id, current);
+          act.hint(`${n} task${n === 1 ? '' : 's'} assigned to ${current.name}.`);
+          redraw();
+        }) : null),
       section('Members', note('Everyone given work in this workspace’s projects.'),
         ...(members.size ? [...members.values()].map((m) => el('div', { class: 'st-inline st-line' }, el('span', { class: 'tl-avatar', text: m[0] }), el('span', { text: m }))) : [note('Nobody yet.')])),
       section('Folders', ...(folders.length ? folders.map((f) => el('div', { class: 'st-inline st-line' }, icon('folder'), el('span', { text: `${f.name} · ${open.filter((p) => p.folderId === f.id).length} projects` }),

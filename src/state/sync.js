@@ -631,13 +631,43 @@ export function setActiveWorkspace(id) {
   set({});
 }
 
+/** The workspaces last read, for what has to know one without waiting (a new task's default assignee). */
+let workspacesKnown = [];
+export const workspaceNow = (id) => (id ? workspacesKnown.find((w) => w.id === id) || null : null);
+
 export async function listWorkspaces() {
   if (!recordStore) return [];
   const all = await recordStore.all();
-  return all
+  workspacesKnown = all
     .filter((r) => r && r.type === WORKSPACE_TYPE && !r.deletedAt && r.name)
     // In the order they were dragged into, then by name.
     .sort((a, b) => (Number.isFinite(a.order) ? a.order : Infinity) - (Number.isFinite(b.order) ? b.order : Infinity) || String(a.name).localeCompare(String(b.name)));
+  return workspacesKnown;
+}
+
+/** Give every open, unassigned task of a workspace's projects to `who`; how many it gave. */
+export async function assignUnassigned(workspaceId, who) {
+  if (!who?.name) return 0;
+  const { assign, addResource, isSummary } = await import('../model/model.js');
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  let n = 0;
+  for (const s of await listPlans()) {
+    if (s.workspaceId !== workspaceId || s.template) continue;
+    await patchPlan(s.id, (p) => {
+      const open = p.tasks.filter((t, i) => !isSummary(p, i) && !t.milestone && !t.archived && (t.percent ?? 0) < 100 && !t.assignments.length);
+      if (!open.length) return;
+      const r = p.resources.find((x) => (who.personId && x.personId === who.personId) || norm(x.name) === norm(who.name)) || addResource(p, { name: who.name, personId: who.personId || null });
+      for (const t of open) { assign(p, t.id, r.id, 1); n++; }
+    }, 'Assign unassigned tasks');
+  }
+  return n;
+}
+
+/** Who a workspace's new tasks go to unless someone else is named: { personId, name }, or null. */
+export async function setWorkspaceAssignee(id, person) {
+  const done = await patchWorkspace(id, (w) => { w.defaultAssignee = person && person.name ? { personId: person.personId || null, name: person.name } : null; });
+  await listWorkspaces();
+  return done;
 }
 
 /** Workspaces in a new order, top to bottom — kept in their records, so every device shows it. */
