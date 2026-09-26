@@ -379,6 +379,11 @@ function whoOf(entries, block) {
  * width; a block alone in its hour keeps the whole column.
  */
 function sideBySide(dayBlocks) {
+  // A short block is drawn taller than it lasts (16px at least, so it can be
+  // read); its neighbours are placed by the size it is drawn at, or a five-
+  // minute block would be drawn over the one that starts ten minutes later.
+  const shortest = Math.ceil((16 / HOUR_H) * 60) + 1;
+  const drawnEnd = (b) => Math.max(b.end, b.start + shortest);
   const sorted = [...dayBlocks].sort((a, b) => a.start - b.start || a.end - b.end);
   const out = [];
   let cluster = [];
@@ -389,7 +394,7 @@ function sideBySide(dayBlocks) {
     const placed = cluster.map((b) => {
       let slot = ends.findIndex((e) => e <= b.start);
       if (slot < 0) { slot = ends.length; ends.push(0); }
-      ends[slot] = b.end;
+      ends[slot] = drawnEnd(b);
       return { block: b, lane: slot };
     });
     const lanes = ends.length;
@@ -400,7 +405,7 @@ function sideBySide(dayBlocks) {
   for (const b of sorted) {
     if (cluster.length && b.start >= clusterEnd) flush();
     cluster.push(b);
-    clusterEnd = Math.max(clusterEnd, b.end);
+    clusterEnd = Math.max(clusterEnd, drawnEnd(b));
   }
   flush();
   return out;

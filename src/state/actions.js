@@ -14,6 +14,7 @@ import {
   setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
 } from '../model/model.js';
 import { workspaceNow } from './sync.js';
+import { today as localToday } from '../model/calendar.js';
 import { taskDefaults } from '../ui/taskdefaults.js';
 import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, logProject, insertStage } from '../model/stages.js';
 
@@ -531,6 +532,27 @@ export function createTask(spec) {
  * A task that already happened: made on time that has gone, it is work done
  * then — logged at that hour, drawn there ticked, and complete as of its end.
  */
+/**
+ * Done from its block on the calendar: the part of the block already behind
+ * the clock is logged as worked there — so the finished work stays on the
+ * calendar where it happened, as Motion keeps it — and the task is complete.
+ */
+export function completeFromBlock(taskId, { day, start, end }) {
+  const d = new Date();
+  const nowMin = d.getHours() * 60 + d.getMinutes();
+  const todayIso = localToday();
+  const worked = day === todayIso && start < nowMin ? Math.min(end, nowMin) - start : 0;
+  return attempt('Complete task', (p) => {
+    const t = getTask(p, taskId);
+    if (!t) throw new Error('That task is gone.');
+    if (worked >= 5) {
+      const who = t.assignments.map((a) => getResource(p, a.resourceId)).find(Boolean);
+      addTimesheet(p, { taskId, resourceId: who?.id || null, date: day, start, hours: Math.round((worked / 60) * 100) / 100, note: 'Worked' });
+    }
+    setTaskField(p, taskId, 'percent', 100);
+  });
+}
+
 export function newTaskDoneAt({ name, day, start, minutes, notes = '' }) {
   let made = null;
   const ok = attempt('Log a task that happened', (p) => {
