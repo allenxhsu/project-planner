@@ -353,3 +353,23 @@ test('merging two resources of one person joins their work and drops the second'
   assert.equal(t2.assignments[0].resourceId, a.id);
   assert.equal(p.timesheets[0].resourceId, a.id);
 });
+
+test('merging workspaces maps a plan\'s statuses and labels', async () => {
+  const { createProject, insertTask, stages, stageOf, mapStatus, mapLabel, setStage } = await import('../src/model/model.js');
+  const p = createProject('Map', '2026-10-05');
+  const t = insertTask(p, 0, { name: 'Blocked one', duration: 1, level: 1 });
+  const u = insertTask(p, 1, { name: 'Labelled', duration: 1, level: 1 });
+  setStage(p, t.id, stages(p).find((s) => s.name === 'Blocked').id);
+  u.labels = ['urgent', 'home'];
+  // Blocked → Todo: the task moves, the status goes.
+  assert.equal(mapStatus(p, 'Blocked', 'Todo'), true);
+  assert.equal(stageOf(p, t).name, 'Todo');
+  assert.ok(!stages(p).some((s) => s.name === 'Blocked'));
+  // A status the plan does not have is a rename.
+  mapStatus(p, 'Backlog', 'Someday');
+  assert.ok(stages(p).some((s) => s.name === 'Someday'));
+  // Labels: renamed, or taken off.
+  mapLabel(p, 'urgent', 'ASAP');
+  mapLabel(p, 'home', '');
+  assert.deepEqual(u.labels, ['ASAP']);
+});

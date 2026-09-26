@@ -756,21 +756,36 @@ async function patchWorkspace(id, change) {
  * each folder going into the target's folder of the same name (made if it is
  * not there), and `fromId`, empty, is deleted.
  */
-export async function mergeWorkspaces(fromId, intoId) {
+export async function mergeWorkspaces(fromId, intoId, choices = {}) {
   if (!recordStore || !fromId || !intoId || fromId === intoId) return 0;
   const from = await recordStore.get(fromId);
   if (!from || from.type !== WORKSPACE_TYPE) return 0;
   const norm = (s) => String(s || '').trim().toLowerCase();
+  // Folders: choices.folders[id] is a target folder's id, 'new', or 'none';
+  // unsaid, a folder joins the target's of the same name, or is made there.
   const map = new Map();
   for (const f of foldersOf(from)) {
+    const pick = choices.folders?.[f.id];
     const into = await recordStore.get(intoId);
     const same = foldersOf(into).find((x) => norm(x.name) === norm(f.name));
-    map.set(f.id, same ? same.id : (await createFolder(intoId, f.name))?.id || null);
+    if (pick === 'none') map.set(f.id, null);
+    else if (pick && pick !== 'new') map.set(f.id, pick);
+    else if (!pick && same) map.set(f.id, same.id);
+    else map.set(f.id, (await createFolder(intoId, f.name))?.id || null);
   }
+  const { mapStatus, mapLabel } = await import('../model/model.js');
+  const statuses = Object.entries(choices.statuses || {}).filter(([a, b]) => b && a !== b);
+  const labels = Object.entries(choices.labels || {}).filter(([a, b]) => a !== b);
   let moved = 0;
   for (const s of await listPlans()) {
     if (s.workspaceId !== fromId) continue;
-    await setPlanFolder(s.id, intoId, s.folderId ? map.get(s.folderId) || null : null);
+    const folderId = s.folderId ? map.get(s.folderId) || null : null;
+    await patchPlan(s.id, (p) => {
+      p.workspaceId = intoId;
+      p.folderId = folderId;
+      for (const [a, b] of statuses) mapStatus(p, a, b);
+      for (const [a, b] of labels) mapLabel(p, a, b);
+    }, 'Merge workspaces');
     moved++;
   }
   await deleteWorkspace(fromId);

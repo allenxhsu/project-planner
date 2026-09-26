@@ -138,27 +138,102 @@ const PAGES = {
 
 let wsTab = 'overview';
 
-/** Merge a workspace into another: pick the one it goes into, confirm, move. */
+/**
+ * Merge a workspace into another — a wizard, because two workspaces seldom
+ * agree: which one it goes into; where each of its folders goes; what its
+ * projects' statuses and labels that the other does not use become; then a
+ * review. Nothing changes until Merge.
+ */
 export async function mergeWorkspaceDialog(fromId) {
   const sync = await import('../state/sync.js');
-  const { formDialog, confirmDialog: confirm, showText } = await import('./dialog.js');
+  const { parse } = await import('../io/json.js');
+  const { stages } = await import('../model/model.js');
+  const { open: openDialog, foot, button: dialogButton, showText } = await import('./dialog.js');
   const spaces = await sync.listWorkspaces();
   const from = spaces.find((w) => w.id === fromId);
   const others = spaces.filter((w) => w.id !== fromId);
   if (!from || !others.length) { act.hint('There is no other workspace to merge into.'); return; }
-  const answer = await formDialog(`Merge “${from.name}”`, [
-    { key: 'into', label: 'Into', type: 'select', value: others[0].id, options: others.map((w) => ({ value: w.id, label: w.name })) },
-  ], 'Next');
-  if (!answer) return;
-  const into = others.find((w) => w.id === answer.into);
-  const n = (await sync.listPlans()).filter((p) => p.workspaceId === fromId).length;
-  if (!(await confirm(`Merge “${from.name}” into “${into.name}”?`,
-    `Its ${n} project${n === 1 ? '' : 's'} and ${sync.foldersOf(from).length} folder${sync.foldersOf(from).length === 1 ? '' : 's'} move into ${into.name} (a folder joins one of the same name there), and ${from.name} is deleted.`, 'Merge'))) return;
-  const moved = await sync.mergeWorkspaces(fromId, into.id);
+  const plansIn = {};
+  for (const r of await sync.planRecords()) {
+    try { const p = parse(r.body).project; (plansIn[p.workspaceId || ''] ||= []).push(p); } catch { /* unreadable */ }
+  }
+  const norm = (x) => String(x || '').trim().toLowerCase();
+  const statusesOf = (ps) => [...new Set(ps.flatMap((p) => stages(p).map((st) => st.name)))];
+  const labelsOf = (ps) => [...new Set(ps.flatMap((p) => p.tasks.flatMap((t) => t.labels || [])))].sort();
+  const mine = plansIn[fromId] || [];
+
+  const state = { step: 0, into: others[0].id, folders: {}, statuses: {}, labels: {} };
+  const STEPS = ['Into', 'Folders', 'Statuses', 'Labels', 'Review'];
+  const target = () => others.find((w) => w.id === state.into);
+  const theirs = () => plansIn[state.into] || [];
+  const newStatuses = () => statusesOf(mine).filter((n) => !statusesOf(theirs()).some((m) => norm(m) === norm(n)));
+  const newLabels = () => labelsOf(mine).filter((n) => !labelsOf(theirs()).some((m) => norm(m) === norm(n)));
+
+  const done = await openDialog(`Merge “${from.name}”`, (close) => {
+    const body = el('div', { class: 'mw-body' });
+    const footer = el('div');
+    const pick = (value, options, onchange) => el('select', { class: 'sc-select', onchange: (e) => onchange(e.target.value) },
+      ...options.map(([v, label]) => el('option', { value: v, text: label, selected: v === value })));
+    const line = (label, control) => el('div', { class: 'mw-line' }, el('span', { class: 'mw-from', text: label }), el('span', { class: 'sc-faint', text: '→' }), control);
+    const draw = () => {
+      const t = target();
+      const steps = el('div', { class: 'mw-steps' }, ...STEPS.map((name, i) => el('span', { class: `mw-step${i === state.step ? ' is-on' : ''}${i < state.step ? ' is-done' : ''}`, text: `${i + 1}. ${name}` })));
+      let content;
+      if (state.step === 0) {
+        content = [el('p', { class: 'sc-muted small', text: `${mine.length} project${mine.length === 1 ? '' : 's'} and ${sync.foldersOf(from).length} folder${sync.foldersOf(from).length === 1 ? '' : 's'} will move, and “${from.name}” is removed.` }),
+          line(from.name, pick(state.into, others.map((w) => [w.id, w.name]), (v) => { state.into = v; state.folders = {}; state.statuses = {}; state.labels = {}; }))];
+      } else if (state.step === 1) {
+        const folders = sync.foldersOf(from);
+        const theirFolders = sync.foldersOf(t);
+        content = folders.length ? [el('p', { class: 'sc-muted small', text: `Where each folder of ${from.name} goes in ${t.name}.` }),
+          ...folders.map((f) => {
+            const same = theirFolders.find((x) => norm(x.name) === norm(f.name));
+            const value = state.folders[f.id] || (same ? same.id : 'new');
+            return line(`▭ ${f.name} (${mine.filter((p) => p.folderId === f.id).length})`, pick(value, [
+              ['new', `A new folder “${f.name}”`], ...theirFolders.map((x) => [x.id, `Join “${x.name}”`]), ['none', 'No folder — loose in the workspace']],
+            (v) => { state.folders[f.id] = v; }));
+          })] : [el('p', { class: 'sc-muted small', text: `${from.name} has no folders. Nothing to resolve here.` })];
+      } else if (state.step === 2) {
+        const extra = newStatuses();
+        const theirStatuses = statusesOf(theirs()).length ? statusesOf(theirs()) : ['Backlog', 'Todo', 'In Progress', 'Blocked', 'Completed', 'Cancelled'];
+        content = extra.length ? [el('p', { class: 'sc-muted small', text: `Statuses ${from.name}’s projects use that ${t.name}’s do not. Map each to one of theirs, or keep it.` }),
+          ...extra.map((n) => line(n, pick(state.statuses[n] || '', [['', 'Keep it'], ...theirStatuses.map((m) => [m, `Becomes “${m}”`])], (v) => { state.statuses[n] = v; })))]
+          : [el('p', { class: 'sc-muted small', text: 'Both workspaces use the same statuses. Nothing to resolve here.' })];
+      } else if (state.step === 3) {
+        const extra = newLabels();
+        const theirLabels = labelsOf(theirs());
+        content = extra.length ? [el('p', { class: 'sc-muted small', text: `Labels on ${from.name}’s tasks that ${t.name} does not use. Keep, rename to one of theirs, or take off.` }),
+          ...extra.map((n) => line(`# ${n}`, pick(n in state.labels ? state.labels[n] : n, [[n, 'Keep it'], ...theirLabels.map((m) => [m, `Becomes “${m}”`]), ['', 'Take it off']], (v) => { state.labels[n] = v; })))]
+          : [el('p', { class: 'sc-muted small', text: 'No labels to resolve.' })];
+      } else {
+        const folderLines = sync.foldersOf(from).map((f) => {
+          const v = state.folders[f.id];
+          const same = sync.foldersOf(t).find((x) => norm(x.name) === norm(f.name));
+          const to = v === 'none' ? 'no folder' : v && v !== 'new' ? `“${sync.foldersOf(t).find((x) => x.id === v)?.name}”` : same && !v ? `“${same.name}”` : `new “${f.name}”`;
+          return `Folder ${f.name} → ${to}`;
+        });
+        const statusLines = Object.entries(state.statuses).filter(([, b]) => b).map(([a, b]) => `Status ${a} → ${b}`);
+        const labelLines = Object.entries(state.labels).filter(([a, b]) => a !== b).map(([a, b]) => (b ? `Label ${a} → ${b}` : `Label ${a} taken off`));
+        content = [el('p', { text: `${mine.length} project${mine.length === 1 ? ' moves' : 's move'} from “${from.name}” into “${t.name}”, and “${from.name}” is removed.` }),
+          el('ul', { class: 'mw-review' }, ...[...folderLines, ...statusLines, ...labelLines].map((x) => el('li', { text: x })),
+            ...(folderLines.length + statusLines.length + labelLines.length ? [] : [el('li', { class: 'sc-faint', text: 'Nothing else changes.' })]))];
+      }
+      body.replaceChildren(steps, ...content);
+      footer.replaceChildren(foot(
+        state.step ? dialogButton('Back', () => { state.step--; draw(); }) : el('span'),
+        el('span', { class: 'sc-spacer' }),
+        dialogButton('Cancel', () => close(null)),
+        state.step < STEPS.length - 1 ? dialogButton('Next', () => { state.step++; draw(); }, 'sc-button--primary') : dialogButton('Merge', () => close(true), 'sc-button--primary')));
+    };
+    draw();
+    return [body, footer];
+  }, { wide: true });
+  if (!done) return;
+  const moved = await sync.mergeWorkspaces(fromId, state.into, { folders: state.folders, statuses: state.statuses, labels: state.labels });
   const { refreshSidebar } = await import('./sidebar.js');
   await refreshSidebar();
-  if (store.ui.view === 'settings') set({ settingsPage: `ws:${into.id}` }); else set({});
-  showText('Merged', `${moved} project${moved === 1 ? '' : 's'} moved into ${into.name}.`);
+  if (store.ui.view === 'settings') set({ settingsPage: `ws:${state.into}` }); else set({});
+  showText('Merged', `${moved} project${moved === 1 ? '' : 's'} moved into ${target().name}.`);
 }
 const WS_TABS = [['overview', 'Overview'], ['statuses', 'Statuses'], ['templates', 'Project Templates'], ['fields', 'Custom Fields'], ['labels', 'Labels']];
 

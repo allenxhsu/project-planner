@@ -1167,6 +1167,36 @@ export function removeStage(p, id) {
   for (const t of p.tasks) if (t.stageId === id) t.stageId = fallback;
 }
 
+/**
+ * A status of this plan becomes another, as merging workspaces asks: its
+ * tasks move to the status named `toName` when the plan has one (and the old
+ * one goes), or the status is renamed when it has not.
+ */
+export function mapStatus(p, fromName, toName) {
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  if (!toName || norm(fromName) === norm(toName)) return false;
+  const list = stages(p).map((s) => ({ ...s }));
+  const src = list.find((s) => norm(s.name) === norm(fromName));
+  if (!src) return false;
+  const dst = list.find((s) => norm(s.name) === norm(toName));
+  const moving = p.tasks.filter((t) => stageOf(p, t).id === src.id);
+  if (!dst) { src.name = String(toName).trim(); p.stages = list; return true; }
+  p.stages = list.filter((s) => s.id !== src.id);
+  for (const t of moving) t.stageId = dst.id;
+  return true;
+}
+
+/** A label becomes another on every task of the plan; an empty `to` takes it off. */
+export function mapLabel(p, from, to) {
+  let n = 0;
+  for (const t of p.tasks) {
+    if (!(t.labels || []).includes(from)) continue;
+    t.labels = [...new Set(t.labels.map((l) => (l === from ? to : l)).filter(Boolean))];
+    n++;
+  }
+  return n;
+}
+
 export function moveStage(p, id, dir) {
   const list = stages(p);
   const i = list.findIndex((x) => x.id === id);
