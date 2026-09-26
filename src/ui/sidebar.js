@@ -111,6 +111,7 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
   parts.views = el('div', { class: 'side-list' });
   parts.favorites = el('div', { class: 'side-list' });
   parts.workspaces = el('div', { class: 'side-list' });
+  parts.settings = el('div', { class: 'side-settings' });
   const section = (key, title, body, extra = null) => {
     const head = el('div', { class: 'side-section' },
       el('button', { class: 'side-section-toggle', onclick: () => { state[key] = !state[key]; remember(); renderSidebar(); } },
@@ -130,6 +131,7 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
       el('button', { class: 'side-icon', text: '⚙', title: 'Settings — sync and appearance', onclick: () => hooks.settings?.() }),
       el('button', { class: 'sc-button sc-button--primary sc-button--sm side-new', text: '＋ New', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); hooks.newMenu(r.left, r.bottom + 4); } })),
     parts.now,
+    parts.settings,
     el('div', { class: 'side-search' }, find),
     el('div', { class: 'side-scroll' },
       parts.places,
@@ -385,8 +387,29 @@ function renderNow() {
   node.title = label ? 'Now — click to open it' : '';
 }
 
+/** Settings: the sidebar is the list of settings, as Motion's is. */
+async function renderSettingsNav() {
+  const { SETTINGS_PAGES, leaveSettings } = await import('./settingspage.js');
+  const on = store.ui.settingsPage || 'calendars';
+  const go = (id) => set({ settingsPage: id });
+  const groups = [];
+  for (const [id, label, glyph, sectionName] of SETTINGS_PAGES) {
+    let g = groups.find((x) => x.name === sectionName);
+    if (!g) { g = { name: sectionName, items: [] }; groups.push(g); }
+    g.items.push(item({ icon: ic(glyph), label, active: on === id, onclick: () => go(id) }));
+  }
+  parts.settings.replaceChildren(
+    el('button', { class: 'side-back', onclick: leaveSettings }, el('span', { text: '←' }), el('span', { text: 'Back to the planner' })),
+    ...groups.flatMap((g) => [el('div', { class: 'side-settings-head', text: g.name }), ...g.items]),
+    el('div', { class: 'side-settings-head', text: 'Workspaces' }),
+    ...cache.spaces.map((w) => item({ icon: ic('workspace'), label: w.name, active: on === `ws:${w.id}`, onclick: () => go(`ws:${w.id}`) })));
+}
+
 export function renderSidebar() {
   if (!root) return;
+  const settingsMode = store.ui.view === 'settings';
+  root.classList.toggle('is-settings', settingsMode);
+  if (settingsMode) void renderSettingsNav();
   document.getElementById('app')?.classList.toggle('no-side', !state.open);
   for (const c of root.querySelectorAll('.side-caret')) c.textContent = state[c.dataset.key] ? '▾' : '▸';
   for (const g of root.querySelectorAll('.side-group')) g.classList.toggle('is-closed', !state[g.dataset.key]);

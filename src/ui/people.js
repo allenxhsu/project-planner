@@ -117,6 +117,26 @@ function profileBlock(person) {
     el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Profiler ↗', title: 'Open the Profiler app', onclick: (e) => { e.stopPropagation(); openProfiler(person); } }));
 }
 
+/** Merge: this person is someone else too — their work moves across, and they go. */
+async function mergeInto(person) {
+  const others = people.map((x) => x.person).filter((x) => x !== person && !(person.id && x.id === person.id));
+  if (!others.length) return;
+  const answer = await formDialog('Merge people', [
+    { key: 'keep', label: `${person.name} is the same person as`, type: 'select', value: String(0),
+      options: others.map((o, i) => ({ value: String(i), label: `${o.name}${o.id ? '' : ' (not in the directory)'}` })) },
+  ]);
+  if (!answer) return;
+  const keep = others[+answer.keep];
+  if (!keep) return;
+  const yes = await confirmDialog(`Merge ${person.name} into ${keep.name}?`,
+    `Every project's work, logged time and calendars for ${person.name} become ${keep.name}'s, and ${person.name} leaves the directory. Undo in each project brings it back.`, 'Merge');
+  if (!yes) return;
+  const { mergePeople } = await import('../state/sync.js');
+  const n = await mergePeople(keep, person);
+  await reloadPeople();
+  showText('Merged', `${person.name} is now ${keep.name} in ${n} ${n === 1 ? 'project' : 'projects'}.`);
+}
+
 function row(entry) {
   const { person, plans, tasks, hours, cost } = entry;
   const listed = !!person.id;
@@ -130,6 +150,7 @@ function row(entry) {
       { label: 'Open Profiler', run: () => openProfiler(person) },
       ...(person.profile ? [{ label: 'Forget the attached profile', run: async () => { await detachProfile(person.id); await reloadPeople(); } }] : []),
       '-',
+      { label: 'Merge into someone else…', run: () => void mergeInto(person) },
       { label: 'Take out of the directory', danger: true, run: async () => {
         const yes = await confirmDialog(`Take ${person.name} out of the directory?`,
           'Plans they are already on keep them — this only stops them being offered for new work.');
@@ -139,6 +160,7 @@ function row(entry) {
       } },
     ] : [
       { label: 'Add to the directory', run: async () => { await rememberPerson({ name: person.name, initials: person.initials, type: person.resourceType, rate: person.rate, group: person.group }); await reloadPeople(); } },
+      { label: 'Merge into someone else…', run: () => void mergeInto(person) },
     ];
     showMenu(r.left - 200, r.bottom + 4, items);
   };

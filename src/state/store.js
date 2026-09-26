@@ -22,6 +22,7 @@ export const VIEWS = {
   gantt: { label: 'Gantt Chart', short: 'Gantt', glyph: '▤' },
   kanban: { label: 'Kanban', short: 'Kanban', glyph: '▥' },
   alltasks: { label: 'All Tasks', short: 'All Tasks', glyph: '≣' },
+  settings: { label: 'Settings', short: 'Settings', glyph: '⚙' },
   list: { label: 'Projects & Tasks — this project', short: 'Project tasks', glyph: '≣' },
   team: { label: 'Team Schedule', short: 'Team', glyph: '▥' },
   calendar: { label: 'Calendar', short: 'Calendar', glyph: '▦' },
@@ -54,6 +55,7 @@ export const store = {
     usageScope: 'all',      // resource usage: every project, or the open one
     split: 560,             // gantt: width of the grid half
     rightTab: 'task',
+    settingsPage: 'calendars',
     bottomTab: 'checks',
     rightOpen: true,
     bottomOpen: true,

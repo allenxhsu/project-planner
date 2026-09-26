@@ -337,3 +337,19 @@ test('moving a project on the Gantt moves its start, deadline, stages and open t
   assert.equal(p.deadline, '2026-11-20');
   assert.throws(() => setProjectDates(p, { start: '2026-12-01' }), /before it starts/);
 });
+
+test('merging two resources of one person joins their work and drops the second', async () => {
+  const { createProject, insertTask, addResource, assign, mergeResources } = await import('../src/model/model.js');
+  const p = createProject('Merge', '2026-10-05');
+  const a = addResource(p, { name: 'Allen X' });
+  const b = addResource(p, { name: 'Allen Xu' });
+  const t1 = insertTask(p, 0, { name: 'Both', duration: 1, level: 1 });
+  const t2 = insertTask(p, 1, { name: 'Only B', duration: 1, level: 1 });
+  assign(p, t1.id, a.id, 1); assign(p, t1.id, b.id, 0.5); assign(p, t2.id, b.id, 1);
+  p.timesheets.push({ id: 'ts1', taskId: t2.id, resourceId: b.id, date: '2026-10-05', hours: 2 });
+  mergeResources(p, a.id, b.id);
+  assert.deepEqual(p.resources.map((r) => r.name), ['Allen X']);
+  assert.deepEqual(t1.assignments, [{ resourceId: a.id, units: 1 }]);
+  assert.equal(t2.assignments[0].resourceId, a.id);
+  assert.equal(p.timesheets[0].resourceId, a.id);
+});

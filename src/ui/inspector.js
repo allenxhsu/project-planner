@@ -221,12 +221,15 @@ function renderResource(root) {
   root.append(el('div', { class: 'insp-actions' }, el('button', { class: 'sc-button sc-button--danger sc-button--sm', text: 'Delete resource', onclick: () => act.deleteResource(r.id) })));
 }
 
-function renderProject(root, { dialog = false } = {}) {
+/** The open project's scheduling settings, drawn in `root`; `only` picks one part: 'working', 'calendars' or 'schedules'. */
+export const renderProjectSettings = (root, only = null) => renderProject(root, { dialog: true, only });
+
+function renderProject(root, { dialog = false, only = null } = {}) {
   const { project, schedule } = store;
   // The project itself — name, dates, stages, status, colour — is in its
   // window; this is how it is scheduled: working time and the calendar.
   if (!dialog) root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project settings' }), el('div', { class: 'sc-display insp-title', text: project.name })));
-  root.append(el('div', { class: 'sc-section-title', text: 'Working time' }));
+  const want = (part) => !only || only === part;
   const form = el('div', { class: 'insp-form' });
   form.append(field('Status date', date(project.statusDate, (v) => act.setProjectInfo({ statusDate: v })), 'what “today” is for progress — blank is today'));
   form.append(el('div', { class: 'two' },
@@ -259,8 +262,9 @@ function renderProject(root, { dialog = false } = {}) {
     if (bad.length) { act.hint(`Not a date: ${bad[0]} (use YYYY-MM-DD, one per line).`); return; }
     act.setCalendar({ holidays: [...new Set(list)].sort() });
   } })), 'one date per line, YYYY-MM-DD'));
-  root.append(form);
+  if (want('working')) root.append(el('div', { class: 'sc-section-title', text: 'Working time' }), form);
   // ---- connected calendars: real meetings, so work goes around them
+  if (want('calendars')) {
   root.append(el('div', { class: 'sc-section-title', text: 'Connected calendars' }));
   root.append(el('p', { class: 'sc-muted small', text: 'Google and Outlook each hand out a private iCalendar address for a calendar. Paste one here and its meetings become busy hours the calendar schedules around.' }));
   const list = el('div', { class: 'link-list' });
@@ -276,9 +280,11 @@ function renderProject(root, { dialog = false } = {}) {
   }
   list.append(el('button', { class: 'sc-button sc-button--sm', text: '+ Connect a calendar…', onclick: () => act.connectCalendarDialog() }));
   root.append(list);
+  }
 
   // ---- schedules: the hours of the week that are for a kind of work. They
   // are drawn on their own page, because a week is not three boxes.
+  if (!want('schedules')) return;
   root.append(el('div', { class: 'sc-section-title', text: 'Schedules' }));
   root.append(el('p', { class: 'sc-muted small', text: 'The hours each kind of work may use, shared by every project.' }));
   const sched = el('div', { class: 'link-list' });

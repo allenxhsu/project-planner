@@ -17,6 +17,8 @@ import { formatDate } from '../model/calendar.js';
 import { open, foot, button } from './dialog.js';
 import { fieldInput } from './blockmenu.js';
 
+import { taskDefaults, defaultDeadline } from './taskdefaults.js';
+
 const DURATIONS = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480];
 const minText = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`);
 const nowIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -54,25 +56,26 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
     };
 
     // Placed by the calendar, or held at an hour.
-    const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !fixed });
+    const defaults = taskDefaults();
+    const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !fixed && defaults.auto });
     const autoRow = el('label', { class: 'tp-auto' }, el('span', { class: 'tp-auto-text' }), auto, el('span', { class: 'tp-switch' }));
     const fixedDay = el('input', { class: 'sc-input', type: 'date', value: day || nowIso() });
     const fixedFrom = el('input', { class: 'sc-input', type: 'time', step: 900, value: hhmm(start ?? 9 * 60) });
     const whenBox = el('div', { class: 'tp-when' }, fixedDay, fixedFrom);
 
-    const firstLength = end !== null && start !== null ? end - start : 30;
+    const firstLength = end !== null && start !== null ? end - start : (+defaults.minutes || 30);
     const duration = el('select', { class: 'sc-select' }, ...[...new Set([...DURATIONS, firstLength])].sort((a, b) => a - b)
       .map((m) => el('option', { value: m, text: minText(m), selected: m === firstLength })));
     const chunk = el('select', { class: 'sc-select' },
       el('option', { value: '', text: 'The plan’s block size' }),
-      ...BLOCK_CHOICES.map((h) => el('option', { value: h, text: minText(h * 60) })),
-      el('option', { value: 'whole', text: 'No chunks — one sitting' }));
+      ...BLOCK_CHOICES.map((h) => el('option', { value: h, text: minText(h * 60), selected: String(h) === String(defaults.chunk) })),
+      el('option', { value: 'whole', text: 'No chunks — one sitting', selected: defaults.chunk === 'whole' }));
     const startDate = el('input', { class: 'sc-input', type: 'date', value: day || nowIso() });
-    const deadline = el('input', { class: 'sc-input', type: 'date', value: day || '' });
-    const hard = el('input', { type: 'checkbox', class: 'tp-switch-box' });
+    const deadline = el('input', { class: 'sc-input', type: 'date', value: day || defaultDeadline(defaults.deadline) });
+    const hard = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!defaults.hard });
     const hardRow = el('label', { class: 'tp-hard', title: 'A hard deadline must hold: it is placed ahead of soft ones, and it is the soft ones that slip.' },
       el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' }));
-    const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: id === 'normal' })));
+    const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: id === (defaults.urgency || 'normal') })));
     const labels = el('input', { class: 'sc-input', type: 'text', placeholder: 'None — comma-separated' });
     let assignee, stage, schedule, custom = [];
     const rows = {};

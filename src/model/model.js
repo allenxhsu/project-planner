@@ -403,6 +403,26 @@ export function addResource(p, props = {}) {
 }
 
 /** Who this resource is, across plans: the shared person, or failing that the name. */
+/**
+ * Two resources of a plan that are one person: the second's work, logged
+ * time, calendars and events become the first's, and the second goes. A task
+ * both were on keeps one assignment, at the larger of the two units.
+ */
+export function mergeResources(p, keepId, dropId) {
+  if (!keepId || !dropId || keepId === dropId) return;
+  for (const t of p.tasks) {
+    const drop = t.assignments.find((a) => a.resourceId === dropId);
+    if (!drop) continue;
+    const keep = t.assignments.find((a) => a.resourceId === keepId);
+    if (keep) { keep.units = Math.max(keep.units || 1, drop.units || 1); t.assignments = t.assignments.filter((a) => a !== drop); }
+    else drop.resourceId = keepId;
+  }
+  for (const x of p.timesheets || []) if (x.resourceId === dropId) x.resourceId = keepId;
+  for (const f of feeds(p)) if (f.resourceId === dropId) f.resourceId = keepId;
+  for (const e of eventsOf(p)) if (e.resourceId === dropId) e.resourceId = keepId;
+  p.resources = p.resources.filter((r) => r.id !== dropId);
+}
+
 export const identityOf = (r) => (r?.personId ? `person:${r.personId}` : `who:${String(r?.name || '').trim().toLowerCase()}`);
 export function removeResource(p, id) {
   p.resources = p.resources.filter((r) => r.id !== id);

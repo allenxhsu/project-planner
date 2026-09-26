@@ -993,6 +993,44 @@ export async function unlinkedCount() {
   return n;
 }
 
+/**
+ * Two people who are one: in every plan, whoever is `drop` becomes `keep` —
+ * by directory link, or by name where a plan never linked them — and where a
+ * plan has both, their work is joined (model.mergeResources). `drop` then
+ * leaves the directory. Each is { id?, name, initials? }.
+ */
+export async function mergePeople(keep, drop) {
+  if (!recordStore) return 0;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const isKeep = (r) => (keep.id ? r.personId === keep.id : false) || (!r.personId && norm(r.name) === norm(keep.name));
+  const isDrop = (r) => (drop.id ? r.personId === drop.id : false) || (!r.personId && norm(r.name) === norm(drop.name));
+  const { mergeResources } = await import('../model/model.js');
+  const change = (p) => {
+    const drops = p.resources.filter((r) => isDrop(r) && !isKeep(r));
+    let kept = p.resources.find(isKeep) || null;
+    for (const d of drops) {
+      if (!kept) { kept = d; continue; }
+      mergeResources(p, kept.id, d.id);
+    }
+    if (kept) {
+      kept.personId = keep.id || kept.personId || null;
+      kept.name = keep.name;
+      if (keep.initials) kept.initials = keep.initials;
+    }
+  };
+  let plans = 0;
+  for (const record of await planRecords()) {
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    // Plans with the other one, and plans naming this one without the link to the directory.
+    if (!project.resources.some((r) => (isDrop(r) && !isKeep(r)) || (keep.id && isKeep(r) && r.personId !== keep.id))) continue;
+    await patchPlan(record.id, change, 'Merge people');
+    plans++;
+  }
+  if (drop.id && drop.id !== keep.id) await forgetPerson(drop.id);
+  return plans;
+}
+
 /** Take someone out of the directory. Plans that already use them are untouched. */
 export async function forgetPerson(id) {
   if (!recordStore) return;

@@ -15,6 +15,7 @@ import { renderNetwork, zoomNetwork } from './ui/network.js';
 import { renderProjects, reloadPlans } from './ui/projects.js';
 import { renderPeople } from './ui/people.js';
 import { renderSchedules } from './ui/schedules.js';
+import { renderSettings } from './ui/settingspage.js';
 import { renderToday } from './ui/today.js';
 import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, reloadAllTasks } from './ui/alltasks.js';
@@ -38,7 +39,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
+const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 function render() {
   const { ui } = store;
@@ -57,7 +58,7 @@ function render() {
   // in Motion; everywhere else it is the details of what is selected.
   const calSide = ui.view === 'calendar';
   $('app').classList.toggle('view-calendar', calSide);
-  for (const v of ['team', 'today', 'alltasks', 'list']) $('app').classList.toggle(`view-${v}`, ui.view === v);
+  for (const v of ['team', 'today', 'alltasks', 'list', 'settings']) $('app').classList.toggle(`view-${v}`, ui.view === v);
   // One place for each thing: the task's and the project's own windows hold
   // what they are; this panel holds how they are scheduled. The resource tab
   // is only where resources are the subject.
@@ -132,17 +133,7 @@ function initHosting() {
 initHeader($('header'));
 initSidebar($('sidebar'), {
   newMenu, findResults,
-  settings: () => {
-    const r = document.querySelector('.side-top .side-icon:nth-of-type(2)')?.getBoundingClientRect() || { left: 40, bottom: 40 };
-    showMenu(r.left, r.bottom + 4, [
-      { label: 'Project settings — working time & scheduling…', run: () => { void import('./ui/inspector.js').then((m) => m.projectSettingsDialog()); } },
-      '-',
-      { label: 'Sync…', run: () => COMMANDS['view.sync']() },
-      { label: 'Appearance…', run: () => COMMANDS['view.appearance']() },
-      { label: 'Custom fields…', run: () => { void import('./ui/newproject.js').then((m) => m.editFieldsDialog()); } },
-      { label: 'Schedules — working hours and time blocks', run: () => set({ view: 'schedules' }) },
-    ]);
-  },
+  settings: () => { void import('./ui/settingspage.js').then((m) => m.openSettings()); },
 });
 // The right panel's left edge drags to resize it, between a minimum and a
 // maximum width, kept on this device; a double-click puts it back.
