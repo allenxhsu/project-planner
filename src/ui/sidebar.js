@@ -216,7 +216,7 @@ function ordered(plans) {
   const order = readOrder();          // this device's order from before it was kept in the plans
   const local = (id) => { const i = order.indexOf(id); return i < 0 ? Infinity : i; };
   const at = (p) => (Number.isFinite(p.sortOrder) ? p.sortOrder : Infinity);
-  return [...plans].sort((a, b) => at(a) - at(b) || local(a.id) - local(b.id) || a.name.localeCompare(b.name));
+  return [...plans].sort((a, b) => (a.archived === true) - (b.archived === true) || at(a) - at(b) || local(a.id) - local(b.id) || a.name.localeCompare(b.name));
 }
 /** Write a place's order (and move a plan into it), then redraw. */
 async function arrange(ids, workspaceId, folderId) {
@@ -302,8 +302,9 @@ export function planMenu(p, siblings = []) {
       { label: 'colours', panel: null, render: true },
       '-',
       { icon: '↗', label: 'Open project', run: () => { void openPlanFromSidebar(p.id); } },
-      { icon: '✓', label: 'Complete project', run: () => { void status('Completed'); } },
-      { icon: '⊘', label: 'Cancel project', run: () => { void status('Cancelled'); } },
+      ...(p.archived ? [{ icon: '↺', label: 'Reopen project', run: () => { void status('Todo'); } }] : [
+        { icon: '✓', label: 'Complete project', run: () => { void status('Completed'); } },
+        { icon: '⊘', label: 'Cancel project', run: () => { void status('Cancelled'); } }]),
       { icon: '⧉', label: 'Copy link', run: () => { const url = `${location.origin}${location.pathname}#plan=${encodeURIComponent(p.id)}`; navigator.clipboard?.writeText(url).then(() => act.hint('Link copied.'), () => act.hint(url)); } },
       { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Remove from Favorites' : 'Add to Favorites', run: async () => { await sync.setPlanPinned(p.id, !p.pinned); await refreshSidebar(); } },
       { icon: '✦', label: 'Save as template', run: async () => {
@@ -442,7 +443,8 @@ export function renderSidebar() {
   }
 
   clear(parts.workspaces);
-  const live = cache.plans.filter((p) => !p.archived);
+  // Completed and cancelled projects stay in the tree, dimmed and last, as Motion keeps them.
+  const live = cache.plans;
   const groups = [...cache.spaces.map((w) => ({ id: w.id, name: w.name, folders: Array.isArray(w.folders) ? w.folders.filter((f) => f?.id && f.name) : [] })), { id: '', name: 'No workspace', folders: [] }];
   const hoverButtons = (...buttons) => el('span', { class: 'side-hover' }, ...buttons);
   const iconButton = (text, title, run) => el('button', { class: 'side-mini', text, title, onclick: (e) => { e.stopPropagation(); run(e); } });
@@ -450,7 +452,7 @@ export function renderSidebar() {
 
   /** A project row, draggable, with the places it can be dropped around it. */
   const planRow = (p, siblings, wsId, folderId, cls) => {
-    const row = item({ icon: ic('project', projectColour(p.colour)), label: p.name, cls, active: p.id === project.id,
+    const row = item({ icon: ic('project', projectColour(p.colour)), label: p.name, cls: `${cls}${p.archived ? ' is-archived' : ''}`, active: p.id === project.id,
       title: `${p.tasks} tasks — double-click to open; drag to move`, onclick: () => { void selectPlanFromSidebar(p.id); },
       open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, siblings) });
     row.prepend(el('span', { class: 'side-grip', text: '⠿' }));
@@ -474,6 +476,8 @@ export function renderSidebar() {
     const open = state.expanded.has(key);
     const active = w.id && cache.active === w.id;
     const wsMenu = (x, y) => showMenu(x, y, [
+      w.id ? { icon: '▣', label: 'Archived Tasks', run: () => { void import('./alltasks.js').then((m) => m.showArchived(w.id)); } } : null,
+      w.id ? '-' : null,
       { icon: '▢', label: 'New project…', run: () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: w.id || null })); } },
       w.id ? { icon: '▭', label: 'New folder…', run: () => { void newFolder(w); } } : null,
       w.id ? '-' : null,
@@ -495,6 +499,8 @@ export function renderSidebar() {
         await sync.renameWorkspace(w.id, name);
         await refreshSidebar();
       } } : null,
+      w.id ? '-' : null,
+      w.id ? { icon: '⚙', label: 'Workspace Settings', run: () => { void import('./settingspage.js').then((m) => m.openSettings(`ws:${w.id}`)); } } : null,
     ]);
     const row = el('div', { class: `side-item side-ws${active ? ' is-on' : ''}`, title: w.id ? (active ? 'Showing only this workspace — click to show all' : 'Show only this workspace in lists') : 'Projects not filed under a workspace',
       oncontextmenu: (e) => { e.preventDefault(); wsMenu(e.clientX, e.clientY); } },

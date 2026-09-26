@@ -330,11 +330,12 @@ function visible(view, layout) {
     if (f.project?.length && !f.project.includes(r.planId)) return false;
     if (f.label?.length && !r.labels.some((l) => f.label.includes(l))) return false;
     if (f.deadline && !deadlineMatch(r, f.deadline)) return false;
+    if (f.archivedOnly && !r.cancelled) return false;
     return !q || `${r.name} ${r.planName} ${r.who.join(' ')} ${r.labels.join(' ')}`.toLowerCase().includes(q);
   });
 }
 const filterCount = (view) => ['status', 'priority', 'assignee', 'project', 'label'].filter((k) => view.filters[k]?.length).length
-  + (view.filters.deadline ? 1 : 0) + (scope === 'all' && view.filters.workspace ? 1 : 0);
+  + (view.filters.deadline ? 1 : 0) + (view.filters.archivedOnly ? 1 : 0) + (scope === 'all' && view.filters.workspace ? 1 : 0);
 
 // ---------------------------------------------------------------- grouping
 
@@ -582,6 +583,8 @@ const PANELS = {
       chips('Assignee', 'assignee', uniq(list.map((r) => r.who[0] || '')).sort().map((a) => [a, a || 'Unassigned'])),
       scope === 'all' ? chips('Project', 'project', inScopePlans(view).map((p) => [p.id, p.name]).sort((a, b) => a[1].localeCompare(b[1]))) : null,
       chips('Label', 'label', uniq(list.flatMap((r) => r.labels)).sort().map((l) => [l, l])),
+      el('label', { class: 'tl-toggle' }, el('span', { text: 'Archived and cancelled tasks only' }),
+        el('input', { type: 'checkbox', class: 'sc-check', checked: !!view.filters.archivedOnly, onchange: (e) => edit((x) => { x.filters = { ...x.filters, archivedOnly: e.target.checked }; if (e.target.checked) x.resolved = true; }) })),
       el('div', { class: 'tl-f' }, el('div', { class: 'tl-f-title sc-faint small', text: 'Deadline' }),
         el('select', { class: 'sc-select sc-select--sm', onchange: (e) => edit((x) => { x.filters = { ...x.filters, deadline: e.target.value }; }) },
           ...[['', 'Any'], ['overdue', 'Overdue'], ['week', 'This week'], ['next7', 'In the next 7 days'], ['none', 'No deadline']]
@@ -1101,6 +1104,17 @@ async function projectMenuAt(p, x, y) {
 function redraw() {
   if (lastRoot?.isConnected) renderAllTasks(lastRoot, { scope });
   drawPop();
+}
+
+/** A workspace's archived tasks: Projects & Tasks, a List, filtered to them (a change to the view, not saved). */
+export function showArchived(workspaceId) {
+  scope = 'all';
+  const { list } = current();
+  const listView = list.find((v) => v.layout === 'list');
+  if (listView) writeJson(ACTIVE_KEY, { ...readJson(ACTIVE_KEY, {}), all: listView.id });
+  set({ view: 'alltasks' });
+  edit((x) => { x.filters = { ...x.filters, workspace: workspaceId, archivedOnly: true }; x.resolved = true; });
+  void reloadAllTasks();
 }
 
 /** Projects & Tasks (`scope: 'all'`), or the open project's Task list (`scope: 'project'`). */

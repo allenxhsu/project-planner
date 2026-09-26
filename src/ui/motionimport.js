@@ -66,7 +66,16 @@ export async function importMotion(picked = null) {
   const sync = await import('../state/sync.js');
   const shelf = await sync.planRecords().catch(() => []);
   const known = new Map();
-  for (const r of shelf) { try { const id = JSON.parse(r.body).motionId; if (id) known.set(id, r.id); } catch { /* not ours to read */ } }
+  // A project imported before keeps its id, and where it was put since: its folder, place, colour, favourite.
+  const kept = new Map();
+  for (const r of shelf) {
+    try {
+      const b = JSON.parse(r.body);
+      if (!b.motionId) continue;
+      known.set(b.motionId, r.id);
+      kept.set(b.motionId, { workspaceId: b.workspaceId || null, folderId: b.folderId || null, sortOrder: b.sortOrder ?? null, colour: b.colour ?? null, pinned: b.pinned === true });
+    } catch { /* not ours to read */ }
+  }
   const again = result.plans.filter((p) => p.motionId && known.has(p.motionId)).length;
   const { counts } = result;
 
@@ -97,6 +106,19 @@ export async function importMotion(picked = null) {
     const made = await sync.createWorkspace(name);
     if (made?.id) idFor.set(name.toLowerCase(), made.id);
   }
+  // Motion's export does not say which folder a project was in. Its completed
+  // projects go in a "Completed Projects" folder of their workspace (made if
+  // missing), which is how Motion keeps them; anything else is loose in its
+  // workspace, to be dragged where it belongs.
+  const completedFolder = new Map();
+  const folderFor = async (workspaceId) => {
+    if (completedFolder.has(workspaceId)) return completedFolder.get(workspaceId);
+    const w = (await sync.listWorkspaces()).find((x) => x.id === workspaceId);
+    const existing = sync.foldersOf(w).find((f) => /^complete/i.test(f.name.trim()));
+    const folder = existing || await sync.createFolder(workspaceId, 'Completed Projects');
+    completedFolder.set(workspaceId, folder?.id || null);
+    return folder?.id || null;
+  };
   // The people, once each, into the directory.
   const personIds = new Map();
   let stored = 0;
@@ -109,6 +131,10 @@ export async function importMotion(picked = null) {
     }
     p.workspaceId = p.workspaceName ? idFor.get(p.workspaceName.toLowerCase()) || null : null;
     delete p.workspaceName;
+    const before = p.motionId ? kept.get(p.motionId) : null;
+    if (before && before.workspaceId === p.workspaceId) {
+      Object.assign(p, { folderId: before.folderId, sortOrder: before.sortOrder, colour: before.colour, pinned: before.pinned });
+    } else if (p.archived && p.workspaceId) p.folderId = await folderFor(p.workspaceId);
     for (const r of p.resources) {
       const key = r.name.toLowerCase();
       if (!personIds.has(key)) personIds.set(key, (await sync.rememberPerson({ name: r.name }).catch(() => null))?.id || null);

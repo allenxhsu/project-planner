@@ -1149,3 +1149,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .st-keys { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 20px; max-width: 520px; }
 .st-keys kbd { padding: 1px 6px; border: 1px solid var(--sc-line); border-radius: 4px; font-size: 12px; }
 .st-embed { min-height: 400px; display: flex; }
+.st-tabs { display: flex; gap: 4px; margin: -18px -28px 18px; padding: 0 22px; border-bottom: 1px solid var(--sc-line); }
+.st-line { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--sc-line) 60%, transparent); }
+.st-wide { max-width: 520px; }
+.side-item.is-archived { opacity: .55; }

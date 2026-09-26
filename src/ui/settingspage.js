@@ -136,32 +136,73 @@ const PAGES = {
   },
 };
 
-/** A workspace's page: its name, its folders, how many projects, and deleting it. */
+let wsTab = 'overview';
+const WS_TABS = [['overview', 'Overview'], ['statuses', 'Statuses'], ['templates', 'Project Templates'], ['fields', 'Custom Fields'], ['labels', 'Labels']];
+
+/** A workspace's settings, in Motion's tabs: its name, people, folders; the statuses, templates, fields and labels its projects use. */
 async function workspacePage(id) {
   const sync = await import('../state/sync.js');
+  const { parse } = await import('../io/json.js');
+  const { stages, stageOf, fieldsOf } = await import('../model/model.js');
   const w = (await sync.listWorkspaces()).find((x) => x.id === id);
   if (!w) return page('Workspace', note('That workspace is gone.'));
-  const plans = (await sync.listPlans()).filter((p) => p.workspaceId === id && !p.template);
+  const projects = [];
+  for (const r of await sync.planRecords()) {
+    try { const p = parse(r.body).project; if (p.workspaceId === id) projects.push(p); } catch { /* unreadable */ }
+  }
+  const open = projects.filter((p) => !p.template);
   const folders = sync.foldersOf(w);
   const redraw = () => set({});
-  return page(w.name,
-    section('Name', el('div', { class: 'st-inline' }, el('strong', { text: w.name }), button('Rename…', async () => {
-      const name = await promptText('Rename the workspace', '', w.name);
-      if (name?.trim()) { await sync.renameWorkspace(id, name); const { refreshSidebar } = await import('./sidebar.js'); await refreshSidebar(); redraw(); }
-    }))),
-    section('Folders', ...(folders.length ? folders.map((f) => el('div', { class: 'st-inline' }, icon('folder'), el('span', { text: `${f.name} · ${plans.filter((p) => p.folderId === f.id).length} projects` }),
-      button('Rename…', async () => { const n = await promptText('Rename the folder', '', f.name); if (n?.trim()) { await sync.renameFolder(id, f.id, n); redraw(); } }),
-      button('Delete', async () => { if (await confirmDialog(`Delete the folder “${f.name}”?`, 'Its projects stay in the workspace.', 'Delete folder')) { await sync.deleteFolder(id, f.id); redraw(); } }, 'sc-button--ghost'))) : [note('No folders yet.')]),
-    button('＋ New folder…', async () => { const n = await promptText('New folder', `A folder in ${w.name}.`, ''); if (n?.trim()) { await sync.createFolder(id, n); redraw(); } })),
-    section('Projects', note(`${plans.filter((p) => !p.archived).length} open, ${plans.filter((p) => p.archived).length} archived.`)),
-    section('Delete workspace', note('Its projects are kept and become unfiled — nothing is deleted but the workspace.'),
-      button('Delete workspace…', async () => {
-        if (!(await confirmDialog(`Delete the workspace “${w.name}”?`, 'Its projects are kept and become unfiled.', 'Delete workspace'))) return;
+  const refresh = async () => { const { refreshSidebar } = await import('./sidebar.js'); await refreshSidebar(); redraw(); };
+
+  const tabs = el('div', { class: 'st-tabs' }, ...WS_TABS.map(([k, label]) => el('button', { class: `pt-tab${wsTab === k ? ' is-on' : ''}`, text: label, onclick: () => { wsTab = k; redraw(); } })));
+  let body;
+  if (wsTab === 'statuses') {
+    const counts = new Map();
+    for (const p of open) {
+      for (const st of stages(p)) if (!counts.has(st.name)) counts.set(st.name, 0);
+      for (const t of p.tasks) { const n = stageOf(p, t).name; counts.set(n, (counts.get(n) || 0) + 1); }
+    }
+    body = section(null, note('The statuses tasks move through. Each project keeps its own list (a new project starts with Backlog, Todo, In Progress, Blocked, Completed, Cancelled); these are the ones used here.'),
+      ...[...counts].map(([name, n]) => el('div', { class: 'st-inline st-line' }, el('span', { class: 'tl-ring' }), el('span', { text: name }), el('span', { class: 'sc-faint small', text: `${n} task${n === 1 ? '' : 's'}` }))));
+  } else if (wsTab === 'templates') {
+    const templates = projects.filter((p) => p.template);
+    body = section(null, note('Templates filed in this workspace. Any project can become one: its menu ▸ Save as template.'),
+      ...(templates.length ? templates.map((p) => el('div', { class: 'st-inline st-line' }, icon('project'), el('span', { text: p.name }), el('span', { class: 'sc-faint small', text: `${p.tasks.length} tasks` }),
+        button('New project from it…', () => { void import('./newproject.js').then((m) => m.newProjectWizard({ workspaceId: id })); }))) : [note('No templates in this workspace yet.')]));
+  } else if (wsTab === 'fields') {
+    const byName = new Map();
+    for (const p of open) for (const f of fieldsOf(p)) { if (!byName.has(f.name)) byName.set(f.name, { type: f.type, projects: [] }); byName.get(f.name).projects.push(p.name); }
+    body = section(null, note('Custom fields are defined per project (Settings ▸ Custom fields, for the open one). These are the ones this workspace’s projects have.'),
+      ...(byName.size ? [...byName].map(([name, f]) => el('div', { class: 'st-inline st-line' }, el('strong', { text: name }), el('span', { class: 'sc-faint small', text: `${f.type} · ${f.projects.join(', ')}` }))) : [note('None yet.')]));
+  } else if (wsTab === 'labels') {
+    const counts = new Map();
+    for (const p of open) for (const t of p.tasks) for (const l of t.labels || []) counts.set(l, (counts.get(l) || 0) + 1);
+    body = section(null, note('Labels on this workspace’s tasks. Add them in a task’s window or on its card.'),
+      ...(counts.size ? [...counts].sort((a, b) => b[1] - a[1]).map(([l, n]) => el('div', { class: 'st-inline st-line' }, el('span', { class: 'ps-chip', text: l }), el('span', { class: 'sc-faint small', text: `${n} task${n === 1 ? '' : 's'}` }))) : [note('No labels yet.')]));
+  } else {
+    const name = el('input', { class: 'sc-input st-wide', type: 'text', value: w.name, onchange: async (e) => { if (e.target.value.trim()) { await sync.renameWorkspace(id, e.target.value); await refresh(); } } });
+    const members = new Map();
+    for (const p of open) for (const r of p.resources.filter((x) => x.type !== 'material' && x.type !== 'cost')) members.set(r.personId || r.name.toLowerCase(), r.name);
+    body = el('div', { class: 'st-body' },
+      section('Workspace name', name),
+      section('Members', note('Everyone given work in this workspace’s projects.'),
+        ...(members.size ? [...members.values()].map((m) => el('div', { class: 'st-inline st-line' }, el('span', { class: 'tl-avatar', text: m[0] }), el('span', { text: m }))) : [note('Nobody yet.')])),
+      section('Folders', ...(folders.length ? folders.map((f) => el('div', { class: 'st-inline st-line' }, icon('folder'), el('span', { text: `${f.name} · ${open.filter((p) => p.folderId === f.id).length} projects` }),
+        button('Rename…', async () => { const n = await promptText('Rename the folder', '', f.name); if (n?.trim()) { await sync.renameFolder(id, f.id, n); await refresh(); } }),
+        button('Delete', async () => { if (await confirmDialog(`Delete the folder “${f.name}”?`, 'Its projects stay in the workspace.', 'Delete folder')) { await sync.deleteFolder(id, f.id); await refresh(); } }, 'sc-button--ghost'))) : [note('No folders yet.')]),
+      button('＋ New folder…', async () => { const n = await promptText('New folder', `A folder in ${w.name}.`, ''); if (n?.trim()) { await sync.createFolder(id, n); await refresh(); } })),
+      section('Projects', note(`${open.filter((p) => !p.archived).length} open, ${open.filter((p) => p.archived).length} archived.`),
+        button('Archived tasks', () => { void import('./alltasks.js').then((m) => m.showArchived(id)); })),
+      section(null, button('Delete workspace', async () => {
+        if (!(await confirmDialog(`Delete the workspace “${w.name}”?`, 'Its projects are kept and become unfiled — nothing is deleted but the workspace.', 'Delete workspace'))) return;
         await sync.deleteWorkspace(id);
         const { refreshSidebar } = await import('./sidebar.js');
         await refreshSidebar();
         set({ settingsPage: 'calendars' });
       }, 'sc-button--danger')));
+  }
+  return el('div', { class: 'st-page' }, el('h2', { class: 'st-title', text: w.name }), tabs, body);
 }
 
 export function renderSettings(root) {
