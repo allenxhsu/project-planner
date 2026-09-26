@@ -235,3 +235,79 @@ test('a Motion export becomes plans: workspaces, projects, tasks, worked time', 
   assert.equal(back.tasks.find((t) => t.name === 'Essay').hardDeadline, true);
   assert.equal(htmlToText('<p>a &amp; b</p><p>c</p>'), 'a & b\nc');
 });
+
+test('stages run one after another, advance by themselves, and can be extended, fixed, completed or cancelled', async () => {
+  const { addPhase, insertTask, setTaskField } = await import('../src/model/model.js');
+  const S = await import('../src/model/stages.js');
+  const { computeSchedule } = await import('../src/model/schedule.js');
+  const p = createProject('Study', '2026-09-28');           // a Monday
+  const a = addPhase(p, { name: 'Module 1', deadline: '2026-10-02' });
+  const b = addPhase(p, { name: 'Module 2', deadline: '2026-10-09' });
+  const c = addPhase(p, { name: 'Module 3', deadline: '2026-10-16' });
+  const t1 = insertTask(p, 0, { name: 'Read 1', phaseId: a.id });
+  const t2 = insertTask(p, 1, { name: 'Read 2', phaseId: b.id });
+  const t3 = insertTask(p, 2, { name: 'Read 3', phaseId: c.id });
+  p.currentPhaseId = a.id;
+  assert.deepEqual(S.stageRange(p, b.id), { start: '2026-10-03', end: '2026-10-09' });
+  assert.deepEqual(S.stageRange(p, a.id), { start: '2026-09-28', end: '2026-10-02' });
+
+  // Finishing the stage's only task moves the project on.
+  setTaskField(p, t1.id, 'percent', 100);
+  assert.equal(S.autoAdvance(p), true);
+  assert.equal(p.currentPhaseId, b.id);
+  assert.equal(S.stageStatus(a), 'done');
+  assert.equal(p.activity.at(-1).kind, 'stage');
+
+  // Late: work laid past the deadline.
+  const sched = computeSchedule(p);
+  const { toDay } = await import('../src/model/calendar.js');
+  const byTask = new Map([[t2.id, [{ day: toDay('2026-10-14') }]]]);   // after its 9 Oct deadline
+  const h = S.stageHealth(p, sched, b.id, { byTask, today: toDay('2026-10-01') });
+  assert.equal(h.missed, true);
+  assert.deepEqual(h.late.map((l) => l.name), ['Read 2']);
+
+  // Extending moves the stages after it by as many working days.
+  S.extendStage(p, b.id, '2026-10-16');
+  assert.equal(b.deadline, '2026-10-16');
+  assert.equal(c.deadline, '2026-10-23');
+
+  // Fixing brings a task inside: its deadline the stage's, hard, high.
+  S.fixTaskToStage(p, t2.id, b.id);
+  assert.deepEqual([t2.deadline, t2.hardDeadline, t2.urgency], ['2026-10-16', true, 'high']);
+
+  // Cancel archives what is left; complete finishes it and moves on.
+  S.cancelStage(p, b.id);
+  assert.equal(t2.archived, true);
+  assert.equal(p.currentPhaseId, c.id);
+  S.reopenStage(p, b.id);
+  assert.equal(t2.archived, false);
+  S.completeStage(p, c.id);
+  assert.equal(t3.percent, 100);
+  assert.equal(p.currentPhaseId, null);
+
+  // The project's own fields survive a save.
+  S.setProjectField(p, 'description', 'All seven modules');
+  S.setProjectField(p, 'deadline', '2026-11-01');
+  S.setProjectField(p, 'status', 'In Progress');
+  S.commentOnProject(p, 'On track');
+  const back = parse(serialize(p)).project;
+  assert.deepEqual([back.description, back.deadline, back.status, back.phases.map((x) => x.status || 'open')], ['All seven modules', '2026-11-01', 'In Progress', ['done', 'open', 'done']]);
+  assert.equal(back.activity.at(-1).text, 'On track');
+  S.setProjectField(p, 'status', 'Completed');
+  assert.equal(p.archived, true);
+});
+
+test('a new stage goes where it is put and moves what follows by its length', async () => {
+  const { addPhase } = await import('../src/model/model.js');
+  const S = await import('../src/model/stages.js');
+  const p = createProject('P', '2026-09-26');
+  const a = addPhase(p, { name: 'sage 1', deadline: '2026-10-10' });
+  const b = addPhase(p, { name: 'stage 2', deadline: '2026-10-17' });
+  p.deadline = '2026-10-17';
+  const r = S.insertStage(p, { name: 'stage 3', afterId: a.id, days: 7 });
+  assert.deepEqual(p.phases.map((x) => [x.name, x.deadline]), [['sage 1', '2026-10-10'], ['stage 3', '2026-10-17'], ['stage 2', '2026-10-24']]);
+  assert.deepEqual([r.deadlineFrom, r.deadlineTo], ['2026-10-17', '2026-10-24']);
+  S.insertStage(p, { name: 'first', days: 3 });
+  assert.equal(p.phases[0].deadline, '2026-09-28');
+  assert.equal(p.phases[1].deadline, '2026-10-13');
+});

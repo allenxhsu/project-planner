@@ -89,10 +89,8 @@ function cardMenu(p, x, y) {
 
 function card(p) {
   const open = () => { void openThis(); };
-  const openThis = async () => {
-    if (p.id === store.project.id) { set({ view: 'gantt' }); return; }
-    if (await openPlan(p.id)) set({ view: 'gantt' });
-  };
+  // Clicking a project opens its window, as in Motion; the Gantt is a click away inside it.
+  const openThis = async () => { void (await import('./projectsheet.js')).projectSheet({ planId: p.id }); };
   const isOpen = p.id === store.project.id;
   const menu = (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); cardMenu(p, r.left - 170, r.bottom + 4); };
 
@@ -120,10 +118,7 @@ function card(p) {
 /** One plan as a row: the same facts as a card, in a line you can scan. */
 function row(p, spaces) {
   const isOpen = p.id === store.project.id;
-  const open = async () => {
-    if (isOpen) { set({ view: 'gantt' }); return; }
-    if (await openPlan(p.id)) set({ view: 'gantt' });
-  };
+  const open = async () => { void (await import('./projectsheet.js')).projectSheet({ planId: p.id }); };
   return el('tr', {
     class: `plan-row${isOpen ? ' is-open' : ''}${p.archived ? ' is-archived' : ''}`,
     onclick: () => { void open(); },

@@ -9,10 +9,11 @@ import {
   setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
   addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
-  addPhase, setPhaseField, removePhase, movePhase, getPhase,
+  addPhase, setPhaseField, removePhase, movePhase, getPhase, phases,
   cleanField, fieldsOf, getField, removeField, setFieldValue, getResource,
   setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
 } from '../model/model.js';
+import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, logProject, insertStage } from '../model/stages.js';
 
 export const hint = (text) => set({ hint: text });
 /** Run an undoable edit; true when it applied, false when it threw (the message is shown as the hint). */
@@ -165,7 +166,8 @@ export function editTask(id, field, value) {
     const info = store.schedule.tasks[id];
     return attempt(label, (p) => setFinish(p, id, info.startIso, value));
   }
-  const ok = attempt(label, (p) => setTaskField(p, id, field, value));
+  // Every edit to a task may finish its stage; the project then moves on.
+  const ok = attempt(label, (p) => { setTaskField(p, id, field, value); autoAdvance(p); });
   // Typing "Ana, Ben" into Resource Names invents resources; each one that is
   // new to the shelf joins the directory, so the next plan can pick them.
   if (ok && field === 'resources') void linkNewResources();
@@ -375,12 +377,53 @@ export function startTaskNow(taskId, minutes, { pinIndex = null } = {}) {
 export function saveOwnEvent(ev) { return attempt(ev.id ? 'Edit the event' : 'New event', (p) => saveEvent(p, ev)); }
 export function deleteOwnEvent(id) { return attempt('Delete the event', (p) => removeEvent(p, id)); }
 
+// ---------------------------------------------------------------- the project and its stages
+
+export const editProject = (field, value) => attempt(`Project ${field}`, (p) => setProjectField(p, field, value));
+export const commentProject = (text) => attempt('Comment', (p) => commentOnProject(p, text));
+export const extendStageTo = (id, iso) => attempt('Extend the stage', (p) => extendStage(p, id, iso));
+export const fixStageTasks = (id, taskIds) => attempt('Fix tasks past the stage', (p) => { for (const t of taskIds) fixTaskToStage(p, t, id); });
+export const completeStageNow = (id) => attempt('Complete the stage', (p) => completeStage(p, id));
+export const cancelStageNow = (id) => attempt('Cancel the stage', (p) => cancelStage(p, id));
+export const reopenStageNow = (id) => attempt('Reopen the stage', (p) => reopenStage(p, id));
+export const goToStage = (id) => attempt('Change stage', (p) => setCurrentStage(p, id));
+export const createStage = (opts) => attempt('Create a stage', (p) => { insertStage(p, opts); });
+export function addStageAfter(afterId, name = 'New stage') {
+  return attempt('Add a stage', (p) => {
+    const ph = addPhase(p, { name });
+    const list = phases(p);
+    list.splice(list.indexOf(ph), 1);
+    const at = afterId ? list.findIndex((x) => x.id === afterId) + 1 : list.length;
+    list.splice(at, 0, ph);
+    p.phases = list;
+    logProject(p, { kind: 'change', field: 'stages', from: '', to: `added ${ph.name}` });
+  });
+}
+export function quickTaskInStage(stageId, name) {
+  let made = null;
+  const ok = attempt('New task', (p) => {
+    // At the end of the stage's tasks in the outline, or the end of the plan.
+    const idxs = p.tasks.map((t, i) => (phaseOf(p, t.id) === stageId ? i : -1)).filter((i) => i >= 0);
+    const at = idxs.length ? idxs[idxs.length - 1] + 1 : p.tasks.length;
+    const t = insertTask(p, at, { name, duration: 1, level: idxs.length ? p.tasks[idxs[idxs.length - 1]].level : 1 });
+    if (stageId) t.phaseId = stageId;
+    setTaskField(p, t.id, 'work', '0.5');
+    const who = p.resources.find((r) => r.type === 'work');
+    if (who) assign(p, t.id, who.id, 1);
+    const ph = getPhase(p, stageId);
+    if (ph?.deadline) setTaskField(p, t.id, 'deadline', ph.deadline);
+    t.activity = (t.activity || []).slice(0, 1);
+    made = t;
+  });
+  return ok ? made : null;
+}
+
 /** A comment in a task's activity. */
 export function commentOnTask(taskId, text) { return attempt('Comment', (p) => addComment(p, taskId, text)); }
 
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
-  return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => stopWork(p, taskId, { worked, more }));
+  return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => { stopWork(p, taskId, { worked, more }); autoAdvance(p); });
 }
 
 /**
@@ -614,7 +657,7 @@ export function deleteTimeLine(id) { return attempt('Delete timesheet line', (p)
 
 // ---------------------------------------------------------------- stages
 
-export function setTaskStage(taskId, stageId) { return attempt('Move task', (p) => setStage(p, taskId, stageId)); }
+export function setTaskStage(taskId, stageId) { return attempt('Move task', (p) => { setStage(p, taskId, stageId); autoAdvance(p); }); }
 export function newStageColumn(name) { return commit('New status', (p) => addStage(p, name)); }
 export function renameStageColumn(id, name) { return attempt('Rename status', (p) => renameStage(p, id, name)); }
 export function deleteStageColumn(id) { return attempt('Delete status', (p) => removeStage(p, id)); }

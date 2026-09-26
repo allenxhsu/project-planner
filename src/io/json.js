@@ -79,6 +79,17 @@ export function parse(text) {
   // Where a plan came from when it was imported (a Motion project's id), so a
   // second import updates it instead of making a copy.
   if (typeof raw.motionId === 'string' && raw.motionId) p.motionId = raw.motionId;
+  // The project's own fields, as Motion keeps them.
+  if (typeof raw.description === 'string' && raw.description) p.description = raw.description;
+  if (typeof raw.status === 'string' && ['Backlog', 'Todo', 'In Progress', 'Blocked', 'Completed', 'Cancelled'].includes(raw.status)) p.status = raw.status;
+  if (isoValid(raw.deadline)) p.deadline = raw.deadline;
+  if (URGENCIES[raw.urgency]) p.urgency = raw.urgency;
+  if (typeof raw.managerId === 'string') p.managerId = raw.managerId;
+  if (Array.isArray(raw.labels)) { const l = [...new Set(raw.labels.map((x) => String(x).trim()).filter(Boolean))]; if (l.length) p.labels = l; }
+  if (raw.autoAdvance === false) p.autoAdvance = false;
+  if (Array.isArray(raw.activity)) p.activity = raw.activity
+    .filter((x) => x && typeof x === 'object' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(x.at)) && typeof x.kind === 'string').slice(-300)
+    .map((x) => Object.fromEntries(['at', 'kind', 'field', 'from', 'to', 'text', 'by'].filter((k) => x[k] !== undefined && x[k] !== null).map((k) => [k, String(x[k]).slice(0, 4000)])));
 
 
   // The plan's calendar defaults, which every task inherits.
@@ -201,7 +212,11 @@ export function parse(text) {
   // silently gating the calendar on something that is not a phase.
   p.phases = (Array.isArray(raw.phases) ? raw.phases : [])
     .filter((ph) => ph && typeof ph === 'object' && String(ph.name || '').trim())
-    .map((ph) => ({ id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim(), deadline: isoValid(ph.deadline) ? ph.deadline : null }));
+    .map((ph) => ({
+      id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim(), deadline: isoValid(ph.deadline) ? ph.deadline : null,
+      ...(ph.status === 'done' || ph.status === 'cancelled' ? { status: ph.status } : {}),
+      ...(typeof ph.colour === 'string' && /^#[0-9a-f]{6}$/i.test(ph.colour) ? { colour: ph.colour } : {}),
+    }));
   const phaseIds = new Set(p.phases.map((ph) => ph.id));
   for (const t of p.tasks) if (t.phaseId && !phaseIds.has(t.phaseId)) t.phaseId = null;
   p.currentPhaseId = typeof raw.currentPhaseId === 'string' && phaseIds.has(raw.currentPhaseId) ? raw.currentPhaseId : null;

@@ -126,12 +126,11 @@ const item = ({ icon, label, active = false, badge = null, aside = null, onclick
   aside ? el('span', { class: 'side-item-aside', text: aside }) : null,
   badge ? el('span', { class: 'side-badge', text: String(badge) }) : null);
 
+/** A project, clicked: its window, over a view of it (Motion opens the project the same way). */
 async function openPlanFromSidebar(id) {
-  if (id !== store.project.id) {
-    const { openPlan } = await import('../state/sync.js');
-    if (!(await openPlan(id))) return;
-  }
-  set({ view: ['gantt', 'kanban', 'sheet', 'network', 'priority'].includes(store.ui.view) ? store.ui.view : 'gantt' });
+  if (!['gantt', 'kanban', 'sheet', 'network', 'priority', 'alltasks'].includes(store.ui.view)) set({ view: 'gantt' });
+  const { projectSheet } = await import('./projectsheet.js');
+  await projectSheet({ planId: id });
   renderSidebar();
 }
 
@@ -202,7 +201,8 @@ export function renderSidebar() {
   }
 
   clear(parts.views);
-  parts.views.append(el('div', { class: 'side-plan-name', title: 'The open project', text: project.name }));
+  parts.views.append(el('button', { class: 'side-plan-name', title: 'Open the project — stages, dates and its tasks', text: `▢ ${project.name}`,
+    onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }));
   for (const v of PLAN_VIEWS) parts.views.append(item({ ...v, active: ui.view === v.view, onclick: () => set({ view: v.view }) }));
 
   clear(parts.favorites);
