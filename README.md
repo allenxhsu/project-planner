@@ -367,6 +367,20 @@ toolbar and from **Edit time blocks…** beside a task's own time block. Each
 plan still carries a copy of the list, so a `*.project.json` opened on its own
 schedules exactly as it did here.
 
+### Overdue work
+
+A calendar is about the days still ahead. A task the schedule says should have
+started already, and is not finished, is **overdue** — and overdue work is
+placed from today on, hatched so it reads as late, rather than written into a
+May that has gone where nobody will ever see it. The floor is the plan's status
+date when it has one, which is what looking at a plan "as of" another day
+means; otherwise it is today.
+
+When projects are missing from the calendar it is almost always because their
+tasks were never put on it: the calendar shows only what asks to be shown. The
+note under the grid names the projects holding work back and how much, and
+**Show what is held back** lists every such task.
+
 ### Why a week is not full
 
 Duration is how long a task is open. Work is how much of that time goes into

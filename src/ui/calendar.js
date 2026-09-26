@@ -14,7 +14,7 @@ import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
-import { showMenu } from './dialog.js';
+import { showMenu, showText } from './dialog.js';
 
 /**
  * How much of the calendar is on screen.
@@ -360,12 +360,12 @@ export function renderCalendar(root) {
       // task's name and the day says the rest.
       const oneDay = range === 'day';
       col.append(el('div', {
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, background: colour.fill, borderLeftColor: colour.line,
         },
-        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete`,
+        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}`,
         onclick: () => { if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); },
         ondblclick: () => set({ rightOpen: true, rightTab: 'task', selection: [t.id] }),
         oncontextmenu: (e) => {
@@ -410,9 +410,18 @@ export function renderCalendar(root) {
   const placedHours = Math.round(placed.reduce((n, b) => n + b.minutes, 0) / 6) / 10;
   const later = blocks.filter((b) => !onScreen.has(b.day));
   const laterTasks = new Set(later.map((b) => b.taskId)).size;
-  const notReleased = entries.reduce((n, e) => n + e.project.tasks.filter((t, i) =>
-    !isSummary(e.project, i) && !agendaOf(e.project, t).show && (e.schedule.tasks[t.id]?.percent ?? 0) < 100
-    && !e.schedule.tasks[t.id]?.milestone).length, 0);
+  // Which projects are keeping work off the calendar, and how much. "Not all
+  // my projects are here" is almost always this: the tasks were never put on
+  // it, and the calendar only shows what asks to be shown.
+  const held = entries.map((e) => ({
+    name: e.project.name,
+    tasks: e.project.tasks.filter((t, i) => !isSummary(e.project, i) && !agendaOf(e.project, t).show
+      && (e.schedule.tasks[t.id]?.percent ?? 0) < 100 && !e.schedule.tasks[t.id]?.milestone),
+  })).filter((h) => h.tasks.length);
+  const notReleased = held.reduce((n, h) => n + h.tasks.length, 0);
+  const heldBack = held.sort((a, b) => b.tasks.length - a.tasks.length).slice(0, 4).map((h) => `${h.name} ${h.tasks.length}`);
+  if (held.length > 4) heldBack.push(`${held.length - 4} more`);
+  const heldBackDetail = held.flatMap((h) => [`${h.name} — ${h.tasks.length}`, ...h.tasks.slice(0, 12).map((t) => `   ${t.name}`), h.tasks.length > 12 ? `   … ${h.tasks.length - 12} more` : null, '']).filter((x) => x !== null);
   const capHours = { ...DEFAULT_AGENDA, ...(project.agenda || {}) }.dailyCap;
   const room = Math.max(0, capHours * columns.length - placedHours);
   if (placedHours || laterTasks || notReleased) {
@@ -420,7 +429,12 @@ export function renderCalendar(root) {
       `${placedHours}h placed${columns.length > 1 ? ` across ${columns.length} days` : ''}. `,
       room > 0 ? `Room for ${Math.round(room * 10) / 10}h more at ${capHours}h a day. ` : `That is the ${capHours}h a day this plan allows. `,
       laterTasks ? `${laterTasks} ${laterTasks === 1 ? 'task is' : 'tasks are'} on the calendar but not scheduled to start until later. ` : '',
-      notReleased ? `${notReleased} unfinished ${notReleased === 1 ? 'task is' : 'tasks are'} not on the calendar yet.` : ''));
+      notReleased ? `${notReleased} unfinished ${notReleased === 1 ? 'task is' : 'tasks are'} not on the calendar yet${heldBack.length ? ` — ${heldBack.join(', ')}` : ''}. ` : '',
+      notReleased ? el('button', {
+        class: 'sc-button sc-button--ghost sc-button--sm', text: 'Show what is held back',
+        title: 'Every unfinished task that is not on the calendar, by project',
+        onclick: () => showText('Not on the calendar', heldBackDetail.join('\n')),
+      }) : null));
   }
 
   if (overflow.length) {

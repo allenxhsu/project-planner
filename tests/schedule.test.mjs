@@ -18,6 +18,9 @@ const d = (iso) => toDay(iso);
 
 function plan(start = MON) {
   const p = createProject('T', start);
+  // Looked at as of its own start, so placement does not depend on the day the
+  // tests happen to run — the calendar never places work before its status date.
+  p.statusDate = start;
   return p;
 }
 const task = (p, name, duration, level = 1) => insertTask(p, p.tasks.length, { name, duration, level });
@@ -1039,4 +1042,26 @@ test('a task can be in several time blocks and uses whichever has room', async (
   const only = planBlocks(p, computeSchedule(p)).blocks;
   assert.ok(only.every((b) => b.start >= 18 * 60 && b.end <= 21 * 60));
   assert.ok(only.every((b) => ![0, 6].includes(((b.day + 4) % 7 + 7) % 7)), 'and on weekdays only');
+});
+
+test('overdue work is placed from today on, never on days that have gone', async () => {
+  const { planBlocks } = await import('../src/model/agenda.js');
+  const p = plan('2026-05-11');                 // a plan that started in May
+  const r = addResource(p, { name: 'Ann' });
+  const late = task(p, 'Order the brackets', 1);
+  assign(p, late.id, r.id, 1);
+  setTaskField(p, late.id, 'work', 2);
+  setTaskField(p, late.id, 'calendarShow', true);
+
+  // Looked at as of 25 September, the May task is overdue and not done.
+  p.statusDate = '2026-09-25';
+  const { blocks } = planBlocks(p, computeSchedule(p));
+  assert.ok(blocks.length > 0, 'it is still on the calendar');
+  assert.ok(blocks.every((b) => b.dateIso >= '2026-09-25'), 'and nowhere before the day it is looked at from');
+  assert.ok(blocks.every((b) => b.overdue), 'each block says it is overdue');
+
+  // A task that starts in the future is not pulled forward.
+  p.statusDate = '2026-05-01';
+  const early = planBlocks(p, computeSchedule(p)).blocks;
+  assert.ok(early.every((b) => b.dateIso >= '2026-05-11' && !b.overdue), 'future work keeps its own start');
 });

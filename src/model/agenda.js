@@ -285,10 +285,19 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     // rounded up to a whole block.
     const spanDays = Math.max(1, cal.between(info.start, info.finish));
     const perDayBlocks = Math.max(1, Math.ceil(Math.ceil(left / size) / spanDays));
+    // A calendar is about the days still ahead. Work the schedule says should
+    // have started already, and is not finished, is overdue — and overdue
+    // work is done from today on, not written into a May that has gone, where
+    // nobody will ever see it. The floor is the plan's status date when it
+    // has one, which is Microsoft Project's "as of" and what a plan being
+    // looked at from another day means; otherwise it is today.
+    //
     // "Do it now" means today, not the day the schedule would have started it.
     const urgency = urgencyOf(t);
     const todayDay = toDay(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
-    let day = cal.next(urgency === 'now' ? Math.min(info.start, todayDay) : info.start);
+    const floor = project.statusDate ? toDay(project.statusDate) : todayDay;
+    let day = cal.next(urgency === 'now' ? Math.min(Math.max(info.start, floor), floor) : Math.max(info.start, floor));
+    const overdue = info.start < floor;
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
       // A time block says which days it covers; a day outside every one of
@@ -313,7 +322,7 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
           const block = {
             taskId: t.id, planId: project.id, planName: project.name,
             day, start: at, end: at + minutes, minutes,
-            lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day),
+            lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day), overdue,
           };
           blocks.push(block);
           mine.push(block);
