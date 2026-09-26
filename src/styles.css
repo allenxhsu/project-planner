@@ -1079,3 +1079,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .ord-row.is-dragging { opacity: .45; }
 .ord-row.is-drop-before { box-shadow: inset 0 2px 0 var(--sc-accent); }
 .ord-row.is-drop-after { box-shadow: inset 0 -2px 0 var(--sc-accent); }
+/* Now, across today's column. */
+.cal-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--sc-text-1, #fff); z-index: 6; pointer-events: none; }
+.cal-now::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--sc-text-1, #fff); }
+.side-item-icon { width: 18px; display: inline-flex; justify-content: center; color: var(--sc-text-2); }
+.side-item.is-on .side-item-icon { color: var(--sc-text-1); }
+.side-plan-name { display: inline-flex; align-items: center; gap: 6px; }

@@ -139,6 +139,41 @@ export async function stopNowDialog({ planId = store.project.id, taskId }) {
   }
 }
 
+/** A local 'YYYY-MM-DDTHH:MM'. */
+const stamp = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+/** Motion's Do later choices: [label, 'YYYY-MM-DDTHH:MM' | 'ask']. */
+function laterChoices() {
+  const now = new Date();
+  const at = (days, h, m = 0) => { const d = new Date(now); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return stamp(d); };
+  const inHours = (n) => { const d = new Date(now.getTime() + n * 3600000); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0); return stamp(d); };
+  const cal = makeCalendar(store.project.calendar);
+  const tomorrow = cal.next(toDay(today()) + 1) - toDay(today());
+  const monday = ((8 - now.getDay()) % 7) || 7;
+  const mondayIso = at(monday, 9);
+  return [
+    ['In 1 hour', inHours(1)],
+    ['In 2 hours', inHours(2)],
+    ...(now.getHours() < 15 ? [['This afternoon (3pm)', at(0, 15)]] : []),
+    ...(now.getHours() < 19 ? [['This evening (7pm)', at(0, 19)]] : []),
+    ['Tomorrow', at(tomorrow, 9)],
+    [`Next week (Mon ${formatDate(mondayIso.slice(0, 10), 'day')})`, mondayIso],
+    ['Specify time…', 'ask'],
+  ];
+}
+/** Specify time: a date and a time to put the task off to. */
+function askLaterTime() {
+  return open('Do later', (close) => {
+    const d = new Date(Date.now() + 3600000);
+    const date = el('input', { class: 'sc-input', type: 'date', value: stamp(d).slice(0, 10) });
+    const time = el('input', { class: 'sc-input', type: 'time', step: 900, value: `${String(d.getHours()).padStart(2, '0')}:00` });
+    const ok = () => { if (date.value && time.value) close(`${date.value}T${time.value.slice(0, 5)}`); };
+    close.onSave = ok;
+    return [el('p', { class: 'sc-muted small', text: 'The calendar lays none of this task before then.' }),
+      el('div', { class: 'tp-row' }, date, time),
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)), button('Do later', ok, 'sc-button--primary'))];
+  });
+}
+
 const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`);
 
 /**
@@ -165,6 +200,7 @@ export function blockMenu(b, x, y) {
     done
       ? { icon: '↺', label: 'Mark not complete', run: run(b, (t) => act.setPercent(t.id, 0)) }
       : { icon: '✓', label: 'Complete task', run: run(b, (t) => act.setPercent(t.id, 100)) },
+    { icon: '⊗', label: 'Cancel task', run: run(b, (t) => { const c = stages(store.project).find((s) => s.cancelled); if (c) act.setTaskStage(t.id, c.id); }) },
     '-',
     b.pinned
       ? { icon: '⌖', label: 'Unschedule the fixed time', run: run(b, (t) => act.unpinBlock(t.id, b.pinIndex)) }
@@ -188,14 +224,16 @@ export function blockMenu(b, x, y) {
     { icon: '◷', label: 'Add time to task', submenu: [[15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 hour'], [90, '1h 30m'], [120, '2 hours']].map(([m, label]) => ({
       label, run: run(b, (t) => act.editTask(t.id, 'work', String(Math.round((expectedHours(store.project, t) + m / 60) * 100) / 100))),
     })) },
-    { icon: '☾', label: 'Do later', run: run(b, (t) => {
-      // Later is tomorrow at the soonest: the task is kept off today, not
-      // lowered in a ranking a deadline would override anyway.
-      const cal = makeCalendar(store.project.calendar);
-      act.editTask(t.id, 'start', fromDay(cal.next(toDay(today()) + 1)));
-      if (urgencyOf(t) === 'now') act.editTask(t.id, 'urgency', 'normal');
-    }) },
-    { icon: '!', label: 'Do ASAP', run: run(b, (t) => act.editTask(t.id, 'urgency', 'now')) },
+    { icon: '☾', label: 'Do later', submenu: laterChoices().map(([label, when]) => ({
+      label, run: run(b, async (t) => {
+        const at = when === 'ask' ? await askLaterTime() : when;
+        if (!at) return;
+        act.editTask(t.id, 'notBefore', at);
+        if (urgencyOf(t) === 'now') act.editTask(t.id, 'urgency', 'normal');
+        act.hint(`“${t.name}” is put off to ${formatDate(at.slice(0, 10), 'day')}, ${formatClock(parseTime(at.slice(11)))}.`);
+      }),
+    })) },
+    { icon: '!', label: 'Do ASAP', run: run(b, (t) => { act.editTask(t.id, 'urgency', 'now'); if (t.calendar?.notBefore) act.editTask(t.id, 'notBefore', null); }) },
     '-',
     { icon: '⊘', label: 'Set blockers…', run: run(b, (t) => { void blockersDialog(t); }) },
     '-',

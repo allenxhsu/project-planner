@@ -150,6 +150,7 @@ export function parse(text) {
               : (t.calendar.timeBlockId ? [t.calendar.timeBlockId] : [])).filter((id) => blockIds.has(id)),
             ...(BLOCK_CHOICES.includes(+t.calendar.blockHours) ? { blockHours: +t.calendar.blockHours } : {}),
             ...(t.calendar.whole === true ? { whole: true } : {}),
+            ...(typeof t.calendar.notBefore === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t.calendar.notBefore) ? { notBefore: t.calendar.notBefore } : {}),
             ...(parseTime(t.calendar.from) !== null ? { from: t.calendar.from } : {}),
             ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}),
             // Only well-formed pins come back; a malformed one is not a

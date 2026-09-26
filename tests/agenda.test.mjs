@@ -302,3 +302,38 @@ test('a hard deadline is placed before a soft one, and "no chunks" lays one bloc
   assert.deepEqual([back.labels, back.calendar.whole], [['writing', 'school'], true]);
   assert.equal(parse(serialize(p)).project.tasks.find((t) => t.id === hard.id).hardDeadline, true);
 });
+
+test('a block under way stays put until half an hour after it ends; after that it is laid again', () => {
+  const { p, ann } = week();
+  const a = job(p, ann, 'Started', { work: 2 });
+  job(p, ann, 'Next', { work: 2 });
+  const mon = toDay(MON);
+  // At 10:00 the 9–11 block has started. Without being told, the planner lays it from 10:00.
+  const at10 = new Date(2026, 8, 21, 10, 0);
+  assert.equal(lay(p, at10).blocks.find((b) => b.taskId === a.id).start, 10 * 60);
+  // Told it was on the calendar at 9:00, it stays there.
+  const held = [{ planId: p.id, taskId: a.id, day: mon, start: 9 * 60, end: 11 * 60 }];
+  const kept = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }], { now: at10, held });
+  const block = kept.blocks.find((b) => b.taskId === a.id);
+  assert.equal(block.start, 9 * 60);
+  assert.equal(block.held, true);
+  assert.equal(kept.blocks.filter((b) => b.taskId === a.id).reduce((n, b) => n + b.minutes, 0), 120, 'its work is not laid twice');
+  // Marked done, it holds nothing.
+  setTaskField(p, a.id, 'percent', 100);
+  const done = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }], { now: at10, held });
+  assert.equal(done.blocks.filter((b) => b.taskId === a.id).length, 0);
+});
+
+test('Do later: none of the task is laid before the time it was put off to', () => {
+  const { p, ann } = week();
+  const t = job(p, ann, 'Later', { work: 2 });
+  setTaskField(p, t.id, 'notBefore', `${TUE}T14:00`);
+  const first = lay(p).blocks.filter((b) => b.taskId === t.id)[0];
+  assert.equal(first.dateIso, TUE);
+  assert.ok(first.start >= 14 * 60, `starts at ${formatClock(first.start)}`);
+  // It is kept in the file.
+  assert.equal(parse(serialize(p)).project.tasks.find((x) => x.id === t.id).calendar.notBefore, `${TUE}T14:00`);
+  // Do ASAP clears it.
+  setTaskField(p, t.id, 'notBefore', null);
+  assert.equal(lay(p).blocks.filter((b) => b.taskId === t.id)[0].dateIso, MON);
+});

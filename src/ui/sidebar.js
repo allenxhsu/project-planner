@@ -19,22 +19,22 @@ import { currentLayout, lateness } from './calendar.js';
 import { icon as ic, projectColour } from './icons.js';
 
 const PLACES = [
-  { view: 'today', icon: '☀', label: 'Agenda' },
-  { view: 'calendar', icon: '▦', label: 'Calendar' },
-  { view: 'alltasks', icon: '≣', label: 'Projects & Tasks' },
-  { view: 'projects', icon: '▢', label: 'Projects' },
-  { view: 'people', icon: '☺', label: 'People' },
+  { view: 'today', icon: 'agenda', label: 'Agenda' },
+  { view: 'calendar', icon: 'calendar', label: 'Calendar' },
+  { view: 'alltasks', icon: 'project', label: 'Projects & Tasks' },
+  { view: 'projects', icon: 'folder', label: 'Projects' },
+  { view: 'people', icon: 'people', label: 'People' },
 ];
 const PLAN_VIEWS = [
-  { view: 'list', icon: '☰', label: 'Task list' },
-  { view: 'gantt', icon: '▤', label: 'Gantt' },
-  { view: 'kanban', icon: '▥', label: 'Kanban' },
-  { view: 'sheet', icon: '☰', label: 'Task sheet' },
-  { view: 'priority', icon: '⚑', label: 'Priority' },
-  { view: 'resources', icon: '◧', label: 'Resources' },
-  { view: 'usage', icon: '▦', label: 'Usage' },
-  { view: 'network', icon: '⬡', label: 'Network' },
-  { view: 'schedules', icon: '◷', label: 'Schedules' },
+  { view: 'list', icon: 'list', label: 'Task list' },
+  { view: 'gantt', icon: 'timeline', label: 'Gantt' },
+  { view: 'kanban', icon: 'kanban', label: 'Kanban' },
+  { view: 'sheet', icon: 'sheet', label: 'Task sheet' },
+  { view: 'priority', icon: 'priority', label: 'Priority' },
+  { view: 'resources', icon: 'resources', label: 'Resources' },
+  { view: 'usage', icon: 'usage', label: 'Usage' },
+  { view: 'network', icon: 'network', label: 'Network' },
+  { view: 'schedules', icon: 'clock', label: 'Schedules' },
 ];
 
 const KEY = 'project-planner:sidebar';
@@ -397,7 +397,7 @@ export function renderSidebar() {
   clear(parts.places);
   for (const p of PLACES) {
     parts.places.append(item({
-      ...p, active: ui.view === p.view || (p.view === 'alltasks' && ui.view === 'team'),
+      ...p, icon: ic(p.icon), active: ui.view === p.view || (p.view === 'alltasks' && ui.view === 'team'),
       badge: p.view === 'today' && late ? late : null,
       aside: p.view === 'calendar' ? dayLabel : null,
       onclick: () => set({ view: p.view }),
@@ -405,9 +405,9 @@ export function renderSidebar() {
   }
 
   clear(parts.views);
-  parts.views.append(el('button', { class: 'side-plan-name', title: 'Open the project — stages, dates and its tasks', text: `▢ ${project.name}`,
-    onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }));
-  for (const v of PLAN_VIEWS) parts.views.append(item({ ...v, active: ui.view === v.view, onclick: () => set({ view: v.view }) }));
+  parts.views.append(el('button', { class: 'side-plan-name', title: 'Open the project — stages, dates and its tasks',
+    onclick: () => { void import('./projectsheet.js').then((m) => m.projectSheet()); } }, ic('project', projectColour(project.colour)), el('span', { text: project.name })));
+  for (const v of PLAN_VIEWS) parts.views.append(item({ ...v, icon: ic(v.icon), active: ui.view === v.view, onclick: () => set({ view: v.view }) }));
 
   clear(parts.favorites);
   const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));

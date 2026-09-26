@@ -99,10 +99,42 @@ export function currentLayout() {
   const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${Math.floor(Date.now() / 900000)}`;
   if (layoutMemo.key === key && layoutMemo.value) return layoutMemo.value;
   const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
-  const value = { entries, all: planBlocksAcross(entries) };
+  const value = { entries, all: planBlocksAcross(entries, { held: heldBlocks() }) };
   layoutMemo = { key, value };
+  rememberToday(value.all.blocks);
   return value;
 }
+
+// A block that has started and is not done stays put until half an hour after
+// it was due to end (model/agenda.js). The planner does not remember where it
+// put things, so the calendar tells it: today's blocks from the last layout,
+// kept for a reload too.
+const HELD_KEY = 'project-planner:today-blocks';
+const GRACE_MIN = 30;
+const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+function heldBlocks() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(HELD_KEY) || 'null'); } catch { saved = null; }
+  if (!saved || saved.day !== toDay(today())) return [];
+  const now = nowMinutes();
+  return saved.blocks.filter((b) => b.start < now && now < b.end + GRACE_MIN).map((b) => ({ ...b, day: saved.day }));
+}
+function rememberToday(blocks) {
+  const day = toDay(today());
+  const mine = blocks.filter((b) => b.day === day && !b.worked && !b.pinned && !b.live)
+    .map((b) => ({ planId: b.planId, taskId: b.taskId, start: b.start, end: b.end }));
+  try { localStorage.setItem(HELD_KEY, JSON.stringify({ day, blocks: mine })); } catch { /* private mode */ }
+}
+
+// The clock moves the calendar on: the now-line every minute, and the layout
+// every quarter hour (the key above changes), when a calendar is on screen.
+let lastQuarter = Math.floor(Date.now() / 900000);
+setInterval(() => {
+  const line = document.querySelector('.cal-now');
+  if (line) line.style.top = `${line.dataset.from ? ((nowMinutes() - +line.dataset.from) / 60) * HOUR_H : 0}px`;
+  const q = Math.floor(Date.now() / 900000);
+  if (q !== lastQuarter) { lastQuarter = q; if (['calendar', 'today'].includes(store.ui.view)) set({}); }
+}, 60 * 1000);
 /** Pick out a task's blocks for a moment, and bring the first into view. */
 export function flashTask(taskId) {
   setTimeout(() => {
@@ -530,6 +562,8 @@ export function renderCalendar(root) {
   for (const d of columns) {
     const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
+    // Now: a line across today at the minute it is.
+    if (d === todayDay) col.append(el('div', { class: 'cal-now', 'data-from': String(hourFrom * 60), title: 'Now', style: { top: `${((nowMinutes() - hourFrom * 60) / 60) * HOUR_H}px` } }));
     // Drag down empty time: pick the hours, then say what goes in them — the
     // same menu as a right-click, for exactly the range drawn.
     col.addEventListener('pointerdown', (e) => {

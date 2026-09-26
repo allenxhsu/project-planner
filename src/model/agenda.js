@@ -194,7 +194,17 @@ export function planBlocks(project, schedule, opts = {}) {
  *
  * @param {Array<{project: object, schedule: object}>} entries
  */
-export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() } = {}) {
+/**
+ * When a task was put off to ("Do later"), in minutes from day 0, or -Infinity.
+ * `calendar.notBefore` is local 'YYYY-MM-DDTHH:MM'.
+ */
+export function notBeforeOf(t) {
+  const s = t.calendar?.notBefore;
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return -Infinity;
+  return toDay(s.slice(0, 10)) * 24 * 60 + (+s.slice(11, 13)) * 60 + (+s.slice(14, 16));
+}
+
+export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [] } = {}) {
   // One plan, once. The same plan arriving twice — the open copy and its own
   // record from the shelf — would book every hour of it twice over.
   const seenPlans = new Set();
@@ -357,6 +367,34 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
     pinnedMinutes.set(t.id, used);
   }
 
+  // ---- blocks already under way. A block the calendar laid, that has
+  // started and is not done, stays where it is until half an hour after it
+  // was due to end — the time to finish it and tick it off — rather than
+  // jumping ahead of the clock every quarter hour. After that its work is
+  // laid again from now on, and what came after it moves up. The caller says
+  // which blocks those are (the layout it drew last).
+  for (const h of held) {
+    const c = candidates.find((x) => x.t.id === h.taskId && x.project.id === h.planId);
+    if (!c || pinsOf(c.t).length || notBeforeOf(c.t) > (h.day * 24 * 60 + h.start)) continue;
+    const { t, info, project } = c;
+    const left = Math.round(hoursLeft(project, info, t) * 60) - (pinnedMinutes.get(t.id) || 0);
+    const minutes = Math.min(h.end - h.start, left);
+    if (minutes <= 0) continue;
+    const a = agendaOf(project, t);
+    const people = peopleOf(project, t);
+    const lanes = lanesOf(t);
+    const block = {
+      taskId: t.id, planId: project.id, planName: project.name,
+      day: h.day, start: h.start, end: h.start + minutes, minutes,
+      lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(h.day), overdue: false, held: true,
+    };
+    blocks.push(block);
+    if (!byTask.has(t.id)) byTask.set(t.id, []);
+    byTask.get(t.id).push(block);
+    for (const lane of people) { bookedOn(lane, h.day).push({ start: h.start, end: h.start + minutes + a.gap }); fill(lane, h.day, minutes); }
+    pinnedMinutes.set(t.id, (pinnedMinutes.get(t.id) || 0) + minutes);
+  }
+
   // ---- work already done, where it was done. A task that was started and
   // stopped logged its time with the minute it began; the calendar shows it
   // there, ticked, so the day reads as what happened. It is history: it
@@ -408,7 +446,11 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
     // "Do it now" means today, not the day the schedule would have started it.
     const urgency = urgencyOf(t);
     const floor = floorOf(project);
-    const firstDay = cal.next(urgency === 'now' ? floor : Math.max(info.start, floor));
+    // "Do later": not before the day and minute it was put off to.
+    const later = notBeforeOf(t);
+    const laterDay = Number.isFinite(later) ? Math.floor(later / (24 * 60)) : -Infinity;
+    const laterMinute = Number.isFinite(later) ? later % (24 * 60) : 0;
+    const firstDay = cal.next(Math.max(urgency === 'now' ? floor : Math.max(info.start, floor), laterDay));
     const overdue = info.start < floor;
     // Duration is how long the task is open; work is how much of that time is
     // spent on it. A five-day design task of twelve hours is three hours a day,
@@ -441,7 +483,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
       if (roomToday < Math.min(size, left)) { day = cal.next(day + 1); continue; }
       let usedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
-      const busyForAll = people.flatMap((lane) => bookedOn(lane, day));
+      const busyForAll = [...people.flatMap((lane) => bookedOn(lane, day)), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])];
       const slots = today.flatMap((w) => freeSlots(busyForAll, w.from, w.to)).sort((x, y) => x[0] - y[0]);
       for (const [from, to] of slots) {
         let at = from;

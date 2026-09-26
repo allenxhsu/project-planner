@@ -1207,6 +1207,7 @@ function describeField(p, t, field) {
     case 'calendarShow': return ['on the calendar', t.calendar?.show ? 'yes' : 'no'];
     case 'blockHours': return ['min chunk', t.calendar?.blockHours ? hoursWords(t.calendar.blockHours) : 'the plan’s'];
     case 'wholeBlock': return ['min chunk', t.calendar?.whole ? 'no chunks' : 'chunks'];
+    case 'notBefore': return ['do later', t.calendar?.notBefore ? t.calendar.notBefore.replace('T', ' ') : 'any time'];
     case 'timeBlock': return ['schedule', (t.calendar?.timeBlockIds || []).map((id) => getTimeBlock(p, id)?.name).filter(Boolean).join(', ') || 'any'];
     case 'milestone': return ['milestone', t.milestone ? 'yes' : 'no'];
     default: return null;
@@ -1280,6 +1281,13 @@ function applyTaskField(p, t, id, field, value) {
     }
     // No chunks: laid as one block, however long.
     case 'wholeBlock': t.calendar = { ...t.calendar, whole: !!value }; if (!value) delete t.calendar.whole; break;
+    // "Do later": the calendar lays none of it before this moment, local 'YYYY-MM-DDTHH:MM'.
+    case 'notBefore': {
+      if (value && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(value))) throw new Error('A time to do it later is a date and a time.');
+      t.calendar = { ...t.calendar };
+      if (value) t.calendar.notBefore = String(value); else delete t.calendar.notBefore;
+      break;
+    }
     case 'deadline': if (value && !isoValid(value)) throw new Error('A deadline is a date (YYYY-MM-DD).'); t.deadline = value || null; break;
     case 'constraintType': {
       if (!CONSTRAINTS[value]) throw new Error('Unknown constraint.');
