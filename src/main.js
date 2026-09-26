@@ -23,7 +23,7 @@ import { renderInspector } from './ui/inspector.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, APP_ID } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, keepsEdits, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 
@@ -111,7 +111,11 @@ function initHosting() {
   subscribe(() => {
     if (store._rev === lastRev && store.ui.dirty === lastDirty) return;
     lastRev = store._rev; lastDirty = store.ui.dirty;
-    post({ type: 'changed', json: serialize(store.project), dirty: store.ui.dirty, name: store.project.name });
+    // The Mac app marks the window edited — and asks to save on close — for a
+    // change reported dirty. Once the store is open every edit is kept there
+    // within a second, so there is nothing to ask about; only a plan the store
+    // cannot keep is reported unsaved.
+    post({ type: 'changed', json: serialize(store.project), dirty: store.ui.dirty && !keepsEdits(), name: store.project.name });
   });
 }
 

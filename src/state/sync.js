@@ -17,6 +17,7 @@ import {
 } from '../../sync-kit/js/index.js';
 import { store, set, loadProject, markSaved, subscribe, revision, tryCommit, setAutosaveSink, readAutosave, clearLocalAutosave, AUTOSAVE_STORAGE_KEY } from './store.js';
 import { uid } from '../util.js';
+import { hosted as hostedPage } from '../host.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
@@ -32,7 +33,9 @@ const DEVICE_KEY = 'project-planner:deviceId';
 /** How often a configured, enabled sync runs by itself. */
 const INTERVAL_MS = 30_000;
 /** How long after the last edit the plan is written to the record store. */
-const COMMIT_MS = 800;
+// In the Mac app nothing asks to save on close, so an edit has to be in the
+// store before a quick ⌘Q can beat it.
+const COMMIT_MS = hostedPage ? 200 : 800;
 /** …and how long after that it goes to the server, when sync is on. */
 const AUTOSAVE_MS = 2_500;
 
@@ -310,6 +313,9 @@ async function openDocument() {
   await commit();
 }
 
+/** Whether edits are being kept by the store on their own — no Save needed. */
+export const keepsEdits = () => !!recordStore;
+
 /**
  * Write the open plan into the record store, where a push can find it, and —
  * when sync is on — send it shortly after. This is what "autosaved to the
@@ -321,14 +327,20 @@ async function commit() {
   // a record would put a row on the shelf — and on every other device — for the
   // act of opening the app, so a plan earns its record by having something in it.
   const untouched = store.project.tasks.length === 0
+    && !(store.project.events || []).length
     && store.project.name === 'Untitled project'
     && !doc.record.updatedAt;
   if (untouched) return;
   const body = serialize(store.project);
-  if (body === doc.body && store.project.name === doc.name) return;
-  doc.edit(body, store.project.name);
-  await doc.save();
-  if (!syncConfigured()) return;
+  const changed = body !== doc.body || store.project.name !== doc.name;
+  if (changed) {
+    doc.edit(body, store.project.name);
+    await doc.save();
+  }
+  // In the store is saved: the plan is on this device, and on the others once
+  // sync runs. Nothing is left for a Save to do, so nothing asks for one.
+  if (store.ui.dirty && store.project.id === docPlanId) markSaved(null);
+  if (!changed || !syncConfigured()) return;
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => { void syncNow(); }, AUTOSAVE_MS);
 }
