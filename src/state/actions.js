@@ -11,7 +11,7 @@ import {
   addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
   addPhase, setPhaseField, removePhase, movePhase, getPhase,
   cleanField, fieldsOf, getField, removeField, setFieldValue, getResource,
-  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent,
+  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
 } from '../model/model.js';
 
 export const hint = (text) => set({ hint: text });
@@ -375,6 +375,9 @@ export function startTaskNow(taskId, minutes, { pinIndex = null } = {}) {
 export function saveOwnEvent(ev) { return attempt(ev.id ? 'Edit the event' : 'New event', (p) => saveEvent(p, ev)); }
 export function deleteOwnEvent(id) { return attempt('Delete the event', (p) => removeEvent(p, id)); }
 
+/** A comment in a task's activity. */
+export function commentOnTask(taskId, text) { return attempt('Comment', (p) => addComment(p, taskId, text)); }
+
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
   return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => stopWork(p, taskId, { worked, more }));
@@ -396,6 +399,8 @@ export function newTaskFromEvent({ name, day, start, minutes, notes = '' }) {
     setTaskField(p, t.id, 'calendarShow', true);
     if (notes) setTaskField(p, t.id, 'notes', notes);
     setPin(p, t.id, { day, start, minutes });
+    // Set up as it was made: its history starts at "created", not with each setting.
+    t.activity = (t.activity || []).slice(0, 1);
     made = t;
   });
   return ok ? made : null;
@@ -420,8 +425,14 @@ export function createTask(spec) {
     if (spec.blockHours) setTaskField(p, t.id, 'blockHours', spec.blockHours);
     if (spec.timeBlockId) setTaskField(p, t.id, 'timeBlock', spec.timeBlockId);
     if (spec.stageId) setStage(p, t.id, spec.stageId);
+    if (spec.phaseId && getPhase(p, spec.phaseId)) t.phaseId = spec.phaseId;
+    if (spec.hardDeadline) setTaskField(p, t.id, 'hardDeadline', true);
+    if (spec.labels?.length) setTaskField(p, t.id, 'labels', spec.labels);
+    if (spec.whole) setTaskField(p, t.id, 'wholeBlock', true);
     for (const [fieldId, value] of Object.entries(spec.fields || {})) setFieldValue(p, t.id, fieldId, value);
     if (spec.fixed) setPin(p, t.id, spec.fixed);
+    // Set up as it was made: its history starts at "created", not with each setting.
+    t.activity = (t.activity || []).slice(0, 1);
     made = t;
   });
   return ok ? made : null;
@@ -445,6 +456,8 @@ export function newTaskDoneAt({ name, day, start, minutes, notes = '' }) {
     setTaskField(p, t.id, 'percent', 100);
     const end = start + minutes;
     t.doneAt = `${day}T${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+    // Set up as it was made: its history starts at "created", not with each setting.
+    t.activity = (t.activity || []).slice(0, 1);
     made = t;
   });
   return ok ? made : null;

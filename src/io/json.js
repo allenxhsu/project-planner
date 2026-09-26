@@ -111,6 +111,13 @@ export function parse(text) {
       // Checked against the plan's phases once those are read, below.
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
+      ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
+      // The task's history: kept as long as each line is a dated entry.
+      ...(Array.isArray(t.activity) ? { activity: t.activity
+        .filter((x) => x && typeof x === 'object' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(x.at)) && typeof x.kind === 'string')
+        .slice(-200)
+        .map((x) => Object.fromEntries(['at', 'kind', 'field', 'from', 'to', 'text'].filter((k) => x[k] !== undefined && x[k] !== null).map((k) => [k, String(x[k]).slice(0, 4000)]))) } : {}),
+      ...(Array.isArray(t.labels) && t.labels.some((x) => String(x).trim()) ? { labels: [...new Set(t.labels.map((x) => String(x).trim()).filter(Boolean))] } : {}),
       ...(typeof t.doneAt === 'string' && isoValid(t.doneAt.slice(0, 10)) && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(t.doneAt) && Math.round(+t.percent) === 100 ? { doneAt: t.doneAt } : {}),
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
@@ -119,6 +126,7 @@ export function parse(text) {
               ? t.calendar.timeBlockIds
               : (t.calendar.timeBlockId ? [t.calendar.timeBlockId] : [])).filter((id) => blockIds.has(id)),
             ...(BLOCK_CHOICES.includes(+t.calendar.blockHours) ? { blockHours: +t.calendar.blockHours } : {}),
+            ...(t.calendar.whole === true ? { whole: true } : {}),
             ...(parseTime(t.calendar.from) !== null ? { from: t.calendar.from } : {}),
             ...(parseTime(t.calendar.to) !== null ? { to: t.calendar.to } : {}),
             // Only well-formed pins come back; a malformed one is not a

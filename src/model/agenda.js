@@ -310,8 +310,12 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
     //
     // One exception, on purpose: "do it now" still goes first. It is a person
     // saying, in so many words, that this beats the arithmetic.
+    //
+    // A hard deadline is the other: it is placed before any soft one, so when
+    // there is not room for both it is the soft deadline that slips.
     .sort((a, b) =>
       ((urgencyOf(a.t) === 'now' ? 0 : 1) - (urgencyOf(b.t) === 'now' ? 0 : 1))
+      || ((a.t.hardDeadline && Number.isFinite(a.deadline) ? 0 : 1) - (b.t.hardDeadline && Number.isFinite(b.deadline) ? 0 : 1))
       || (a.deadline - b.deadline || 0)
       || (URGENCIES[urgencyOf(a.t)].rank - URGENCIES[urgencyOf(b.t)].rank)
       || (a.info.start - b.info.start)
@@ -383,8 +387,9 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() 
     const a = agendaOf(project, t);
     // The longest window is what decides whether a block can fit at all.
     const windowMinutes = Math.max(0, ...a.windows.map((w) => w.to - w.from));
-    const size = Math.round(a.blockHours * 60);
     let left = Math.round(hoursLeft(project, info, t) * 60) - (pinnedMinutes.get(t.id) || 0);
+    // "No chunks": the whole of what is left, in one sitting.
+    const size = t.calendar?.whole ? Math.max(15, left) : Math.round(a.blockHours * 60);
     const mine = byTask.get(t.id) || [];
     if (left <= 0 || size <= 0 || windowMinutes < size) {
       if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });

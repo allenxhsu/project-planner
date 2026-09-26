@@ -150,3 +150,30 @@ test('finishing a task records the day, and undoing it forgets it', async () => 
   setTaskField(p, t.id, 'percent', 50);
   assert.equal('doneAt' in t, false);
 });
+
+test('a task keeps a log of what happened to it, with comments, through a save', async () => {
+  const { setTaskField, insertTask, addComment, setPin, removePin } = await import('../src/model/model.js');
+  const p = createProject('Log', '2026-09-28');
+  const t = insertTask(p, 0, { name: 'Draft' });
+  setTaskField(p, t.id, 'name', 'Draft the brief');
+  setTaskField(p, t.id, 'deadline', '2026-10-02');
+  setTaskField(p, t.id, 'deadline', '2026-10-02');            // no change, no line
+  setTaskField(p, t.id, 'notes', 'Longer now');
+  setPin(p, t.id, { day: '2026-09-29', start: 600, minutes: 60 });
+  removePin(p, t.id, 0);
+  addComment(p, t.id, 'Ask Ana for the numbers');
+  const log = t.activity.map((x) => [x.kind, x.field || '', x.from || '', x.to || x.text || '']);
+  assert.deepEqual(log, [
+    ['created', '', '', ''],
+    ['change', 'name', 'Draft', 'Draft the brief'],
+    ['change', 'deadline', 'none', '2026-10-02'],
+    ['change', 'description', '', ''],
+    ['fixed', '', '', '2026-09-29 10:00 AM, 1h'],
+    ['unfixed', '', '', ''],
+    ['comment', '', '', 'Ask Ana for the numbers'],
+  ]);
+  assert.deepEqual(parse(serialize(p)).project.tasks[0].activity, t.activity);
+  // A copy starts its own history.
+  const copy = insertTask(p, 1, { ...structuredClone(t), id: undefined });
+  assert.deepEqual(copy.activity.map((x) => x.kind), ['created']);
+});

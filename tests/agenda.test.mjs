@@ -282,3 +282,23 @@ test('events repeat, run past midnight, can be free, and keep travel time', asyn
   assert.ok(mine.every((b) => b.end <= 12 * 60 + 30 || b.start >= 14 * 60 + 30), 'travel either side is held');
   assert.ok(meetings.some((m) => m.title === 'Maybe' && m.free));
 });
+
+test('a hard deadline is placed before a soft one, and "no chunks" lays one block', async () => {
+  const { serialize, parse } = await import('../src/io/json.js');
+  const { p, ann } = week({ cap: 8 });
+  // A day's room Monday. Soft is due Monday, hard is due Tuesday: the hard one goes first.
+  const soft = job(p, ann, 'Soft', { days: 1, work: 8, deadline: MON });
+  const hard = job(p, ann, 'Hard', { days: 1, work: 8, deadline: TUE });
+  setTaskField(p, hard.id, 'hardDeadline', true);
+  const { blocks } = lay(p);
+  assert.equal(hoursOn(blocks, hard.id, MON), 8);
+  assert.equal(hoursOn(blocks, soft.id, MON), 0);
+  const one = job(p, ann, 'Essay', { days: 1, work: 3 });
+  setTaskField(p, one.id, 'wholeBlock', true);
+  setTaskField(p, one.id, 'labels', 'writing, school, writing');
+  const mine = lay(p).blocks.filter((b) => b.taskId === one.id);
+  assert.deepEqual(mine.map((b) => b.minutes), [180]);
+  const back = parse(serialize(p)).project.tasks.find((t) => t.id === one.id);
+  assert.deepEqual([back.labels, back.calendar.whole], [['writing', 'school'], true]);
+  assert.equal(parse(serialize(p)).project.tasks.find((t) => t.id === hard.id).hardDeadline, true);
+});

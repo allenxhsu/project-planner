@@ -216,6 +216,51 @@ export function blockMenu(b, x, y) {
 const timeInput = (min) => el('input', { class: 'sc-input sheet-time', type: 'time', step: 900, value: `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}` });
 const dateInput = (iso) => el('input', { class: 'sc-input sheet-date', type: 'date', value: iso });
 
+/** "5 min ago", "yesterday", "3 Sep" — when an activity line happened. */
+function ago(at) {
+  const then = new Date(`${at}:00`);
+  const min = Math.round((Date.now() - then.getTime()) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  if (min < 24 * 60) return `${Math.round(min / 60)} h ago`;
+  if (min < 48 * 60) return 'yesterday';
+  return formatDate(at.slice(0, 10), 'day');
+}
+/** One line of a task's activity, as words. */
+function activityLine(x) {
+  switch (x.kind) {
+    case 'created': return 'Created this task';
+    case 'comment': return null;
+    case 'change': return x.from === undefined && x.to === undefined ? `Changed the ${x.field}` : `Changed ${x.field} from ${x.from} to ${x.to}`;
+    case 'fixed': return `Fixed a block at ${x.text}`;
+    case 'unfixed': return 'Took a fixed block off';
+    case 'started': return `Started it — ${x.text}`;
+    case 'stopped': return `Stopped — ${x.text}`;
+    default: return x.text || x.kind;
+  }
+}
+
+/** The activity section of a task's sheet: a box to comment in, and the log, newest first. */
+function activityBox(project, t) {
+  const list = el('ul', { class: 'act-list' });
+  const draw = () => {
+    const task = store.project.id === project.id ? getTask(store.project, t.id) : t;
+    list.replaceChildren(...[...(task?.activity || [])].reverse().map((x) => el('li', { class: `act-item${x.kind === 'comment' ? ' is-comment' : ''}` },
+      el('span', { class: 'act-dot' }),
+      x.kind === 'comment' ? el('div', { class: 'act-comment', text: x.text }) : el('span', { class: 'act-text', text: activityLine(x) }),
+      el('span', { class: 'sc-faint act-at', title: x.at.replace('T', ' '), text: ago(x.at) }))));
+    if (!list.children.length) list.append(el('li', { class: 'sc-faint small', text: 'Nothing recorded yet. Changes from now on are kept here.' }));
+  };
+  const input = el('input', { class: 'sc-input act-input', type: 'text', placeholder: 'Enter comment — ↵ to post' });
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !input.value.trim()) return;
+    e.preventDefault(); e.stopPropagation();
+    if (act.commentOnTask(t.id, input.value)) { input.value = ''; draw(); }
+  });
+  draw();
+  return el('details', { class: 'act', open: true }, el('summary', { text: 'Activity' }), input, list);
+}
+
 /**
  * An input for one custom field, of the kind the field is: a box for words,
  * numbers and links, a date, a choice or a set of ticks for options and
@@ -301,11 +346,14 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: urgencyOf(t) === id })));
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
+    const hard = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!t.hardDeadline });
+    const labels = el('input', { class: 'sc-input', type: 'text', value: (t.labels || []).join(', '), placeholder: 'None — comma-separated' });
     const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
+      hard: hard.checked, labels: labels.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
     setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
@@ -367,7 +415,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
             ? 'This block is fixed here. Changing the day or hours moves it; the rest of the week re-lays around it.'
             : 'Placed by the calendar. Changing the day or hours fixes it there, the same as dragging it.' }) : null,
           late ? el('div', { class: 'sc-alert sc-alert--danger sheet-late', text: late }) : null,
-          notes),
+          notes,
+          activityBox(project, t)),
         el('aside', { class: 'task-sheet-facts' },
           el('div', { class: `sheet-state ${state.cls}`, title: state.title || '', text: state.text }),
           whenLine ? el('div', { class: `sheet-sched${next?.pinned ? ' is-fixed' : ''}`, text: whenLine }) : null,
@@ -379,7 +428,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Duration', el('span', { class: 'sc-mono', title: `${info?.duration ?? 0} day(s) open in the plan · ${info?.percent ?? 0}% complete`,
             text: `${minText(spentMin)} of ${minText(expectedMin)} done · ${minText(leftMin)} left` })),
           fact('Start date', start),
-          fact('Deadline', deadline),
+          fact('Deadline', el('div', { class: 'tp-deadline' }, deadline,
+            el('label', { class: 'tp-hard', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' })))),
+          fact('Labels', labels),
           ...custom.map((c) => fact(c.field.name, c.node)),
           fact('On the calendar', el('span', { text: agendaOf(project, t).show ? `Yes${pins.length ? `, ${pins.length} fixed` : ''}` : 'No' })),
           fact('Blocked by', list(blockedBy)),
@@ -401,6 +452,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if (saved.start !== hadStart) act.editTask(t.id, 'start', saved.start);
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
+  if (saved.hard !== !!t.hardDeadline) act.editTask(t.id, 'hardDeadline', saved.hard);
+  const newLabels = saved.labels.split(',').map((x) => x.trim()).filter(Boolean);
+  if (newLabels.join('|') !== (t.labels || []).join('|')) act.editTask(t.id, 'labels', newLabels);
   for (const c of saved.custom) {
     const was = t.fields?.[c.id] ?? null;
     const field = getField(store.project, c.id);
@@ -576,7 +630,7 @@ export async function eventDialog({ day, start, end, ev = null }) {
 /** Right-click on empty calendar time: make something there. */
 export function slotMenu({ day, start, end }, x, y, onClose = () => {}) {
   showMenu(x, y, [
-    { note: `${formatDate(day, 'day')} · ${formatClock(start)}` },
+    { note: `${formatDate(day, 'day')} · ${formatClock(start)} – ${formatClock(end)}` },
     { icon: '▦', label: 'Create event', run: () => { onClose(); void eventDialog({ day, start, end }); } },
     { icon: '☑', label: 'Create task (fixed time)', run: () => { onClose(); void import('./taskpanel.js').then((m) => m.newTaskPanel({ day, start, end, fixed: true })); } },
     { icon: '✦', label: 'Create task (auto-scheduled)', run: () => { onClose(); void import('./taskpanel.js').then((m) => m.newTaskPanel({ day, start, end, fixed: false })); } },

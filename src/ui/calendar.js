@@ -429,6 +429,41 @@ export function renderCalendar(root) {
   for (const d of columns) {
     const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
+    // Drag down empty time: pick the hours, then say what goes in them — the
+    // same menu as a right-click, for exactly the range drawn.
+    col.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.cal-block, .cal-meeting, .cal-buffer, .cal-slot-ghost')) return;
+      e.preventDefault();
+      const top = col.getBoundingClientRect().top;
+      const minuteAt = (cy) => hourFrom * 60 + ((cy - top) / HOUR_H) * 60;
+      const snap = (m) => Math.max(0, Math.min(24 * 60, Math.round(m / 15) * 15));
+      const anchor = Math.max(0, Math.min(24 * 60 - 15, Math.floor(minuteAt(e.clientY) / 15) * 15));
+      let range = [anchor, anchor + 15];
+      let moved = false;
+      const ghost = el('div', { class: 'cal-slot-ghost' });
+      const paint = () => {
+        ghost.style.top = `${y(range[0])}px`;
+        ghost.style.height = `${y(range[1]) - y(range[0])}px`;
+        ghost.textContent = `${formatClock(range[0])} – ${formatClock(range[1])}`;
+      };
+      const move = (ev) => {
+        if (Math.abs(ev.clientY - e.clientY) > 4 && !moved) { moved = true; col.append(ghost); }
+        if (!moved) return;
+        const b = snap(minuteAt(ev.clientY));
+        range = b >= anchor ? [anchor, Math.max(anchor + 15, b)] : [b, anchor + 15];
+        paint();
+      };
+      const up = (ev) => {
+        removeEventListener('pointermove', move);
+        removeEventListener('pointerup', up);
+        if (!moved) return;
+        const drop = () => ghost.remove();
+        slotMenu({ day: col.dataset.day, start: range[0], end: range[1] }, ev.clientX, ev.clientY, drop);
+        setTimeout(() => addEventListener('pointerdown', drop, { once: true, capture: true }), 0);
+      };
+      addEventListener('pointermove', move);
+      addEventListener('pointerup', up);
+    });
     // Right-click empty time: an event or a fixed-time task there, half an
     // hour from the quarter hour clicked, marked while the menu is open.
     col.addEventListener('contextmenu', (e) => {

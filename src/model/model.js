@@ -182,6 +182,9 @@ export function insertTask(p, at = p.tasks.length, props = {}) {
   const ref = p.tasks[i] || p.tasks[i - 1];
   const level = props.level || (ref ? (i < p.tasks.length ? ref.level : ref.level) : 1);
   const t = newTask({ ...props, level });
+  // A new task starts its own history, whatever it was copied from.
+  delete t.activity;
+  logActivity(t, { kind: 'created' });
   p.tasks.splice(i, 0, t);
   return t;
 }
@@ -615,6 +618,7 @@ export function stopWork(p, taskId, { worked, more }) {
   if (w > 0) {
     addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date: pin.day, start: pin.start, hours: w / 60, note: 'Worked' });
   }
+  logActivity(t, { kind: 'stopped', text: `worked ${hoursWords(w / 60)}${m > 0 ? `, ${hoursWords(m / 60)} more needed` : ', finished'}` });
   const spent = spentOn(p, taskId);
   if (m === 0) { setTaskField(p, taskId, 'percent', 100); return; }
   setTaskField(p, taskId, 'work', String(Math.round((spent + m / 60) * 100) / 100));
@@ -631,6 +635,8 @@ export function setPin(p, taskId, pin, index = null) {
   if (index !== null && index >= 0 && index < list.length) list[index] = clean; else list.push(clean);
   list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.start - b.start));
   t.calendar = { ...(t.calendar || { show: true, timeBlockIds: [] }), pins: list };
+  const clock = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
+  logActivity(t, { kind: clean.live ? 'started' : 'fixed', text: `${clean.day} ${clock(clean.start)}, ${hoursWords(clean.minutes / 60)}` });
   return clean;
 }
 
@@ -639,6 +645,7 @@ export function removePin(p, taskId, index) {
   if (!t) throw new Error('No such task.');
   const list = pinsOf(t).filter((_, i) => i !== index);
   t.calendar = { ...t.calendar, pins: list };
+  logActivity(t, { kind: 'unfixed' });
 }
 
 export function clearPins(p, taskId) {
@@ -772,9 +779,12 @@ export function setFieldValue(p, taskId, fieldId, value) {
   const field = getField(p, fieldId);
   if (!t || !field) throw new Error('No such task or field.');
   const v = fieldValue(p, field, value);
+  const old = t.fields?.[fieldId] ?? null;
   const fields = { ...(t.fields || {}) };
   if (v === null) delete fields[fieldId]; else fields[fieldId] = v;
   if (Object.keys(fields).length) t.fields = fields; else delete t.fields;
+  const words = (x) => (x === null ? 'none' : formatFieldValue(p, field, x));
+  if (words(old) !== words(v)) logActivity(t, { kind: 'change', field: field.name, from: words(old), to: words(v) });
 }
 
 /** A value as words: options and dates as they are, people by name. */
@@ -1061,8 +1071,10 @@ export function setStage(p, taskId, stageId) {
   const t = getTask(p, taskId);
   const st = getStage(p, stageId);
   if (!t || !st) throw new Error('No such task or stage.');
+  const was = getStage(p, t.stageId)?.name || null;
   t.stageId = st.id;
   if (st.done) { t.percent = 100; stampDone(t, 100); if (t.milestone) t.duration = 0; }
+  if (was !== st.name) logActivity(t, { kind: 'change', field: 'status', from: was || 'none', to: st.name });
 }
 
 export function addStage(p, name = 'New stage') {
@@ -1115,9 +1127,70 @@ export function moveStage(p, id, dir) {
  * Set a field from user text. Understands the grid's column keys; validates
  * and normalises. Throws with a readable message.
  */
+// ---------------------------------------------------------------- activity
+//
+// Each task keeps what happened to it: made, renamed, moved, finished,
+// time logged, and what people wrote about it. Newest last, the last 200.
+// It lives in the task, so it travels with the plan and Undo takes an entry
+// back with the change that made it.
+
+const ACTIVITY_LIMIT = 200;
+const stamp = () => {
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+export function logActivity(t, entry) {
+  if (!t) return;
+  const list = Array.isArray(t.activity) ? t.activity : [];
+  list.push({ at: stamp(), ...entry });
+  t.activity = list.slice(-ACTIVITY_LIMIT);
+}
+export function addComment(p, taskId, text) {
+  const clean = String(text || '').trim();
+  if (!clean) throw new Error('A comment needs some words.');
+  logActivity(getTask(p, taskId), { kind: 'comment', text: clean.slice(0, 4000) });
+}
+
+const hoursWords = (h) => { const m = Math.round(h * 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`; };
+/** A field as a person reads it, for the log; null for fields not worth a line. */
+function describeField(p, t, field) {
+  switch (field) {
+    case 'name': return ['name', t.name];
+    case 'work': return ['duration', t.work === null || t.work === undefined ? 'from the plan' : hoursWords(+t.work)];
+    case 'duration': return ['days open', `${t.duration}d`];
+    case 'percent': return ['progress', `${t.percent || 0}%`];
+    case 'start': case 'constraintDate': case 'constraintType': return ['start date', t.constraint?.date || 'none'];
+    case 'deadline': return ['deadline', t.deadline || 'none'];
+    case 'hardDeadline': return ['hard deadline', t.hardDeadline ? 'on' : 'off'];
+    case 'urgency': return ['priority', URGENCIES[t.urgency]?.label || 'Normal'];
+    case 'notes': return ['description', null];
+    case 'archived': return ['archived', t.archived ? 'yes' : 'no'];
+    case 'labels': return ['labels', (t.labels || []).join(', ') || 'none'];
+    case 'resources': return ['assignee', t.assignments.map((a) => p.resources.find((r) => r.id === a.resourceId)?.name).filter(Boolean).join(', ') || 'nobody'];
+    case 'calendarShow': return ['on the calendar', t.calendar?.show ? 'yes' : 'no'];
+    case 'blockHours': return ['min chunk', t.calendar?.blockHours ? hoursWords(t.calendar.blockHours) : 'the plan’s'];
+    case 'wholeBlock': return ['min chunk', t.calendar?.whole ? 'no chunks' : 'chunks'];
+    case 'timeBlock': return ['schedule', (t.calendar?.timeBlockIds || []).map((id) => getTimeBlock(p, id)?.name).filter(Boolean).join(', ') || 'any'];
+    case 'milestone': return ['milestone', t.milestone ? 'yes' : 'no'];
+    default: return null;
+  }
+}
+
 export function setTaskField(p, id, field, value) {
   const t = getTask(p, id);
   if (!t) throw new Error('No such task.');
+  const before = describeField(p, t, field);
+  applyTaskField(p, t, id, field, value);
+  const after = describeField(p, t, field);
+  if (before && after && before[1] !== after[1]) {
+    logActivity(t, before[1] === null ? { kind: 'change', field: before[0] } : { kind: 'change', field: before[0], from: before[1], to: after[1] });
+  } else if (before && after && before[1] === null) {
+    logActivity(t, { kind: 'change', field: before[0] });
+  }
+}
+
+function applyTaskField(p, t, id, field, value) {
   switch (field) {
     case 'name': t.name = String(value).trim() || 'Untitled task'; break;
     case 'duration': {
@@ -1161,6 +1234,16 @@ export function setTaskField(p, id, field, value) {
     case 'resources': t.assignments = parseAssignments(p, value); break;
     case 'notes': t.notes = String(value ?? ''); break;
     case 'archived': t.archived = !!value; break;
+    // A hard deadline is one that must hold: it is placed ahead of soft ones.
+    case 'hardDeadline': t.hardDeadline = !!value; if (!t.hardDeadline) delete t.hardDeadline; break;
+    // Labels: short tags, kept as typed, each once.
+    case 'labels': {
+      const list = [...new Set((Array.isArray(value) ? value : String(value || '').split(',')).map((x) => String(x).trim()).filter(Boolean))];
+      if (list.length) t.labels = list; else delete t.labels;
+      break;
+    }
+    // No chunks: laid as one block, however long.
+    case 'wholeBlock': t.calendar = { ...t.calendar, whole: !!value }; if (!value) delete t.calendar.whole; break;
     case 'deadline': if (value && !isoValid(value)) throw new Error('A deadline is a date (YYYY-MM-DD).'); t.deadline = value || null; break;
     case 'constraintType': {
       if (!CONSTRAINTS[value]) throw new Error('Unknown constraint.');
