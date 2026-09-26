@@ -70,14 +70,19 @@ export async function projectSheet({ planId = store.project.id } = {}) {
 
 // ---------------------------------------------------------------- left
 
-function leftColumn() {
+/** The project's description, markdown as Heptabase writes it; saved a moment after typing stops, as one change. */
+function descriptionNode() {
   const p = store.project;
-  const title = el('input', { class: 'ps-title', type: 'text', value: p.name, onchange: (e) => act.editProject('name', e.target.value) });
-  // Markdown, as Heptabase writes it; saved a moment after typing stops, as one change.
   let timer = null;
   const desc = markdownNotes({ value: p.description || '', placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 8,
     onchange: (text) => { clearTimeout(timer); timer = setTimeout(() => act.editProject('description', text), 700); } }).node;
   desc.classList.add('ps-desc');
+  return desc;
+}
+
+/** The project's activity, newest first, with a box to comment. */
+function activityNode() {
+  const p = store.project;
   const comment = el('input', { class: 'sc-input act-input', type: 'text', placeholder: 'Enter comment — ↵ to post' });
   comment.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !comment.value.trim()) return;
@@ -90,13 +95,18 @@ function leftColumn() {
       : x.kind === 'stage' ? el('span', { class: 'act-text' }, `${x.by || 'You'} changed stage from `, el('span', { class: 'ps-chip', text: x.from }), ' to ', el('span', { class: 'ps-chip', text: x.to }))
         : el('span', { class: 'act-text', text: x.from === undefined ? `Changed ${x.field}` : `Changed ${x.field} from ${x.from} to ${x.to}` }),
     el('span', { class: 'sc-faint act-at', title: x.at.replace('T', ' '), text: ago(x.at) })));
+  return el('details', { class: 'act', open: true }, el('summary', { text: 'Activity' }), comment,
+    el('ul', { class: 'act-list' }, ...(lines.length ? lines : [el('li', { class: 'sc-faint small', text: 'Nothing recorded yet. Stage changes, dates and comments are kept here.' })])));
+}
+
+function leftColumn() {
+  const p = store.project;
+  const title = el('input', { class: 'ps-title', type: 'text', value: p.name, onchange: (e) => act.editProject('name', e.target.value) });
   return el('div', { class: 'ps-col ps-left' },
     el('div', { class: 'ps-crumb sc-faint small' }, el('span', { text: `▢ ${p.template ? 'Template' : 'Project'}` }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '⚙ Settings', title: 'Working time, calendar and scheduling settings of this project',
         onclick: () => { void import('./inspector.js').then((m) => m.projectSettingsDialog()); } })),
-    title, desc,
-    el('details', { class: 'act', open: true }, el('summary', { text: 'Activity' }), comment,
-      el('ul', { class: 'act-list' }, ...(lines.length ? lines : [el('li', { class: 'sc-faint small', text: 'Nothing recorded yet. Stage changes, dates and comments are kept here.' })]))));
+    title, descriptionNode(), activityNode());
 }
 
 // ---------------------------------------------------------------- middle
@@ -308,6 +318,9 @@ function stageMenu(stageId, x, y) {
   });
 }
 
+/** Set while a task window's project panel is showing: a task clicked there opens in that window. */
+let openTaskHere = null;
+
 function taskRow(t) {
   const p = store.project;
   const info = store.schedule.tasks[t.id];
@@ -317,7 +330,7 @@ function taskRow(t) {
   const who = t.assignments.map((a) => p.resources.find((r) => r.id === a.resourceId)).filter(Boolean)[0];
   const row = el('div', { class: `ps-task${done ? ' is-done' : ''}${t.archived ? ' is-archived' : ''}`, title: stageOf(p, t).name },
     el('input', { type: 'checkbox', class: 'ps-ring', checked: done, title: done ? 'Completed — click to reopen' : 'Mark complete', onclick: (e) => e.stopPropagation(), onchange: (e) => act.setPercent(t.id, e.target.checked ? 100 : 0) }),
-    el('button', { class: 'ps-task-name', text: t.name, onclick: () => { void taskSheet({ taskId: t.id }); } }),
+    el('button', { class: 'ps-task-name', text: t.name, onclick: () => { if (openTaskHere) openTaskHere(t.id); else void taskSheet({ taskId: t.id }); } }),
     late ? el('span', { class: 'ps-late', title: `Past its deadline, ${formatDate(t.deadline, 'long')}`, text: '!' }) : el('span'),
     el('span', { class: 'ps-task-dur', text: minutes ? minText(minutes) : '' }),
     el('span', { class: `ps-task-due${late ? ' is-late' : ''}`, text: t.deadline ? shortDay(t.deadline) : '' }),
@@ -414,4 +427,63 @@ function rightColumn(ui, draw) {
       el('span', { class: 'sc-spacer' }),
       el('button', { class: 'side-icon', text: '＋', title: 'Add a task to the current stage', onclick: () => { ui.adding = p.currentPhaseId ?? ''; draw(); setTimeout(() => document.querySelector('.ps-add-input')?.focus(), 0); } })),
     strip, groups);
+}
+
+// ---------------------------------------------------------------- the panel beside a task
+
+const PANEL_TABS = [['tasks', 'Tasks'], ['description', 'Description'], ['activity', 'Activity'], ['fields', 'Fields'], ['docs', 'Docs']];
+let panelTab = 'tasks';
+
+/**
+ * The project beside one of its tasks, as Motion opens it from a task's
+ * window: its name, then Tasks, Description, Activity, Fields and Docs. Edits
+ * take effect at once, as in the project window.
+ *
+ * @param {{ openTask: (id: string) => void, openProject: () => void, openPage: () => void, openDoc: (id: string) => void, close: () => void }} opts
+ */
+export async function projectPanel({ openTask, openProject, openPage, openDoc, close }) {
+  const sync = await import('../state/sync.js');
+  const spaces = await sync.listWorkspaces().catch(() => []);
+  const root = el('aside', { class: 'task-sheet-project' });
+  const ui = { adding: null, collapsed: new Set() };
+  const draw = () => {
+    const body = root.querySelector('.tsp-body');
+    const scroll = body?.scrollTop || 0;
+    clear(root);
+    const p = store.project;
+    let content;
+    if (panelTab === 'tasks') { content = rightColumn(ui, draw, () => close()); content.classList.remove('ps-col'); }
+    else if (panelTab === 'description') content = descriptionNode();
+    else if (panelTab === 'activity') { content = activityNode(); content.querySelector('summary')?.remove(); }
+    else if (panelTab === 'fields') {
+      content = middleColumn(() => close(), spaces);
+      content.classList.remove('ps-col');
+      content.querySelector('.ps-links')?.remove();
+    } else {
+      const docs = p.docs || [];
+      content = el('div', { class: 'tsp-docs' },
+        ...docs.map((d) => el('button', { class: 'nav-item', onclick: () => openDoc(d.id) },
+          el('span', { class: 'nav-glyph', text: d.kind === 'sheet' ? '▦' : '▤' }), el('span', { class: 'nav-title', text: d.title }))),
+        docs.length ? null : el('p', { class: 'sc-faint small', text: 'No docs or sheets in this project yet — its page (↗) makes them.' }));
+    }
+    root.append(
+      el('div', { class: 'tsp-head' },
+        el('strong', { class: 'tsp-name', text: p.name }),
+        el('button', { class: 'side-icon', text: 'ⓘ', title: 'Open the project window', onclick: openProject }),
+        el('button', { class: 'side-icon', text: '↗', title: 'Open the project page', onclick: openPage })),
+      el('div', { class: 'tsp-tabs' }, ...PANEL_TABS.map(([id, label]) => el('button', {
+        class: `tsp-tab${panelTab === id ? ' is-on' : ''}`, text: label, onclick: () => { panelTab = id; draw(); } }))),
+      el('div', { class: 'tsp-body' }, content));
+    const nextBody = root.querySelector('.tsp-body');
+    if (nextBody) nextBody.scrollTop = scroll;
+  };
+  draw();
+  openTaskHere = openTask;
+  let lastRev = store._rev;
+  const unsubscribe = subscribe(() => {
+    if (!document.body.contains(root)) { unsubscribe(); if (openTaskHere === openTask) openTaskHere = null; return; }
+    if (store._rev !== lastRev) { lastRev = store._rev; if (!root.contains(document.activeElement)) draw(); }
+  });
+  root.detach = () => { unsubscribe(); if (openTaskHere === openTask) openTaskHere = null; };
+  return root;
 }

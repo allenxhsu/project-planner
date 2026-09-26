@@ -415,6 +415,9 @@ export async function summarySheet(taskId) {
   });
 }
 
+/** Whether a task window opens with its project beside it: it stays as it was last left. */
+let projectPanelOpen = false;
+
 export async function taskSheet({ planId = store.project.id, taskId, block: b = null, late = null }) {
   const t = await withTask(planId, taskId);
   if (!t) return;
@@ -452,6 +455,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   const spentMin = Math.max(0, expectedMin - leftMin);
   const minText = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`);
 
+  // What to do once this window has closed and its edits are saved — the
+  // project panel's next task, say. Set by the panel, run at the very end.
+  let then = null;
   const saved = await open(t.name, (close) => {
     const name = el('input', { class: 'sc-input sheet-title', type: 'text', value: t.name, 'data-autofocus': '' });
     const done = el('input', { class: 'sc-check', type: 'checkbox', checked: info?.percent === 100 });
@@ -544,6 +550,33 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const subFact = (label, value) => el('div', { class: 'fact is-sub' }, el('span', { class: 'fact-label' }, el('span', { class: 'fact-elbow', text: '└' }), el('span', { text: label })), value);
     const list = (names) => el('span', { class: names.length ? '' : 'sc-faint', text: names.length ? names.join(', ') : 'None' });
 
+    // Open: the project beside the task, as Motion docks it; Close takes it away.
+    // Leaving for another task, the project or a doc saves this one first.
+    let panel = null;
+    const leave = (next) => { then = next; save(); };
+    const showPanel = async () => {
+      const { projectPanel } = await import('./projectsheet.js');
+      panel = await projectPanel({
+        openTask: (id) => leave(() => taskSheet({ taskId: id })),
+        openProject: () => leave(async () => { projectPanelOpen = false; const m = await import('./projectsheet.js'); await m.projectSheet(); }),
+        openPage: () => leave(() => { projectPanelOpen = false; set({ view: 'list', projectTab: 'navigate' }); }),
+        openDoc: (id) => leave(async () => { projectPanelOpen = false; const m = await import('./docs.js'); m.openDoc(id); }),
+        close: () => close(null),
+      });
+      sheetBody.append(panel);
+      sheetBody.classList.add('has-project');
+      projectToggle.textContent = 'Close';
+    };
+    const hidePanel = () => {
+      panel?.detach?.(); panel?.remove(); panel = null;
+      sheetBody.classList.remove('has-project');
+      projectToggle.textContent = 'Open';
+    };
+    const projectToggle = el('button', { class: 'sc-button sc-button--sm fact-project-open', text: 'Open', title: 'Show the project beside this task',
+      onclick: () => { projectPanelOpen = !panel; if (panel) hidePanel(); else void showPanel(); } });
+    if (projectPanelOpen) setTimeout(() => { void showPanel(); }, 0);
+    let sheetBody = null;
+
     return [
       t.archived ? el('div', { class: 'sheet-archived' },
         el('span', { text: 'This task is archived.' }),
@@ -553,7 +586,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           if (!(await confirmDialog('Delete this task for good?', `“${t.name}” goes from the plan. Undo still brings it back while this window is open.`))) return;
           act.selectTask(t.id); act.deleteSelection();
         } })) : null,
-      el('div', { class: 'task-sheet' },
+      sheetBody = el('div', { class: 'task-sheet' },
         el('div', { class: 'task-sheet-main' },
           el('div', { class: 'sheet-head' },
             el('span', { class: 'sc-pill sheet-chip', text: b?.pinned ? '⌖ Fixed time' : 'Task' }),
@@ -579,7 +612,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           whenLine ? el('div', { class: `sheet-sched${next?.pinned ? ' is-fixed' : ''}`, text: whenLine }) : null,
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
-          fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
+          fact('Project', el('span', { class: 'fact-project' }, el('span', { class: 'fact-project-name', text: project.name }), projectToggle)),
           el('label', { class: 'fact fact-auto' }, el('span', { class: 'fact-label', text: 'Auto-schedule' }),
             el('span', { class: 'fact-switch' }, auto, el('span', { class: 'tp-switch' }),
               el('span', { class: 'sc-faint small', text: pins.length ? `${pins.length} fixed block${pins.length === 1 ? '' : 's'}` : '' }))),
@@ -611,7 +644,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
         button('Save  ⌘S', save, 'sc-button--primary')),
     ];
   }, { wide: true });
-  if (!saved) return;
+  if (!saved) { if (then) await then(); return; }
 
   if (saved.name.trim() && saved.name !== t.name) act.editTask(t.id, 'name', saved.name);
   if (saved.done !== (info?.percent === 100)) act.setPercent(t.id, saved.done ? 100 : 0);
@@ -651,6 +684,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       act.pinBlock(t.id, { day: saved.day, start: saved.from, minutes: saved.to - saved.from }, b.pinned ? b.pinIndex : null);
     } else if (moved) act.hint('A block ends after it starts.');
   }
+  if (then) await then();
 }
 
 /** A block, opened: the task's sheet with that block's day and hours in it. */

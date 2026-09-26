@@ -1289,3 +1289,19 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .tl-table th.tl-col.is-drop { box-shadow: inset 2px 0 0 var(--sc-accent); }
 .sched-default { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
 .sched-row-name .ps-chip { margin-left: 8px; }
+
+/* A task's window with its project beside it (ProjectPanel in ui/projectsheet.js), as Motion docks it. */
+.task-sheet.has-project { grid-template-columns: minmax(0, 1fr) 300px 350px; width: min(1450px, calc(96vw - 48px)); }
+.task-sheet-project { display: flex; flex-direction: column; min-height: 0; max-height: min(78vh, 860px); margin: -8px -8px -8px 0; border-left: 1px solid var(--sc-line); background: color-mix(in srgb, var(--sc-panel) 85%, var(--sc-bg)); }
+.tsp-head { display: flex; align-items: flex-start; gap: 6px; padding: 12px 14px 8px; }
+.tsp-name { flex: 1; font-size: 15px; line-height: 1.3; }
+.tsp-tabs { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 0 14px 6px; border-bottom: 1px solid var(--sc-line); }
+.tsp-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 4px 0; color: var(--sc-text-2); font: inherit; font-size: 12.5px; cursor: pointer; }
+.tsp-tab.is-on { color: var(--sc-text); border-bottom-color: var(--sc-accent); }
+.tsp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.tsp-body > .ps-right, .tsp-body > .ps-mid { background: none; border: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tsp-body > .ps-mid > .ps-group { padding: 0; }
+.tsp-docs { display: flex; flex-direction: column; gap: 4px; }
+.fact-project { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.fact-project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-sheet.has-project .fact-project-open { border-color: var(--sc-accent); }
