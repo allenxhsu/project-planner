@@ -10,6 +10,7 @@
 // Edits apply as they are made, like the task list beside it; the window
 // redraws on every change while it is open.
 
+import { switchToggle } from './toggle.js';
 import { markdownNotes } from './mdnotes.js';
 import { el, clear } from '../util.js';
 import { store, set, subscribe } from '../state/store.js';
@@ -321,9 +322,9 @@ function taskRow(t) {
     el('span', { class: 'ps-task-dur', text: minutes ? minText(minutes) : '' }),
     el('span', { class: `ps-task-due${late ? ' is-late' : ''}`, text: t.deadline ? shortDay(t.deadline) : '' }),
     // Auto-scheduled or not, switched right here.
-    el('button', { class: `ps-auto ps-auto-toggle${agendaOf(p, t).show ? '' : ' is-off'}`, text: '✦',
-      title: agendaOf(p, t).show ? 'Auto-scheduled — click to keep it off the calendar' : 'Not auto-scheduled — click to let the calendar lay it',
-      onclick: (e) => { e.stopPropagation(); act.editTask(t.id, 'calendarShow', !agendaOf(p, t).show); } }),
+    switchToggle({ on: agendaOf(p, t).show,
+      title: agendaOf(p, t).show ? 'Auto-scheduled — switch off to keep it off the calendar' : 'Not auto-scheduled — switch on to let the calendar lay it',
+      onchange: (on) => act.editTask(t.id, 'calendarShow', on) }),
     who ? el('span', { class: 'ps-who', title: who.name, style: { background: personColour(who.name).line }, text: (who.initials || who.name[0] || '?').slice(0, 1) }) : el('span', { class: 'ps-who is-none' }),
     el('button', { class: 'ps-task-more', text: '⋮', title: 'Task menu', onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); void taskMenu(p.id, t.id, r.left, r.bottom + 4); } }));
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); void taskMenu(p.id, t.id, e.clientX, e.clientY); });

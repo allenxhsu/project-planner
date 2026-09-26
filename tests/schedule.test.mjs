@@ -474,7 +474,7 @@ test('two tasks for one person never overlap, and a different person is free at 
   assert.equal(new Set(annBlocks.map((b) => b.day)).size, 2);
 });
 
-test('a block that cannot fit the window is reported rather than hidden', async () => {
+test('a chunk longer than its window is laid in window-sized pieces, not hidden', async () => {
   const { planBlocks } = await import('../src/model/agenda.js');
   const p = plan();
   const a = task(p, 'Workshop', 1);
@@ -483,9 +483,10 @@ test('a block that cannot fit the window is reported rather than hidden', async 
   setTaskField(p, a.id, 'calendarFrom', '09:00');
   setTaskField(p, a.id, 'calendarTo', '11:00');     // two hours a day, four-hour blocks
   const { blocks, overflow } = planBlocks(p, computeSchedule(p));
-  assert.equal(blocks.length, 0);
-  assert.equal(overflow.length, 1);
-  assert.equal(overflow[0].reason, 'window-too-short');
+  assert.equal(overflow.length, 0);
+  assert.ok(blocks.length > 0, 'the work is on the calendar');
+  for (const b of blocks) assert.ok(b.start >= 9 * 60 && b.end <= 11 * 60 && b.minutes <= 120, 'inside its two-hour window');
+  assert.equal(blocks.reduce((n, b) => n + b.minutes, 0), 8 * 60, 'all of it, a day of work');
   assert.throws(() => setTaskField(p, a.id, 'calendarTo', '08:00'), /end after it starts/);
   assert.throws(() => setTaskField(p, a.id, 'blockHours', 3), /one of 0.5, 1, 1.5, 2, 4/);
 });

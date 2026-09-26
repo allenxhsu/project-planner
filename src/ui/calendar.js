@@ -773,7 +773,7 @@ export function renderCalendar(root) {
     pane.append(el('div', { class: 'sc-alert sc-alert--warning cal-overflow' },
       el('strong', { text: `${hours}h could not be placed. ` }),
       el('span', { text: overflow.some((o) => o.reason === 'window-too-short')
-        ? 'One task asks for blocks longer than the hours it is allowed — widen its window, or use a smaller block.'
+        ? 'A task’s schedule has less than a quarter of an hour in it — widen its hours.'
         : 'There are more hours of work than there are working hours to put them in.' })));
   }
 }

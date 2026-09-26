@@ -23,7 +23,7 @@ import { planRecords, openPlan, listWorkspaces } from '../state/sync.js';
 import { currentLayout } from './calendar.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
-import { isSummary, phaseOf, getPhase, phases, stageOf, stages, urgencyOf, URGENCIES } from '../model/model.js';
+import { setTaskField, isSummary, phaseOf, getPhase, phases, stageOf, stages, urgencyOf, URGENCIES } from '../model/model.js';
 import { hoursLeft, expectedHours, agendaOf } from '../model/agenda.js';
 import { stageColour } from '../model/stages.js';
 import { formatDate, toDay, fromDay, today, weekStart, monthStart, addMonths, MONTH_NAMES, WEEKDAY_NAMES, weekday } from '../model/calendar.js';
@@ -32,6 +32,7 @@ import { icon, projectColour } from './icons.js';
 import { showMenu, promptText, confirmDialog, open as openDialog, foot, button } from './dialog.js';
 import { renderResourceUsage } from './resources.js';
 import { renderNavigate } from './docs.js';
+import { switchToggle } from './toggle.js';
 
 /** planId → { updatedAt, plan, rows }. */
 const cache = new Map();
@@ -67,6 +68,9 @@ function readPlan(record) {
       const left = Math.round(hoursLeft(project, s, t) * 60);
       const who = t.assignments.map((a) => project.resources.find((r) => r.id === a.resourceId)?.name).filter(Boolean);
       const status = stageOf(project, t);
+      const agenda = agendaOf(project, t);
+      const nameOfTask = (id) => project.tasks.find((x) => x.id === id)?.name;
+      const log = Array.isArray(t.activity) ? t.activity : [];
       out.push({
         planId: record.id, planName: project.name || record.name, workspaceId: project.workspaceId || '', taskId: t.id,
         phaseId, phaseName: ph?.name || null, phaseColour: ph ? stageColour(project, ph) : null, phaseOrder: ph ? phases(project).indexOf(ph) : -1,
@@ -74,7 +78,13 @@ function readPlan(record) {
         order: i, name: t.name, deadline: t.deadline, start: s.startIso, percent: s.percent, milestone: s.milestone,
         who, expected: exp, done: Math.max(0, exp - left),
         doneAt: t.doneAt || null, archived: !!t.archived, cancelled: !!status.cancelled || !!t.archived,
-        status: status.name, urgency: urgencyOf(t), auto: agendaOf(project, t).show, labels: t.labels || [],
+        status: status.name, urgency: urgencyOf(t), auto: agenda.show, labels: t.labels || [],
+        blockedBy: t.predecessors.map((l) => nameOfTask(l.id)).filter(Boolean),
+        blocking: project.tasks.filter((x) => x.predecessors.some((l) => l.id === t.id)).map((x) => x.name),
+        schedule: t.calendar?.timeBlockIds?.length ? agenda.timeBlocks.map((b) => b.name).join(', ') : 'Any',
+        minChunk: t.calendar?.whole ? 'No chunks' : minText(Math.round(agenda.blockHours * 60)),
+        createdAt: log.find((x) => x.kind === 'created')?.at || null,
+        updatedAt: log.at(-1)?.at || null,
         pastDeadline: !!t.deadline && s.percent < 100 && toDay(t.deadline) < todayDay,
         planArchived: !!project.archived,
       });
@@ -87,7 +97,7 @@ function readPlan(record) {
         stageName: current?.name || null, stageColour: current ? stageColour(project, current) : null,
         colour: project.colour, status: project.status || (project.archived ? 'Completed' : 'Todo'), tasks: out.length,
         stageList: phases(project).map((ph) => ({ id: ph.id, name: ph.name, colour: stageColour(project, ph), deadline: ph.deadline || null, status: ph.status || 'open' })),
-        pinned: project.pinned === true, percent: schedule.percent ?? 0, projectStart: project.start,
+        pinned: project.pinned === true, folderId: project.folderId || null, percent: schedule.percent ?? 0, projectStart: project.start,
         statusList: stages(project).map((st) => ({ id: st.id, name: st.name })),
       },
     };
@@ -117,6 +127,27 @@ function etaOf(r, layout) {
   return blocks.length ? fromDay(Math.max(...blocks.map((b) => b.day))) : null;
 }
 
+/** Scheduled on: the first day the calendar has work for a task. */
+function scheduledOf(r, layout) {
+  const blocks = layout?.all?.byTask?.get(r.taskId)?.filter((b) => b.planId === r.planId && !b.worked) || [];
+  return blocks.length ? fromDay(Math.min(...blocks.map((b) => b.day))) : null;
+}
+const folderName = (r) => {
+  const p = planOf(r.planId);
+  const f = p?.folderId ? spaces.find((w) => w.id === r.workspaceId)?.folders?.find((x) => x.id === p.folderId) : null;
+  return f?.name || '';
+};
+
+/** Auto-schedule a task on or off, in whichever plan it is. */
+async function setAuto(r, on) {
+  if (r.planId === store.project.id) act.editTask(r.taskId, 'calendarShow', on);
+  else {
+    const { patchPlan } = await import('../state/sync.js');
+    await patchPlan(r.planId, (p) => setTaskField(p, r.taskId, 'calendarShow', on), on ? 'Auto-schedule' : 'Stop auto-scheduling');
+  }
+  void reloadAllTasks();
+}
+
 async function openRow(r) {
   const { taskSheet } = await import('./blockmenu.js');
   await taskSheet({ planId: r.planId, taskId: r.taskId });
@@ -144,13 +175,15 @@ const FIELDS = {
 const COLUMNS = {
   eta: 'ETA', assignee: 'Assignee', project: 'Project', status: 'Status', stage: 'Stage', priority: 'Priority',
   start: 'Start date', deadline: 'Deadline', duration: 'Duration', completed: 'Completed', completedAt: 'Completed at', labels: 'Labels',
+  workspace: 'Workspace', folder: 'Folder', scheduledOn: 'Scheduled on', schedule: 'Schedule', minChunk: 'Min chunk',
+  blockedBy: 'Blocked by', blocking: 'Blocking', createdAt: 'Created at', updatedAt: 'Updated at',
 };
 const ALL_COLUMNS = ['eta', 'assignee', 'project', 'completedAt', 'duration', 'deadline', 'completed'];
 const PROJECT_COLUMNS = ['eta', 'deadline', 'status', 'stage', 'priority', 'completed', 'duration'];
 /** What tasks can be sorted by, inside a group. */
 const SORTS = {
   name: 'Name', deadline: 'Deadline', start: 'Start date', priority: 'Priority', status: 'Status',
-  duration: 'Duration', eta: 'ETA', completedAt: 'Completed at', project: 'Project',
+  duration: 'Duration', eta: 'ETA', completedAt: 'Completed at', project: 'Project', createdAt: 'Created at', updatedAt: 'Updated at',
 };
 /** Workload is the Resource Usage view: each person's hours a day against what they have. */
 /**
@@ -456,6 +489,7 @@ function sortRows(list, view, layout) {
     name: (r) => r.name.toLowerCase(), deadline: (r) => r.deadline || '9999', start: (r) => r.start || '9999',
     priority: (r) => URGENCIES[r.urgency]?.rank ?? 9, status: statusIdx, duration: (r) => r.expected,
     eta: (r) => etaOf(r, layout) || '9999', completedAt: (r) => r.doneAt || '', project: (r) => r.planName.toLowerCase(),
+    createdAt: (r) => r.createdAt || '', updatedAt: (r) => r.updatedAt || '',
   };
   return [...list].sort((a, b) => {
     for (const s of view.sort) {
@@ -785,10 +819,19 @@ function cellOf(col, r, layout) {
     case 'completed': return el('td', { class: 'sc-mono', text: minText(r.done) || '0m' });
     case 'completedAt': return el('td', { class: 'sc-faint', text: r.doneAt ? formatDate(r.doneAt.slice(0, 10), 'day') : '' });
     case 'labels': return el('td', {}, ...r.labels.map((l) => el('span', { class: 'ps-chip', text: l })));
+    case 'workspace': return el('td', { class: 'sc-faint', text: wsName(r.workspaceId) });
+    case 'folder': return el('td', { class: 'sc-faint' }, el('span', { class: 'tl-value' }, icon('folder'), el('span', { text: folderName(r) || 'No folder' })));
+    case 'scheduledOn': { const d = scheduledOf(r, layout); return el('td', { class: 'sc-mono', text: d ? shortDate(d) : '' }); }
+    case 'schedule': return el('td', { class: 'sc-faint', text: r.schedule });
+    case 'minChunk': return el('td', { class: 'sc-mono', text: r.minChunk });
+    case 'blockedBy': return el('td', { class: 'sc-faint', text: r.blockedBy.join(', ') || 'None' });
+    case 'blocking': return el('td', { class: 'sc-faint', text: r.blocking.join(', ') || 'None' });
+    case 'createdAt': return el('td', { class: 'sc-mono', text: r.createdAt ? shortDate(r.createdAt.slice(0, 10)) : '' });
+    case 'updatedAt': return el('td', { class: 'sc-mono', text: r.updatedAt ? shortDate(r.updatedAt.slice(0, 10)) : '' });
     default: return el('td');
   }
 }
-function summaryOf(col, rs) {
+function summaryOf(col, rs, layout) {
   const distinct = (xs) => new Set(xs).size;
   const plural = (n, word) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
   const range = (ds) => { const s = ds.filter(Boolean).sort(); return s.length ? (s[0] === s.at(-1) ? shortDate(s[0]) : `${formatDate(s[0], 'day')} – ${formatDate(s.at(-1), 'day')}`) : ''; };
@@ -804,6 +847,11 @@ function summaryOf(col, rs) {
     case 'deadline': return el('td', { class: 'sc-mono sc-faint', text: range(rs.map((r) => r.deadline)) });
     case 'duration': return el('td', { class: 'sc-mono', text: minText(rs.reduce((n, r) => n + r.expected, 0)) });
     case 'completed': return el('td', { class: 'sc-mono', text: minText(rs.reduce((n, r) => n + r.done, 0)) || '0m' });
+    case 'workspace': return el('td', { class: 'sc-faint', text: plural(distinct(rs.map((r) => r.workspaceId)), 'workspace') });
+    case 'folder': return el('td', { class: 'sc-faint', text: plural(distinct(rs.map(folderName).filter(Boolean)), 'folder') });
+    case 'scheduledOn': return el('td', { class: 'sc-mono sc-faint', text: range(rs.map((r) => scheduledOf(r, layout))) });
+    case 'createdAt': return el('td', { class: 'sc-mono sc-faint', text: range(rs.map((r) => r.createdAt?.slice(0, 10))) });
+    case 'updatedAt': return el('td', { class: 'sc-mono sc-faint', text: range(rs.map((r) => r.updatedAt?.slice(0, 10))) });
     default: return el('td');
   }
 }
@@ -814,11 +862,25 @@ function listLayout(list, view, layout) {
     const r = e.currentTarget.getBoundingClientRect();
     showMenu(r.right - 200, r.bottom + 4, [{ note: 'Columns' }, ...Object.entries(COLUMNS).map(([k, label]) => ({
       label, checked: cols.includes(k),
-      run: () => edit((x) => { x.columns = x.columns.includes(k) ? x.columns.filter((c) => c !== k) : Object.keys(COLUMNS).filter((c) => c === k || x.columns.includes(c)); }),
+      run: () => edit((x) => { x.columns = x.columns.includes(k) ? x.columns.filter((c) => c !== k) : [...x.columns, k]; }),
     }))]);
   };
+  // A column's header is dragged to move the column; the order is the view's.
+  let dragging = null;
+  const header = (c) => el('th', { text: COLUMNS[c], draggable: 'true', class: 'tl-col', title: 'Drag to move the column',
+    ondragstart: (e) => { dragging = c; e.dataTransfer.effectAllowed = 'move'; },
+    ondragover: (e) => { if (dragging && dragging !== c) { e.preventDefault(); e.currentTarget.classList.add('is-drop'); } },
+    ondragleave: (e) => e.currentTarget.classList.remove('is-drop'),
+    ondrop: (e) => {
+      e.preventDefault();
+      const from = dragging;
+      dragging = null;
+      if (!from || from === c) return;
+      edit((x) => { const rest = x.columns.filter((k) => k !== from); rest.splice(rest.indexOf(c) + (cols.indexOf(from) < cols.indexOf(c) ? 1 : 0), 0, from); x.columns = rest; });
+    },
+    ondragend: () => { dragging = null; } });
   const table = el('table', { class: 'sc-table tl-table' },
-    el('thead', {}, el('tr', {}, el('th', { text: 'Name' }), ...cols.map((c) => el('th', { text: COLUMNS[c] })),
+    el('thead', {}, el('tr', {}, el('th', { text: 'Name' }), ...cols.map(header),
       el('th', { class: 'tl-col-add' }, el('button', { class: 'ord-btn', text: '＋', title: 'Columns', onclick: columnMenu })))));
   const body = el('tbody');
   const pad = (level) => ({ paddingLeft: `${10 + level * 18}px` });
@@ -827,7 +889,8 @@ function listLayout(list, view, layout) {
   const leaf = (rs, level, target) => {
     sortRows(rs, view, layout).forEach((r, i) => body.append(el('tr', { class: `clickable tl-task${r.percent === 100 ? ' is-done' : ''}${r.cancelled ? ' is-cancelled' : ''}`, onclick: () => { void openRow(r); } },
       el('td', { style: pad(level) }, el('span', { class: 'sc-faint tl-n', text: String(i + 1) }), el('span', { class: `tl-ring${r.percent === 100 ? ' is-done' : ''}` }), el('span', { class: 'tl-name', text: r.name }),
-        r.auto && r.percent < 100 ? el('span', { class: 'ps-auto', title: 'Auto-scheduled', text: '✦' }) : null),
+        r.percent < 100 && !r.cancelled ? switchToggle({ on: r.auto, title: r.auto ? 'Auto-scheduled — switch off to keep it off the calendar' : 'Not auto-scheduled — switch on to let the calendar lay it',
+          onchange: (on) => { void setAuto(r, on); } }) : null),
       ...cols.map((c) => cellOf(c, r, layout)), el('td'))));
     if (target) addRow(target, level);
   };
@@ -841,7 +904,7 @@ function listLayout(list, view, layout) {
           el('span', { class: 'sc-faint', text: ` (${FIELDS[g.field].replace(/ \(week\)/, '')})` }),
           g.field === 'stage' && g.sample?.activePhase ? el('span', { class: 'ts-current', text: 'Current' }) : null,
           el('span', { class: 'sc-faint tl-count', text: ` ${g.rows.length}` })),
-        ...cols.map((c) => summaryOf(c, g.rows)), el('td')));
+        ...cols.map((c) => summaryOf(c, g.rows, layout)), el('td')));
       if (shut) continue;
       if (g.children) walk(g.children, level + 1);
       else leaf(g.rows, level + 1, targetOf(g.path, g.rows));

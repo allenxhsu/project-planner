@@ -433,11 +433,15 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     // The longest window is what decides whether a block can fit at all.
     const windowMinutes = Math.max(0, ...a.windows.map((w) => w.to - w.from));
     let left = Math.round(hoursLeft(project, info, t) * 60) - (pinnedMinutes.get(t.id) || 0);
-    // "No chunks": the whole of what is left, in one sitting.
-    const size = t.calendar?.whole ? Math.max(15, left) : Math.round(a.blockHours * 60);
+    // "No chunks": the whole of what is left, in one sitting. A chunk never
+    // outgrows the task's schedule or the day's cap, though: a two-hour chunk
+    // in a one-hour window is laid as one-hour pieces, not left off the
+    // calendar, where nobody would see it — and late, if it is, shows as late.
+    const wanted = t.calendar?.whole ? Math.max(15, left) : Math.round(a.blockHours * 60);
+    const size = Math.min(wanted, windowMinutes, Math.round(a.dailyCap * 60));
     const mine = byTask.get(t.id) || [];
-    if (left <= 0 || size <= 0 || windowMinutes < size) {
-      if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < size ? 'window-too-short' : 'none' });
+    if (left <= 0 || size < 15) {
+      if (left > 0) overflow.push({ taskId: t.id, planId: project.id, minutes: left, reason: windowMinutes < 15 ? 'window-too-short' : 'none' });
       byTask.set(t.id, mine);
       continue;
     }

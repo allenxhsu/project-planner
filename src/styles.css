@@ -846,7 +846,7 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .ps-range:hover { color: var(--sc-text-1); }
 .ps-late { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; background: var(--sc-danger); color: #fff; font-size: 10px; font-weight: 700; flex: none; }
 .ps-stage-sum { padding-left: 20px; }
-.ps-task { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto 16px 18px 14px; align-items: center; gap: 6px; padding: 3px 2px 3px 18px; font-size: 12.5px; border-radius: 4px; }
+.ps-task { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto auto 28px 18px 14px; align-items: center; gap: 6px; padding: 3px 2px 3px 18px; font-size: 12.5px; border-radius: 4px; }
 .ps-task:hover { background: color-mix(in srgb, var(--sc-line) 45%, transparent); }
 .ps-task.is-done .ps-task-name { text-decoration: line-through; color: var(--sc-text-3); }
 .ps-task.is-archived { opacity: .55; }
@@ -1278,3 +1278,11 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .tl-nav-tab { display: inline-flex; align-items: center; }
 .tl-project-name { font-weight: 700; font-size: 15px; }
+
+/* Switches (ui/toggle.js): the auto-schedule toggle on a task row. */
+.sw-sm .tp-switch { width: 26px; height: 15px; }
+.sw-sm .tp-switch::after { top: 2px; left: 2px; width: 11px; height: 11px; }
+.sw-sm .tp-switch-box:checked + .tp-switch::after { left: 13px; }
+.tl-task .sw { float: right; margin-left: 10px; margin-top: 1px; }
+.tl-table th.tl-col { cursor: grab; }
+.tl-table th.tl-col.is-drop { box-shadow: inset 2px 0 0 var(--sc-accent); }
