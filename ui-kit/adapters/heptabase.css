@@ -2,8 +2,8 @@
  * Heptabase adapter: maps Heptabase's design tokens onto the kit.
  *
  * `html[data-sc]` outranks Heptabase's `:root` and its dark-mode media query,
- * so load order doesn't matter and switching the skin off restores the classic
- * palette untouched.
+ * so load order doesn't matter and Heptabase's own values stay untouched
+ * underneath.
  */
 html[data-sc] {
   --bg: var(--sc-bg);
@@ -29,4 +29,13 @@ html[data-sc] {
   --font: var(--sc-font-ui);
   --mono: var(--sc-font-mono);
   color-scheme: dark;
+}
+
+/* macOS skin: the platform's shadows and grid; --radius already follows --sc-radius. */
+html[data-sc="mac"] {
+  --shadow-sm: var(--sc-shadow-1);
+  --shadow-md: var(--sc-shadow-2);
+  --shadow-lg: var(--sc-shadow-3);
+  --grid-dot: color-mix(in srgb, var(--sc-text) 12%, transparent);
+  --accent-soft: color-mix(in srgb, var(--sc-accent) 14%, transparent);
 }

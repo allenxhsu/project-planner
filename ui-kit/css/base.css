@@ -1,7 +1,7 @@
 /*
- * Base layer. Everything here is scoped to `html[data-sc]`, so an app can
- * load the kit and still switch the skin off at runtime by removing that one
- * attribute — useful while migrating an existing UI screen by screen.
+ * Base layer. Everything here is scoped to `html[data-sc]`, which js/theme.js
+ * sets before first paint ("" for the HUD, "mac" for the macOS skin), so the
+ * kit stays dormant on a page that has not loaded the runtime.
  */
 
 html[data-sc] {

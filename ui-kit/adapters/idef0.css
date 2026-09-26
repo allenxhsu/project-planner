@@ -73,3 +73,40 @@ html[data-sc] .panel-tabs .tab {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+
+/* ------------------------------------------------------------------ */
+/* macOS skin: the platform's own shapes in place of the HUD ones.     */
+/* ------------------------------------------------------------------ */
+
+html[data-sc="mac"] #toolbar .brand {
+  font-family: var(--sc-font-ui);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+html[data-sc="mac"] .btn {
+  clip-path: none;
+  border-radius: var(--sc-radius);
+  font-family: var(--sc-font-ui);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+html[data-sc="mac"] .btn:hover:not(:disabled) {
+  box-shadow: none;
+}
+html[data-sc="mac"] .btn.on {
+  background: var(--sc-accent);
+  border-color: var(--sc-accent);
+  color: #fff;
+}
+html[data-sc="mac"] .menu-pop {
+  border-radius: 8px;
+  box-shadow: var(--sc-shadow-2);
+}
+html[data-sc="mac"] .panel-tabs .tab {
+  font-family: var(--sc-font-ui);
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+}

@@ -193,3 +193,72 @@ html[data-sc] .btn.primary:hover:not(:disabled) {
 html[data-sc] .pbox.apex {
   box-shadow: 0 0 0 1px var(--sc-app), 0 0 24px rgb(var(--sc-app-rgb) / 0.3), var(--shadow);
 }
+
+/* ------------------------------------------------------------------ */
+/* macOS skin: Pyramid's own classes, drawn the platform's way.        */
+/* ------------------------------------------------------------------ */
+
+:root[data-sc="mac"] {
+  --r: var(--sc-radius);
+  --shadow: var(--sc-shadow-2);
+}
+html[data-sc="mac"] .mark svg path {
+  filter: none;
+}
+html[data-sc="mac"] .mark b,
+html[data-sc="mac"] .btn,
+html[data-sc="mac"] .iconbtn,
+html[data-sc="mac"] .tabs button,
+html[data-sc="mac"] .seg button,
+html[data-sc="mac"] .fmtbar button,
+html[data-sc="mac"] .step .sname,
+html[data-sc="mac"] h2,
+html[data-sc="mac"] .ihead .ttl,
+html[data-sc="mac"] .klhead .lbl,
+html[data-sc="mac"] .field > label,
+html[data-sc="mac"] .finding .fname,
+html[data-sc="mac"] .grouphd,
+html[data-sc="mac"] h3.pane {
+  font-family: var(--sc-font-ui);
+  letter-spacing: normal;
+  text-transform: none;
+}
+html[data-sc="mac"] .btn,
+html[data-sc="mac"] .iconbtn {
+  font-size: 13px;
+  font-weight: 500;
+}
+html[data-sc="mac"] .btn,
+html[data-sc="mac"] .iconbtn,
+html[data-sc="mac"] .docitem,
+html[data-sc="mac"] .step,
+html[data-sc="mac"] .tabs,
+html[data-sc="mac"] .seg,
+html[data-sc="mac"] .fmtbar {
+  clip-path: none;
+}
+html[data-sc="mac"] .btn:hover:not(:disabled),
+html[data-sc="mac"] .iconbtn:hover,
+html[data-sc="mac"] .btn.primary:hover:not(:disabled) {
+  filter: none;
+}
+html[data-sc="mac"] .rail::after,
+html[data-sc="mac"] .margin::after,
+html[data-sc="mac"] .intro::after,
+html[data-sc="mac"] .pbox.apex::after,
+html[data-sc="mac"] .tutbar::after {
+  content: none;
+}
+html[data-sc="mac"] .step[aria-current="true"]::before {
+  box-shadow: none;
+}
+html[data-sc="mac"] .docitem[aria-current="true"] {
+  background: color-mix(in srgb, var(--sc-text) 10%, transparent);
+  box-shadow: none;
+}
+html[data-sc="mac"] .btn.primary {
+  text-shadow: none;
+}
+html[data-sc="mac"] .pbox.apex {
+  box-shadow: 0 0 0 1px var(--sc-app), var(--shadow);
+}

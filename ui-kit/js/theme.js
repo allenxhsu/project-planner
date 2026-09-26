@@ -5,8 +5,7 @@
  *   initTheme({ app: 'idef0' });
  *
  * State is three attributes on <html>, which is all the CSS keys off:
- *   data-sc            "" for the HUD skin, "mac" for the macOS skin, absent
- *                      for classic (the app's own styling)
+ *   data-sc            "" for the HUD skin, "mac" for the macOS skin
  *   data-race          steel | crystal | chitin under the HUD skin;
  *                      light | dark under the macOS skin (Auto follows the system)
  *   data-app           one of APPS below (the app's identity colour)
@@ -17,8 +16,8 @@
  * served from the same origin therefore share a race choice automatically.
  */
 
-export const SKINS = ['hud', 'mac', 'classic'];
-export const SKIN_LABELS = { hud: 'HUD', mac: 'macOS', classic: 'Classic' };
+export const SKINS = ['hud', 'mac'];
+export const SKIN_LABELS = { hud: 'HUD', mac: 'macOS' };
 /** The HUD palettes. The macOS skin has light and dark instead; see APPEARANCES. */
 export const RACES = ['steel', 'crystal', 'chitin'];
 export const RACE_LABELS = { steel: 'Steel', crystal: 'Crystal', chitin: 'Chitin' };
@@ -34,7 +33,8 @@ export const APPS = ['heptabase', 'idef0', 'sysml', 'project', 'pyramid', 'profi
  */
 const LEGACY = {
   race: { terran: 'steel', protoss: 'crystal', zerg: 'chitin' },
-  skin: { starcraft: 'hud' },
+  // 'classic' (the app's own styling) was retired; it reads as the HUD.
+  skin: { starcraft: 'hud', classic: 'hud' },
   app: { mindmap: 'metropolis' },
 };
 
@@ -92,9 +92,7 @@ export function getTheme() {
 /** Writes the current preferences onto <html>. */
 export function applyTheme({ app, root = document.documentElement, macInset } = {}) {
   const t = getTheme();
-  if (t.skin === 'hud') root.setAttribute('data-sc', '');
-  else if (t.skin === 'mac') root.setAttribute('data-sc', 'mac');
-  else root.removeAttribute('data-sc');
+  root.setAttribute('data-sc', t.skin === 'mac' ? 'mac' : '');
   root.setAttribute('data-race', t.skin === 'mac' ? t.mode : t.race);
   if (t.effects === 'off') root.setAttribute('data-sc-effects', 'off');
   else root.removeAttribute('data-sc-effects');

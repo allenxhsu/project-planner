@@ -112,6 +112,7 @@ export class ScPortalBar extends HTMLElement {
     this._state = 'loading';
     this._fetch = null;
     this._abort = null;
+    this._live = false; // set once connected, so attribute callbacks during upgrade don't fetch twice
     this._onOnline = () => this.refresh();
     this._onOffline = () => this.setState('offline');
     this._onClick = (e) => {
@@ -151,6 +152,7 @@ export class ScPortalBar extends HTMLElement {
     window.addEventListener('online', this._onOnline);
     window.addEventListener('offline', this._onOffline);
     if (!this._session) this._session = readSession();
+    this._live = true;
     this.render();
     this.refresh();
   }
@@ -161,10 +163,11 @@ export class ScPortalBar extends HTMLElement {
     window.removeEventListener('offline', this._onOffline);
     this._abort?.abort();
     this._abort = null;
+    this._live = false;
   }
 
   attributeChangedCallback(name) {
-    if (!this.isConnected) return;
+    if (!this._live) return;
     if (name === 'src') this.refresh();
     else this.render();
   }

@@ -61,3 +61,10 @@ html[data-sc] {
   --mono: var(--sc-font-mono);
   color-scheme: dark;
 }
+
+/* macOS skin: no chamfers and a softer shadow; the colours already follow the tokens. */
+html[data-sc="mac"] {
+  --cut: 0px;
+  --shadow: var(--sc-shadow-2);
+  --hover: color-mix(in srgb, var(--sc-text) 6%, transparent);
+}

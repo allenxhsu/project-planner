@@ -1,5 +1,5 @@
 export type Race = 'steel' | 'crystal' | 'chitin';
-export type Skin = 'hud' | 'mac' | 'classic';
+export type Skin = 'hud' | 'mac';
 /** The macOS skin's appearance preference. */
 export type Appearance = 'system' | 'light' | 'dark';
 export type AppId =

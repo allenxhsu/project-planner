@@ -4,9 +4,9 @@
  *   <script type="module" src="../ui-kit/js/theme-picker.js"></script>
  *   <sc-theme-picker></sc-theme-picker>
  *
- * Renders the interface choice (HUD, macOS, Classic), then the controls that
- * apply to it: the HUD's palette and effects, or the macOS skin's appearance
- * (Auto, Light, Dark). Writes through theme.js and stays in sync if the
+ * Renders the interface choice (HUD or macOS), then the controls that apply
+ * to it: the HUD's palette and effects, or the macOS skin's appearance (Auto,
+ * Light, Dark). Writes through theme.js and stays in sync if the
  * preference changes elsewhere. Light DOM (no shadow root), so it inherits
  * the page's kit styles.
  */
@@ -43,18 +43,17 @@ class ThemePicker extends HTMLElement {
 
   render() {
     const t = getTheme();
-    const disabled = t.skin === 'classic' ? 'opacity:.45;pointer-events:none' : '';
     const second =
       t.skin === 'mac'
         ? `<div class="sc-field" style="margin-bottom:14px">
             <span>Appearance</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">${buttons(APPEARANCES, APPEARANCE_LABELS, t.appearance, 'data-appearance')}</div>
           </div>`
-        : `<div class="sc-field" style="margin-bottom:14px;${disabled}">
+        : `<div class="sc-field" style="margin-bottom:14px">
             <span>Palette</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">${buttons(RACES, RACE_LABELS, t.race, 'data-race')}</div>
           </div>
-          <label style="display:flex;align-items:center;gap:10px;${disabled}">
+          <label style="display:flex;align-items:center;gap:10px">
             <input type="checkbox" class="sc-check" data-effects ${t.effects === 'on' ? 'checked' : ''}>
             <span class="sc-muted">Scanlines and glow effects</span>
           </label>`;
