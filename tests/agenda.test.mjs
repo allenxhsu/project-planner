@@ -41,7 +41,9 @@ function job(p, ann, name, { days = 1, work, deadline = null, urgency = null } =
   if (urgency) t.urgency = urgency;
   return t;
 }
-const lay = (p) => planBlocksAcross([{ project: p, schedule: computeSchedule(p) }]);
+// The clock is fixed at the start of the Monday, so what "today" is does not
+// depend on when the tests run.
+const lay = (p, now = new Date(2026, 8, 21, 0, 0)) => planBlocksAcross([{ project: p, schedule: computeSchedule(p) }], { now });
 const hoursOn = (blocks, id, iso) => blocks.filter((b) => b.taskId === id && b.dateIso === iso).reduce((n, b) => n + b.minutes, 0) / 60;
 
 test('earliest deadline first meets a deadline that urgency ordering misses', () => {
@@ -211,4 +213,17 @@ test('the week written as a calendar reads back the same, with UIDs that hold st
   assert.equal(hourOf(moved, 2), 15, 'the block that moved keeps its UID at the new hour');
   assert.equal(moved.filter((e) => e.uid.startsWith(`${a.id}-`)).length, events.filter((e) => e.uid.startsWith(`${a.id}-`)).length, 'nothing added');
   assert.ok(toDay(MON) > 0);
+});
+
+test('nothing is laid in hours that have already gone today', () => {
+  const { p, ann } = week();
+  const t = job(p, ann, 'Report', { days: 1, work: 4 });
+  // Monday at 10:05: the day's work starts at 10:15, not at nine.
+  const { blocks } = lay(p, new Date(2026, 8, 21, 10, 5));
+  const monday = blocks.filter((b) => b.taskId === t.id && b.dateIso === MON);
+  assert.ok(monday.length, 'still laid today');
+  assert.equal(Math.min(...monday.map((b) => b.start)), 10 * 60 + 15);
+  // Late in the evening, today is full and the work goes to tomorrow.
+  const evening = lay(p, new Date(2026, 8, 21, 22, 0)).blocks.filter((b) => b.taskId === t.id);
+  assert.ok(evening.every((b) => b.dateIso !== MON));
 });

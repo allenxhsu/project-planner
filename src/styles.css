@@ -588,3 +588,5 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
   .np-phase { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .np-person-row, .np-field { grid-template-columns: 1fr; }
 }
+.fact-done-at { margin-left: auto; font-weight: 400; }
+.start-now-task { margin-bottom: 4px; }

@@ -13,8 +13,8 @@ import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
-import { formatClock, hoursLeft } from '../model/agenda.js';
-import { isSummary, urgencyOf, URGENCIES } from '../model/model.js';
+import { formatClock, hoursLeft, parseTime } from '../model/agenda.js';
+import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
 import { taskSheet, meetingSheet } from './blockmenu.js';
 
@@ -95,7 +95,7 @@ export function renderToday(root) {
   for (const e of entries) {
     e.project.tasks.forEach((task, i) => {
       const info = e.schedule.tasks[task.id];
-      if (!info || isSummary(e.project, i) || task.doneAt !== iso || info.percent !== 100) return;
+      if (!info || isSummary(e.project, i) || doneDay(task) !== iso || info.percent !== 100) return;
       finished.push({ e, task, info });
     });
   }
@@ -126,7 +126,10 @@ export function renderToday(root) {
   }).filter(Boolean), 'Nothing is laid on this day. Put tasks on the calendar and their hours land here.');
 
   section(`Completed ${title === 'Today' ? 'today' : title === 'Tomorrow' || title === 'Yesterday' ? title.toLowerCase() : `on ${title}`}`,
-    finished.map(({ e, task, info }) => taskRow({ planId: e.project.id, planName: e.project.name, task, info, showPlan: many })),
+    finished.sort((a, b) => a.task.doneAt.localeCompare(b.task.doneAt)).map(({ e, task, info }) => taskRow({
+      planId: e.project.id, planName: e.project.name, task, info, showPlan: many,
+      extra: task.doneAt.length > 10 ? `done ${formatClock(parseTime(task.doneAt.slice(11)))}` : null,
+    })),
     'Nothing finished yet. Tick a task and it lands here.');
 
   if (late.length) {

@@ -142,7 +142,7 @@ test('finishing a task records the day, and undoing it forgets it', async () => 
   const t = newTask({ name: 'One' });
   p.tasks.push(t);
   setTaskField(p, t.id, 'percent', 100);
-  assert.match(t.doneAt, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(t.doneAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   const day = t.doneAt;
   setTaskField(p, t.id, 'percent', 100);
   assert.equal(t.doneAt, day);

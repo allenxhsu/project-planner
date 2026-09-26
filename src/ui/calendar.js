@@ -93,7 +93,9 @@ let othersVersion = 0;
 let layoutMemo = { key: '', value: null };
 export function currentLayout() {
   const { project, schedule, ui } = store;
-  const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}`;
+  // The quarter hour is in the key: as the day goes on, the hours behind now
+  // stop being free, and the layout has to say so.
+  const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${Math.floor(Date.now() / 900000)}`;
   if (layoutMemo.key === key && layoutMemo.value) return layoutMemo.value;
   const entries = [{ project, schedule }, ...(ui.calendarScope === 'plan' ? [] : others.filter((e) => e.project.id !== project.id))];
   const value = { entries, all: planBlocksAcross(entries) };

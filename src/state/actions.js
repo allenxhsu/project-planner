@@ -336,6 +336,40 @@ export function pinBlock(taskId, pin, index = null) {
   return attempt(index === null ? 'Pin a block' : 'Move a pinned block', (p) => { setPin(p, taskId, pin, index); });
 }
 /**
+ * Start a task now: a block from this minute, as long as asked, fixed there.
+ * It comes out of the task's hours, so the time it was planned for later is
+ * freed; anything laid where it now sits moves, because a fixed block is
+ * booked first. A block that was itself fixed moves rather than doubling.
+ * When the task has less left than asked for, it is given the time — someone
+ * sitting down to it for an hour means it takes at least that.
+ */
+export function startTaskNow(taskId, minutes, { pinIndex = null } = {}) {
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, '0');
+  const day = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+  const start = d.getHours() * 60 + d.getMinutes();
+  const length = Math.max(5, Math.min(Math.round(minutes), 24 * 60 - start));
+  const ok = attempt('Start now', (p) => {
+    const t = getTask(p, taskId);
+    if (!t) throw new Error('No such task.');
+    if (!t.calendar?.show) setTaskField(p, t.id, 'calendarShow', true);
+    const info = store.schedule.tasks[t.id];
+    if (info && info.percent < 100) {
+      const left = agendaModule.hoursLeft(p, info, t);
+      const want = length / 60;
+      if (left + 1e-6 < want) {
+        const expected = agendaModule.expectedHours(p, info, t);
+        const hours = Math.max(expected - left + want, want / (1 - info.percent / 100));
+        setTaskField(p, t.id, 'work', String(Math.ceil(hours * 100) / 100));
+      }
+    }
+    setPin(p, t.id, { day, start, minutes: length }, pinIndex);
+  });
+  if (ok && length < minutes) hint(`Only ${length} minutes are left in today; the block stops at midnight.`);
+  return ok;
+}
+
+/**
  * A calendar event made into project work: a task of the event's length,
  * fixed at its hour, in the open plan. The meeting stays in its calendar; the
  * task is what makes its time count toward the project and toward the day.

@@ -907,15 +907,21 @@ export function stageOf(p, task) {
 }
 
 /**
- * Record when a task was finished — the day it reached 100%, in local time —
- * or forget it when it goes back below. It is what "done today" is read from;
- * a task finished before this was kept simply has no day.
+ * Record when a task was finished — local date and time, 'YYYY-MM-DDTHH:MM' —
+ * or forget it when it goes back below 100%. It is what "completed today" is
+ * read from; a task finished before this was kept simply has no time.
  */
-export function stampDone(t, percent, day = localToday()) {
-  if (percent === 100) { if (!t.doneAt) t.doneAt = day; }
+export function stampDone(t, percent, at = localNow()) {
+  if (percent === 100) { if (!t.doneAt) t.doneAt = at; }
   else delete t.doneAt;
 }
-const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const localNow = () => {
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+/** The day part of when a task was finished, or null. */
+export const doneDay = (t) => (typeof t?.doneAt === 'string' ? t.doneAt.slice(0, 10) : null);
 
 /** Put a task in a stage. A done stage completes it; that is what done means. */
 export function setStage(p, taskId, stageId) {

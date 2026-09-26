@@ -111,7 +111,7 @@ export function parse(text) {
       // Checked against the plan's phases once those are read, below.
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
-      ...(isoValid(t.doneAt) && Math.round(+t.percent) === 100 ? { doneAt: t.doneAt } : {}),
+      ...(typeof t.doneAt === 'string' && isoValid(t.doneAt.slice(0, 10)) && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(t.doneAt) && Math.round(+t.percent) === 100 ? { doneAt: t.doneAt } : {}),
       urgency: URGENCIES[t.urgency] ? t.urgency : 'normal',
       calendar: t.calendar && typeof t.calendar === 'object'
         ? { show: !!t.calendar.show,

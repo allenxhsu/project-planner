@@ -103,14 +103,20 @@ export function agendaOf(project, task) {
  * doing it. An implied figure is taken at the plan's assumed load instead,
  * and a stated one is used exactly as stated.
  */
-export function hoursLeft(project, info, task = null) {
+/** How much work the calendar expects of a task in all: its own figure when it states one. */
+export function expectedHours(project, info, task = null) {
   if (info.milestone) return 0;
   const hpd = project.calendar?.hoursPerDay || 8;
   const load = (task ? agendaOf(project, task).assumedLoad : (LOAD_CHOICES.includes(+project.agenda?.assumedLoad) ? +project.agenda.assumedLoad : DEFAULT_AGENDA.assumedLoad)) / 100;
   const stated = task && Number.isFinite(+task.work) && task.work !== null && task.work !== undefined && +task.work >= 0;
   // A task with nobody on it still takes time; the duration is the estimate.
   const full = info.work > 0 ? info.work : info.duration * hpd;
-  const expected = stated ? +task.work : full * load;
+  return stated ? +task.work : full * load;
+}
+
+export function hoursLeft(project, info, task = null) {
+  if (info.milestone) return 0;
+  const expected = expectedHours(project, info, task);
   const left = expected - info.spent;
   // Progress is the other claim on how much is left; take the smaller.
   const byPercent = expected * (1 - (info.percent || 0) / 100);
@@ -188,7 +194,7 @@ export function planBlocks(project, schedule, opts = {}) {
  *
  * @param {Array<{project: object, schedule: object}>} entries
  */
-export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
+export function planBlocksAcross(entries, { horizonDays = 180, now = new Date() } = {}) {
   // One plan, once. The same plan arriving twice — the open copy and its own
   // record from the shelf — would book every hour of it twice over.
   const seenPlans = new Set();
@@ -214,7 +220,12 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     const days = filled.get(lane);
     days.set(day, (days.get(day) || 0) + minutes);
   };
-  const todayDay = toDay(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+  const todayDay = toDay(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
+  // Today's hours that have gone are not free: nothing is laid before the
+  // next quarter hour. Work that was planned for this morning and not done is
+  // laid again from now on, which is what a calendar looked at in the evening
+  // should say.
+  const nowMinute = Math.min(24 * 60, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15);
   const floorOf = (project) => (project.statusDate ? toDay(project.statusDate) : todayDay);
 
   /**
@@ -258,8 +269,10 @@ export function planBlocksAcross(entries, { horizonDays = 180 } = {}) {
     if (!days.has(day)) {
       // Seed the day with whatever the connected calendars already hold,
       // travel time included.
-      days.set(day, meetings.filter((m) => m.lane === lane && m.day === day)
-        .map((m) => ({ start: m.start - m.bufferBefore, end: m.end + m.bufferAfter })));
+      days.set(day, [
+        ...(day === todayDay && nowMinute > 0 ? [{ start: 0, end: nowMinute }] : []),
+        ...meetings.filter((m) => m.lane === lane && m.day === day)
+          .map((m) => ({ start: m.start - m.bufferBefore, end: m.end + m.bufferAfter }))]);
     }
     return days.get(day);
   };

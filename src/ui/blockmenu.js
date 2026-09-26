@@ -79,6 +79,30 @@ async function blockersDialog(t) {
 }
 
 /**
+ * "Start task now": how long, then a block from this minute. The block it was
+ * started from gives its time back; whatever was laid here moves.
+ */
+export async function startNowDialog(t, b = null) {
+  const info = store.schedule.tasks[t.id];
+  const left = info ? Math.round(hoursLeft(store.project, info, t) * 60) : 60;
+  const choices = [[15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 hour'], [90, '1h 30m'], [120, '2 hours'], [180, '3 hours'], [240, '4 hours']];
+  const suggested = b?.minutes || (left > 0 ? Math.min(60, Math.max(15, left)) : 60);
+  const minutes = await open('Start task now', (close) => {
+    const pick = el('select', { class: 'sc-select', 'data-autofocus': '' },
+      ...choices.map(([m, label]) => el('option', { value: m, text: label, selected: m === (choices.find(([c]) => c >= suggested)?.[0] ?? 60) })));
+    return [
+      el('div', { class: 'sc-faint small start-now-task', text: `☐ ${t.name}` }),
+      el('label', { class: 'sc-field' }, el('span', { text: 'How long are you going to work on this task now?' }), pick),
+      el('p', { class: 'sc-faint small', text: `${left ? `${hoursText(left)} left on it. ` : ''}Anything laid in that time moves somewhere else.` }),
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)), button('Start', () => close(+pick.value), 'sc-button--primary')),
+    ];
+  });
+  if (!minutes) return;
+  if (act.startTaskNow(t.id, minutes, { pinIndex: b?.pinned ? b.pinIndex : null })) act.hint(`Started “${t.name}” — ${hoursText(minutes)} from now.`);
+}
+const hoursText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`);
+
+/**
  * The right-click menu on a block — the list Motion puts there, mapped onto
  * this planner. "Schedule event" is a pin: the block becomes a fixed booking.
  */
@@ -89,7 +113,12 @@ export function blockMenu(b, x, y) {
   const quickStart = (project) => quickDates(project, project ? [{ label: 'Project start', day: toDay(project.start) }] : []);
   const quickDue = (project) => quickDates(project, []);
 
+  const done = t0 ? (store.schedule.tasks[t0.id]?.percent ?? 0) === 100 : false;
   showMenu(x, y, [
+    done
+      ? { icon: '↺', label: 'Mark not complete', run: run(b, (t) => act.setPercent(t.id, 0)) }
+      : { icon: '✓', label: 'Complete task', run: run(b, (t) => act.setPercent(t.id, 100)) },
+    '-',
     b.pinned
       ? { icon: '⌖', label: 'Unschedule the fixed time', run: run(b, (t) => act.unpinBlock(t.id, b.pinIndex)) }
       : { icon: '⌖', label: 'Schedule event (fix it at this time)', run: run(b, (t) => act.pinBlock(t.id, { day: b.dateIso, start: b.start, minutes: b.minutes })) },
@@ -98,6 +127,7 @@ export function blockMenu(b, x, y) {
     { icon: '↗', label: 'Open task', run: run(b, (t) => { act.revealTask(t.id); act.selectTask(t.id); set({ rightOpen: true, rightTab: 'task' }); }) },
     { icon: '▢', label: 'View project', run: run(b, (t) => { act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); }) },
     '-',
+    { icon: '▶', label: 'Start task now…', disabled: done, run: run(b, (t) => { void startNowDialog(t, b); }) },
     { icon: '⇥', label: 'Change start date', panel: (close) => datePanel({
       value: t0?.constraint?.date || fromDay(b.day), title: 'Start date', quick: quickStart(entry),
       onPick: (iso) => { close(); void run(b, (t) => act.editTask(t.id, 'start', iso))(); },
@@ -212,6 +242,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       const r = e.currentTarget.getBoundingClientRect();
       showMenu(r.left - 180, r.bottom + 4, [
         { icon: '⧉', label: 'Copy link', run: () => copy(taskLink(project.id, t.id)) },
+        { icon: '▶', label: 'Start task now…', disabled: info?.percent === 100 || t.milestone, run: () => { close(null); void startNowDialog(t, b); } },
         { icon: '⎘', label: 'Duplicate task', run: () => { close(null); act.duplicateTask(t.id); } },
         { icon: '▢', label: 'Create project from task', run: () => { close(null); void projectFromTask(t); } },
         '-',
@@ -249,7 +280,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           late ? el('div', { class: 'sc-alert sc-alert--danger sheet-late', text: late }) : null,
           notes),
         el('aside', { class: 'task-sheet-facts' },
-          el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' })),
+          el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
+            info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
           fact('Project', el('span', {}, project.name, el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { close(null); act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); } }))),
           fact('Assignee', list(who)),
           fact('Urgency', urgency),
