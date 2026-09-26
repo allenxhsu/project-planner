@@ -1169,3 +1169,40 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .fact-auto { cursor: pointer; }
 .fact-duration-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fact-duration { width: 110px; }
+
+/* ================================================================ markdown notes
+   Heptabase's look: headings told apart by colour as well as size. */
+:root { --heading-1: var(--sc-text-1, #fff); --heading-2: #4fc3ff; --heading-3: #3ee07a; }
+.md-notes { position: relative; }
+.md-notes .md-edit { display: none; width: 100%; min-height: 140px; resize: vertical; font-family: var(--sc-font-mono, ui-monospace, monospace); font-size: 13px; line-height: 1.55; }
+.md-notes.is-editing .md-edit { display: block; }
+.md-notes.is-editing .md-view { display: none; }
+.md-view { min-height: 120px; padding: 10px 12px; border: 1px solid var(--sc-line); border-radius: 6px; cursor: text; font-size: 13.5px; line-height: 1.55; }
+.md-view:hover { border-color: var(--sc-line-strong, var(--sc-line)); }
+.md-placeholder { color: var(--sc-text-3); }
+.markdown { word-wrap: break-word; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown h1 { font-size: 1.35em; margin: 0.5em 0 0.35em; line-height: 1.3; color: var(--heading-1); }
+.markdown h2 { font-size: 1.18em; margin: 0.5em 0 0.3em; line-height: 1.3; color: var(--heading-2); }
+.markdown h3 { font-size: 1.05em; margin: 0.5em 0 0.3em; color: var(--heading-3); }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 1em; margin: 0.5em 0 0.3em; }
+.markdown p { margin: 0.5em 0; }
+.markdown ul, .markdown ol { margin: 0.4em 0; padding-left: 1.3em; }
+.markdown li { margin: 0.15em 0; }
+.markdown ul.task-list { list-style: none; padding-left: 0.2em; }
+.markdown li.task { display: flex; gap: 7px; align-items: flex-start; }
+.markdown li.task input { margin-top: 4px; flex: none; cursor: pointer; }
+.markdown li.task.done span { color: var(--sc-text-3); text-decoration: line-through; }
+.markdown blockquote { margin: 0.5em 0; padding: 0.1em 0 0.1em 0.85em; border-left: 3px solid var(--sc-line-strong, var(--sc-line)); color: var(--sc-text-2); }
+.markdown code { font-family: var(--sc-font-mono, ui-monospace, monospace); font-size: 0.88em; padding: 0.12em 0.35em; border-radius: 4px; background: var(--sc-sunken, rgb(255 255 255 / .06)); }
+.markdown pre { margin: 0.55em 0; padding: 9px 11px; border-radius: 6px; background: var(--sc-sunken, rgb(255 255 255 / .06)); overflow-x: auto; }
+.markdown pre code { padding: 0; background: none; font-size: 12px; line-height: 1.55; }
+.markdown hr { margin: 0.9em 0; border: 0; border-top: 1px solid var(--sc-line); }
+.markdown mark { background: color-mix(in srgb, #facc15 40%, transparent); color: inherit; padding: 0 2px; border-radius: 2px; }
+.markdown a.extlink, .markdown a.wikilink { color: var(--sc-accent); }
+.markdown .tag-chip { display: inline-block; padding: 0 6px; border-radius: 999px; background: var(--sc-sunken, rgb(255 255 255 / .06)); color: var(--sc-text-2); font-size: 0.88em; }
+.markdown table { border-collapse: collapse; margin: 0.5em 0; }
+.markdown th, .markdown td { border: 1px solid var(--sc-line); padding: 3px 8px; }
+.markdown details.toggle > summary { cursor: pointer; }
+.md-notes.ps-desc { resize: none; padding: 0; min-height: 0; border: 0; }

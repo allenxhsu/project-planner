@@ -10,6 +10,7 @@
 // Edits apply as they are made, like the task list beside it; the window
 // redraws on every change while it is open.
 
+import { markdownNotes } from './mdnotes.js';
 import { el, clear } from '../util.js';
 import { store, set, subscribe } from '../state/store.js';
 import * as act from '../state/actions.js';
@@ -71,7 +72,11 @@ export async function projectSheet({ planId = store.project.id } = {}) {
 function leftColumn() {
   const p = store.project;
   const title = el('input', { class: 'ps-title', type: 'text', value: p.name, onchange: (e) => act.editProject('name', e.target.value) });
-  const desc = el('textarea', { class: 'ps-desc', rows: 8, placeholder: 'Description', value: p.description || '', onchange: (e) => act.editProject('description', e.target.value) });
+  // Markdown, as Heptabase writes it; saved a moment after typing stops, as one change.
+  let timer = null;
+  const desc = markdownNotes({ value: p.description || '', placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 8,
+    onchange: (text) => { clearTimeout(timer); timer = setTimeout(() => act.editProject('description', text), 700); } }).node;
+  desc.classList.add('ps-desc');
   const comment = el('input', { class: 'sc-input act-input', type: 'text', placeholder: 'Enter comment — ↵ to post' });
   comment.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !comment.value.trim()) return;

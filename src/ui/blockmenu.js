@@ -21,6 +21,7 @@ import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExp
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
 import { datePanel, quickDates } from './datepick.js';
+import { markdownNotes } from './mdnotes.js';
 void _unused;
 
 /** Make `planId` the open plan if it is not, then hand back the task. */
@@ -459,11 +460,12 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const durationList = el('datalist', { id: `dur-${t.id}` }, ...[15, 30, 45, 60, 120, 180, 240, 360, 480].map((m) => el('option', { value: minText(m) })));
     const duration = el('input', { class: 'sc-input fact-duration', type: 'text', value: minText(expectedMin), list: `dur-${t.id}`, placeholder: 'Choose or type a duration',
       title: 'How long the task takes: 15 min, 2h, 1h 30m, 1.5 (hours)…', onkeydown: (e) => e.stopPropagation() });
-    const notes = el('textarea', { class: 'sc-textarea sheet-notes', rows: 8, value: t.notes || '', placeholder: 'Notes' });
+    const notesBox = markdownNotes({ value: t.notes || '', placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 8 });
+    const notes = notesBox.node;
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
-      name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notes.value,
+      name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
       hard: hard.checked, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
       auto: auto.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),

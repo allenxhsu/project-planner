@@ -18,6 +18,7 @@ import { open, foot, button } from './dialog.js';
 import { fieldInput } from './blockmenu.js';
 
 import { taskDefaults, defaultDeadline } from './taskdefaults.js';
+import { markdownNotes } from './mdnotes.js';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480];
 const minText = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`);
@@ -41,7 +42,8 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
   const answer = await open('New task', (close) => {
     let plan = store.project;
     const name = el('input', { class: 'ev-title tp-name', type: 'text', placeholder: 'Task name', 'data-autofocus': '' });
-    const notes = el('textarea', { class: 'sc-textarea tp-notes', rows: 14, placeholder: 'Description' });
+    const notesBox = markdownNotes({ placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 14 });
+    const notes = notesBox.node;
     const side = el('aside', { class: 'tp-side' });
 
     // Where it goes.
@@ -138,7 +140,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       const minutes = +duration.value;
       const from = parseTime(fixedFrom.value);
       close({
-        planId: project.value, phaseId: phase.value || null, name: name.value.trim(), notes: notes.value,
+        planId: project.value, phaseId: phase.value || null, name: name.value.trim(), notes: notesBox.get(),
         resourceId: assignee.value || null, stageId: stage.value, urgency: urgency.value, minutes,
         blockHours: isAuto && chunk.value && chunk.value !== 'whole' ? +chunk.value : null,
         whole: isAuto && chunk.value === 'whole',
