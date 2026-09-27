@@ -265,7 +265,7 @@ export const COMMANDS = {
   'task.complete': () => { const id = act.activeId(); if (id) act.setPercent(id, 100); },
   'resource.new': act.newResource, 'resource.delete': () => act.deleteResource(), 'resource.info': () => set({ view: 'resources' }),
   'view.projects': goView('projects'), 'view.kanban': goView('kanban'), 'view.alltasks': goView('alltasks'), 'view.list': goView('list'), 'view.team': goView('team'),
-  'view.calendar': goView('calendar'), 'view.priority': goView('priority'),
+  'view.calendar': goView('calendar'), 'view.running': goView('running'), 'view.priority': goView('priority'),
   'view.weekBack': () => shiftWeek(-1), 'view.weekOn': () => shiftWeek(1), 'view.thisWeek': showThisWeek,
   'task.breakUp': () => { const id = act.activeId(); if (id) void act.breakUpDialog(id); },
   'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },

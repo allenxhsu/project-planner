@@ -6,7 +6,7 @@
 // logging four hours or moving a task re-lays the week by itself.
 
 import { el, clear } from '../util.js';
-import { store, set, revision } from '../state/store.js';
+import { store, set, revision, setPref } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { DEFAULT_AGENDA, planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf } from '../model/agenda.js';
 import { planRecords, isLiveWork } from '../state/sync.js';
@@ -17,6 +17,7 @@ import { isSummary, phases, getResource, URGENCIES, urgencyOf } from '../model/m
 import { showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
+import { renderDock, renderStrip, runningCount } from './running.js';
 import { visibilityOf } from '../state/mode.js';
 import { icon } from './icons.js';
 
@@ -207,6 +208,10 @@ export function displayOptions(close) {
     el('div', { class: 'dopt-sep' }),
     toggle('Show tasks in calendar', 'calShowTasks', 'Work the calendar has placed, and fixed blocks'),
     toggle('Show completed work', 'calShowWorked', 'Time logged by starting and stopping a task, where it was worked'),
+    el('div', { class: 'dopt-sep' }),
+    el('div', { class: 'dopt-title', text: 'Tasks running at once' }),
+    pick('Day view shows', ui.dayLayout || 'lanes', [['lanes', 'Lanes — the calendar'], ['strip', 'Track strip — a row a task'], ['dock', 'Calendar and running dock']], (v) => setPref('dayLayout', v)),
+    pick('Switch to the day view', String(Number.isFinite(+ui.parallelSwitch) ? +ui.parallelSwitch : 3), [['2', 'When 2 or more run at once'], ['3', 'When 3 or more run at once'], ['4', 'When 4 or more run at once'], ['0', 'Never']], (v) => setPref('parallelSwitch', +v)),
     el('div', { class: 'dopt-sep' }),
     el('button', { class: 'dopt-link', text: 'Auto-schedule every unfinished task', onclick: () => { close(); act.showAllInCalendar(); } }),
     el('button', { class: 'dopt-link', text: 'Schedules — the hours work may use ⚙', onclick: () => { close(); set({ view: 'schedules' }); } }),
@@ -517,6 +522,8 @@ async function openOther(planId, taskId) {
  * then stays where it was put across redraws, until the days on screen change.
  */
 const dayScroll = { key: null, top: 0 };
+/** The running tasks the calendar last switched to the day view for. */
+let lastParallelSwitch = '';
 let lastStaleCheck = 0;
 
 export function renderCalendar(root) {
@@ -575,7 +582,23 @@ export function renderCalendar(root) {
   const lateHere = (all.late || []).filter((l) => visOf(l.planId) !== 'hide' && (!who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who))));
   if (lateHere.length) pane.append(lateBanner(lateHere));
 
+  // Several tasks running at once: today, one day wide, so each has room — once
+  // per set of running tasks, so switching back is not overridden (ui/running.js).
+  const threshold = Number.isFinite(+ui.parallelSwitch) ? +ui.parallelSwitch : 3;
+  if (threshold > 0 && range !== 'day') {
+    const liveNow = blocks.filter((b) => b.live && b.day === toDay(today())).map((b) => b.taskId).sort().join(',');
+    if (liveNow && liveNow.split(',').length >= threshold && liveNow !== lastParallelSwitch) {
+      lastParallelSwitch = liveNow;
+      goToWeek(toDay(today()));
+      setTimeout(() => set({ calendarRange: 'day' }), 0);
+      act.hint(`${liveNow.split(',').length} tasks are running — showing today, one day wide.`);
+    }
+  }
   if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, colourMode, palette, visOf }); return; }
+  // The day view's layouts: lanes (the calendar), the track strip, or the calendar with the running dock.
+  const dayLayout = range === 'day' ? (ui.dayLayout || 'lanes') : 'lanes';
+  if (dayLayout === 'strip') { renderStrip(pane, { openAt: parseTime(DEFAULT_AGENDA.from) ?? 480 }); return; }
+  if (dayLayout === 'dock') renderDock(root);
   const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
@@ -603,10 +626,14 @@ export function renderCalendar(root) {
   });
 
   const todayDay = toDay(today());
+  // Parallel tracks, over several days: a day where tasks run side by side is
+  // drawn wider — a column's width per track, up to four — so none is squeezed.
+  const widthOf = new Map(columns.map((d) => [d, Math.min(4, Math.max(1, ...sideBySide(blocks.filter((b) => b.day === d)).map((x) => x.lanes)))]));
+  const grow = (d) => (columns.length > 1 ? { flex: `${widthOf.get(d)} 1 0`, minWidth: `${120 * widthOf.get(d)}px` } : {});
   const head = el('div', { class: 'cal-head' }, el('div', { class: 'cal-gutter cal-tz', text: timeZoneLabel(), title: 'Times are in this time zone' }));
   for (const d of columns) {
     // "Sun 20", today's number in a pill — the week reads as dates, not labels.
-    head.append(el('div', { class: `cal-col-head${d === todayDay ? ' is-today' : ''}` },
+    head.append(el('div', { class: `cal-col-head${d === todayDay ? ' is-today' : ''}`, style: grow(d) },
       el('span', { class: 'cal-dow', text: WEEKDAY_NAMES[((d + 4) % 7 + 7) % 7].slice(0, 3) }),
       el('span', { class: 'cal-dnum', text: String(+fromDay(d).slice(8, 10)) })));
   }
@@ -620,7 +647,7 @@ export function renderCalendar(root) {
   body.append(gutter);
 
   for (const d of columns) {
-    const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px` } });
+    const col = el('div', { class: `cal-col${d === todayDay ? ' is-today' : ''}`, 'data-day': fromDay(d), style: { height: `${(hourTo - hourFrom) * HOUR_H}px`, ...grow(d) } });
     for (let h = hourFrom; h < hourTo; h++) col.append(el('div', { class: 'cal-line', style: { top: `${(h - hourFrom) * HOUR_H}px` } }));
     // Now: a line across today at the minute it is.
     if (d === todayDay) col.append(el('div', { class: 'cal-now', 'data-from': String(hourFrom * 60), title: 'Now', style: { top: `${((nowMinutes() - hourFrom * 60) / 60) * HOUR_H}px` } }));

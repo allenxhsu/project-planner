@@ -23,6 +23,7 @@ import { renderKanban } from './ui/kanban.js';
 import { renderAllTasks, renderProjectTabs } from './ui/alltasks.js';
 import { renderTeamSchedule } from './ui/teamschedule.js';
 import { renderCalendar, renderCalendarSide } from './ui/calendar.js';
+import { renderRunning } from './ui/running.js';
 import { renderPriority } from './ui/priority.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
@@ -41,7 +42,7 @@ function tabs(root, key, items) {
   }
 }
 
-const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, doc: renderDoc, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
+const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, doc: renderDoc, team: renderTeamSchedule, calendar: renderCalendar, running: renderRunning, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
 /** What a home project's page is, in work mode: a cover, with the ways out. */
 function renderCovered(root) {

@@ -27,6 +27,7 @@ export const VIEWS = {
   list: { label: 'Projects & Tasks — this project', short: 'Project tasks', glyph: '≣' },
   team: { label: 'Team Schedule', short: 'Team', glyph: '▥' },
   calendar: { label: 'Calendar', short: 'Calendar', glyph: '▦' },
+  running: { label: 'Running', short: 'Running', glyph: '▶' },
   priority: { label: 'Priority', short: 'Priority', glyph: '⚑' },
   sheet: { label: 'Task Sheet', short: 'Tasks', glyph: '☰' },
   resources: { label: 'Resource Sheet', short: 'Resources', glyph: '◧' },
@@ -34,6 +35,14 @@ export const VIEWS = {
   network: { label: 'Network Diagram', short: 'Network', glyph: '⬡' },
   schedules: { label: 'Schedules', short: 'Schedules', glyph: '◷' },
 };
+
+/** A setting kept on this device between sessions (the day view's layout, when it switches). */
+const PREFS_KEY = 'project-planner:prefs';
+export function pref(name, fallback) { try { const v = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')[name]; return v === undefined ? fallback : v; } catch { return fallback; } }
+export function setPref(name, value) {
+  try { const all = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); all[name] = value; localStorage.setItem(PREFS_KEY, JSON.stringify(all)); } catch { /* private mode */ }
+  set({ [name]: value });
+}
 
 export const store = {
   project: createProject(),
@@ -50,6 +59,8 @@ export const store = {
     calendarWho: '',        // calendar: '' is everyone, otherwise a person key
     calendarScope: 'all',   // calendar: 'all' plans, or 'plan' for the open one
     calendarRange: 'work',  // calendar: 'day', 'three' days, 'work' week, whole 'week', or 'month'
+    dayLayout: pref('dayLayout', 'lanes'),   // the day view: 'lanes', 'strip' (a row a task) or 'dock' (the running dock beside it)
+    parallelSwitch: pref('parallelSwitch', 3), // switch to the day view when this many tasks run at once; 0 never
     calendarColour: 'auto', // calendar: colour a block by 'person', by 'plan', or 'auto'
     projectsLayout: 'cards', // projects: 'cards' or 'list'
     usageGrain: 'week',     // resource usage: 'day' or 'week' columns

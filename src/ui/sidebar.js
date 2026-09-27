@@ -17,11 +17,13 @@ import { toDay, today, formatDate, WEEKDAY_NAMES, weekday } from '../model/calen
 import { showMenu, promptText } from './dialog.js';
 import { currentLayout, lateness } from './calendar.js';
 import { icon as ic, projectColour } from './icons.js';
+import { runningCount } from './running.js';
 import { visibilityOf, currentMode, modeChoice, modeReason, setModeChoice, teach, detectMode } from '../state/mode.js';
 
 const PLACES = [
   { view: 'today', icon: 'agenda', label: 'Agenda' },
   { view: 'calendar', icon: 'calendar', label: 'Calendar' },
+  { view: 'running', icon: 'running', label: 'Running' },
   { view: 'alltasks', icon: 'project', label: 'Projects & Tasks' },
   { view: 'projects', icon: 'folder', label: 'Projects' },
   { view: 'people', icon: 'people', label: 'People' },
@@ -447,11 +449,12 @@ export function renderSidebar() {
 
   let late = 0;
   try { late = lateness().length; } catch { late = 0; }
+  const running = runningCount();
   clear(parts.places);
   for (const p of PLACES) {
     parts.places.append(item({
       ...p, icon: ic(p.icon), active: ui.view === p.view || (p.view === 'alltasks' && ['team', 'list'].includes(ui.view)),
-      badge: p.view === 'today' && late ? late : null,
+      badge: p.view === 'today' && late ? late : p.view === 'running' && running ? running : null,
       aside: p.view === 'calendar' ? dayLabel : null,
       onclick: () => set({ view: p.view }),
     }));
