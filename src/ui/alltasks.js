@@ -108,13 +108,15 @@ function readPlan(record) {
 }
 
 export async function reloadAllTasks() {
+  // Before the store is open there is nothing to read yet — and nothing to
+  // conclude: main.js reads again once it is. Asked before anything is drawn:
+  // redrawing here re-runs this from the view, and in the Mac app, where the
+  // first view is drawn before the store opens, that loop never let it open.
+  const { storeReady } = await import('../state/sync.js');
+  if (!storeReady()) return;
   loading = true;
   set({});
   try {
-    const { storeReady } = await import('../state/sync.js');
-    // Before the store is open there is nothing to read yet — and nothing to
-    // conclude: read again once it is, rather than show an empty list for good.
-    if (!storeReady()) { loading = false; set({}); return; }
     const records = await planRecords();
     spaces = await listWorkspaces().catch(() => []);
     const entries = records.map(readPlan).filter((e) => e.plan);
