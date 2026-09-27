@@ -1382,3 +1382,19 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .rt-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--sc-text-3); }
 .cal-stop { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 10px; line-height: 1; color: var(--sc-danger); cursor: pointer; }
 .cal-stop:hover { transform: scale(1.2); }
+
+/* Today's health bar on People (ui/people.js): a game's bar for the day's work. */
+.hp { display: grid; gap: 4px; margin: 6px 0 4px; }
+.hp-top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.hp-label { font-weight: 600; letter-spacing: .02em; }
+.hp-streak { font-size: 11.5px; }
+.hp-num { font-size: 11.5px; color: var(--sc-text-2); }
+.hp-track { position: relative; height: 12px; border-radius: 7px; overflow: hidden; background: color-mix(in srgb, var(--sc-line) 70%, var(--sc-bg)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); }
+.hp-fill { height: 100%; border-radius: 7px; transition: width .6s ease; background: linear-gradient(180deg, color-mix(in srgb, var(--hp) 80%, white) 0%, var(--hp) 55%, color-mix(in srgb, var(--hp) 75%, black) 100%); }
+.hp-notch { position: absolute; top: 2px; bottom: 2px; width: 1px; background: rgb(0 0 0 / .35); }
+.hp.is-low { --hp: #e5534b; }
+.hp.is-mid { --hp: #e3a93b; }
+.hp.is-high { --hp: #57ab5a; }
+.hp.is-full { --hp: #8c6ad9; }
+.hp.is-full .hp-label { color: #b8a3f0; }
+.hp-idle { margin: 6px 0 4px; }
