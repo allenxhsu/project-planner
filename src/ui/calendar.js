@@ -13,7 +13,7 @@ import { planRecords, isLiveWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
-import { isSummary, phases, getResource, URGENCIES, urgencyOf } from '../model/model.js';
+import { isSummary, phases, getResource, URGENCIES, urgencyOf, checkInsOf } from '../model/model.js';
 import { showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
@@ -87,6 +87,8 @@ export function daysOnScreen(project) {
 }
 
 const HOUR_H = 46;
+/** The width of a background task's rail down the side of a day. */
+const RAIL_PX = 20;
 
 /**
  * Every plan on the shelf, parsed and scheduled, so one calendar can cover
@@ -628,7 +630,7 @@ export function renderCalendar(root) {
   const todayDay = toDay(today());
   // Parallel tracks, over several days: a day where tasks run side by side is
   // drawn wider — a column's width per track, up to four — so none is squeezed.
-  const widthOf = new Map(columns.map((d) => [d, Math.min(4, Math.max(1, ...sideBySide(blocks.filter((b) => b.day === d)).map((x) => x.lanes)))]));
+  const widthOf = new Map(columns.map((d) => [d, Math.min(4, Math.max(1, ...sideBySide(blocks.filter((b) => b.day === d && !b.background)).map((x) => x.lanes)))]));
   const grow = (d) => (columns.length > 1 ? { flex: `${widthOf.get(d)} 1 0`, minWidth: `${120 * widthOf.get(d)}px` } : {});
   const head = el('div', { class: 'cal-head' }, el('div', { class: 'cal-gutter cal-tz', text: timeZoneLabel(), title: 'Times are in this time zone' }));
   for (const d of columns) {
@@ -654,7 +656,7 @@ export function renderCalendar(root) {
     // Drag down empty time: pick the hours, then say what goes in them — the
     // same menu as a right-click, for exactly the range drawn.
     col.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('.cal-block, .cal-meeting, .cal-buffer, .cal-slot-ghost')) return;
+      if (e.button !== 0 || e.target.closest('.cal-block, .cal-rail, .cal-meeting, .cal-buffer, .cal-slot-ghost')) return;
       e.preventDefault();
       const top = col.getBoundingClientRect().top;
       const minuteAt = (cy) => hourFrom * 60 + ((cy - top) / HOUR_H) * 60;
@@ -689,7 +691,7 @@ export function renderCalendar(root) {
     // Right-click empty time: an event or a fixed-time task there, half an
     // hour from the quarter hour clicked, marked while the menu is open.
     col.addEventListener('contextmenu', (e) => {
-      if (e.target.closest('.cal-block, .cal-meeting, .cal-buffer')) return;
+      if (e.target.closest('.cal-block, .cal-rail, .cal-meeting, .cal-buffer')) return;
       e.preventDefault();
       const raw = hourFrom * 60 + ((e.clientY - col.getBoundingClientRect().top) / HOUR_H) * 60;
       const start = Math.max(0, Math.min(24 * 60 - 30, Math.floor(raw / 15) * 15));
@@ -727,12 +729,35 @@ export function renderCalendar(root) {
       }, el('div', { class: 'cal-meeting-name', text: m.title }),
         m.own && !m.allDay ? el('div', { class: 'cal-meeting-time', text: `${formatClock(m.start)} – ${formatClock(m.end)}${m.location ? ` · ${m.location}` : ''}` }) : null));
     }
-    for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
+    // Background work (the washer, code running) runs alongside: a narrow rail
+    // down the right of the day per task at once, with a dot for each check-in;
+    // focus work keeps the rest of the width, laid over the same hours.
+    const railed = sideBySide(blocks.filter((x) => x.day === d && x.background));
+    const railsPx = railed.length ? Math.max(...railed.map((x) => x.lanes)) * RAIL_PX : 0;
+    for (const { block: b, lane: rail } of railed) {
+      const hiddenHere = visOf(b.planId) === 'hide';
+      const entry = known.find((e) => e.project.id === b.planId);
+      const t = entry?.project.tasks.find((x) => x.id === b.taskId);
+      if (!t) continue;
+      const colour = palette.get(b.planId) || personColour(b.planName);
+      const name = hiddenHere ? 'Busy' : t.name;
+      const checks = hiddenHere ? [] : checkInsOf(t, b.start, b.end);
+      col.append(el('div', {
+        class: `cal-rail${b.live ? ' is-live' : ''}${hiddenHere ? ' cal-busy' : ''}${visOf(b.planId) === 'dim' ? ' is-dimmed' : ''}`,
+        style: { top: `${y(b.start)}px`, height: `${Math.max(16, y(b.end) - y(b.start) - 2)}px`, right: `${rail * RAIL_PX + 2}px`, width: `${RAIL_PX - 3}px`, '--who': colour.line },
+        title: `${name} — in the background\n${formatClock(b.start)} – ${formatClock(b.end)}${checks.length ? `\nCheck on it at ${checks.map(formatClock).join(', ')}` : ''}`,
+        onclick: hiddenHere ? null : () => { void taskSheet({ planId: b.planId, taskId: b.taskId, block: b }); },
+        oncontextmenu: hiddenHere ? null : (e) => { e.preventDefault(); blockMenu(b, e.clientX, e.clientY); },
+      }, el('span', { class: 'cal-rail-name', text: name }),
+        ...checks.map((m) => el('span', { class: 'cal-rail-check', title: `Check on it at ${formatClock(m)}`, style: { top: `${y(m) - y(b.start) - 3}px` } }))));
+    }
+    const within = (slot, width) => ({ left: `calc((100% - ${railsPx}px) * ${slot * width / 100} + 3px)`, width: `calc((100% - ${railsPx}px) * ${width / 100} - 6px)` });
+    for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d && !x.background))) {
       const shown = visOf(b.planId);
       if (shown === 'hide') {
         const width = 100 / lanes;
         col.append(el('div', { class: 'cal-block cal-busy', title: 'Busy',
-          style: { top: `${y(b.start)}px`, height: `${Math.max(16, y(b.end) - y(b.start) - 2)}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto' } },
+          style: { top: `${y(b.start)}px`, height: `${Math.max(16, y(b.end) - y(b.start) - 2)}px`, ...within(slot, width), right: 'auto' } },
         el('span', { class: 'cal-block-name', text: 'Busy' })));
         continue;
       }
@@ -762,7 +787,7 @@ export function renderCalendar(root) {
         'data-task': b.taskId,
         class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
         style: {
-          top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
+          top: `${y(b.start)}px`, height: `${height}px`, ...within(slot, width), right: 'auto',
           '--who': colour.line, borderLeftColor: colour.line,
         },
         title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,

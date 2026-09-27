@@ -1,7 +1,7 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
 import { cleanDocs } from '../model/docs.js';
-import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent } from '../model/model.js';
+import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -141,6 +141,7 @@ export function parse(text) {
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
+      ...(t.attention === 'background' ? { attention: 'background', ...(CHECK_CHOICES.includes(+t.checkEvery) ? { checkEvery: +t.checkEvery } : {}) } : {}),
       // The task's history: kept as long as each line is a dated entry.
       ...(Array.isArray(t.activity) ? { activity: t.activity
         .filter((x) => x && typeof x === 'object' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(x.at)) && typeof x.kind === 'string')

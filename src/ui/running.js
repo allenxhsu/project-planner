@@ -17,6 +17,7 @@ import { store, set } from '../state/store.js';
 import { toDay, today, fromDay } from '../model/calendar.js';
 import { formatClock } from '../model/agenda.js';
 import { visibilityOf } from '../state/mode.js';
+import { checkInsOf } from '../model/model.js';
 import { currentLayout, personColour, planPalette } from './calendar.js';
 
 const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
@@ -41,6 +42,9 @@ export function todaysTracks() {
       hidden: hidden(b.planId), dimmed: visibilityOf(e?.project.workspaceId) === 'dim',
       colour: palette.get(b.planId) || personColour(b.planName || ''),
       start: b.start, end: b.end, left: b.end - now, elapsed: now - b.start,
+      background: !!b.background,
+      // The next look it needs: a background task's next check-in, else its end.
+      nextCheck: t && !hidden(b.planId) ? checkInsOf(t, b.start, b.end).find((m) => m > now) ?? null : null,
     };
   };
   const blocks = (all.blocks || []).filter((b) => b.day === day);
@@ -75,12 +79,14 @@ const timeLeft = (t) => (t.left >= 0 ? `${span(t.left)} left · ends ${formatClo
 /** One running task, as a card: its name, time left, and the ways to act on it. */
 function trackCard(t, { big = false } = {}) {
   const share = Math.max(0, Math.min(1, t.elapsed / Math.max(1, t.end - t.start)));
-  return el('div', { class: `rt-card${big ? ' is-big' : ''}${t.left < 0 ? ' is-over' : ''}${t.dimmed ? ' is-dimmed' : ''}`, style: { '--rt': t.colour.line } },
+  return el('div', { class: `rt-card${big ? ' is-big' : ''}${t.left < 0 ? ' is-over' : ''}${t.dimmed ? ' is-dimmed' : ''}${t.background ? ' is-background' : ''}`, style: { '--rt': t.colour.line } },
+    el('div', { class: 'rt-kind', text: t.background ? 'Background' : 'Focus' }),
     big ? el('div', { class: 'rt-clock sc-mono', text: t.left >= 0 ? span(t.left) : `+${span(t.left)}` }) : null,
     el('div', { class: 'rt-name', text: t.name }),
     t.planName ? el('div', { class: 'rt-plan sc-faint small', text: t.planName }) : null,
     el('div', { class: 'rt-bar' }, el('span', { style: { width: `${Math.round(share * 100)}%` } })),
     el('div', { class: 'rt-when sc-faint small', text: `▶ since ${formatClock(t.start)} · ${timeLeft(t)}` }),
+    t.nextCheck !== null ? el('div', { class: 'rt-when small', text: `◉ check on it at ${formatClock(t.nextCheck)} (in ${span(t.nextCheck - nowMinutes())})` }) : null,
     t.hidden ? null : el('div', { class: 'rt-actions' },
       el('button', { class: 'sc-button sc-button--sm', text: '■ Stop', title: 'Log the time and say what is left', onclick: () => { void stop(t); } }),
       el('button', { class: 'sc-button sc-button--sm', text: '✓ Done', onclick: () => { void done(t); } }),
@@ -102,7 +108,7 @@ export function renderDock(root) {
   const { running, next } = todaysTracks();
   root.append(el('aside', { class: 'rt-dock' },
     el('div', { class: 'rt-head' }, el('strong', { text: `Running${running.length ? ` · ${running.length}` : ''}` })),
-    running.length ? el('div', { class: 'rt-cards' }, ...running.map((t) => trackCard(t)))
+    running.length ? el('div', { class: 'rt-cards' }, ...[...running.filter((t) => !t.background), ...running.filter((t) => t.background)].map((t) => trackCard(t)))
       : el('p', { class: 'sc-faint small', text: 'Nothing running. Start a task (its menu ▸ Start task now, or ▶ below) and it shows here.' }),
     el('div', { class: 'rt-head' }, el('strong', { text: 'Up next today' })),
     upNextList(next)));
@@ -136,7 +142,7 @@ export function renderStrip(pane, { openAt = 8 * 60 } = {}) {
         style: { left: x(t.start), width: w(t.start, t.end), '--rt': t.colour.line, background: t.hidden ? '' : t.colour.fill },
         title: `${t.name} · ${formatClock(t.start)} – ${formatClock(t.end)}`,
         onclick: t.hidden ? null : () => { void openTrack(t); },
-      }, el('span', { text: t.block.live ? timeLeft(t) : `${formatClock(t.start)} – ${formatClock(t.end)}` }))),
+      }, el('span', { text: `${t.background ? '◌ ' : ''}${t.block.live ? timeLeft(t) : `${formatClock(t.start)} – ${formatClock(t.end)}`}${t.background && t.nextCheck !== null ? ` · check ${formatClock(t.nextCheck)}` : ''}` }))),
       el('div', { class: 'rs-now', style: { left: x(now) } })));
   pane.append(el('div', { class: 'rs' },
     el('div', { class: 'rs-row rs-axis' }, el('div', { class: 'rs-label' }), el('div', { class: 'rs-track' }, ...hours, el('div', { class: 'rs-now', style: { left: x(now) } }))),
@@ -159,11 +165,12 @@ export function renderRunning(root) {
   root.append(el('div', { class: 'rb' },
     el('div', { class: 'rb-head' },
       el('h2', { text: running.length ? `${running.length} running` : 'Nothing running' }),
+      running.length ? el('span', { class: 'sc-faint', text: `${running.filter((t) => !t.background).length} focus · ${running.filter((t) => t.background).length} in the background` }) : null,
       el('span', { class: 'sc-faint', text: `${fromDay(toDay(today()))} · ${formatClock(now)}` }),
       el('span', { class: 'sc-spacer' }),
       el('button', { class: 'sc-button sc-button--sm', text: 'Calendar', onclick: () => set({ view: 'calendar', calendarRange: 'day' }) })),
     strip,
-    running.length ? el('div', { class: 'rb-grid' }, ...running.map((t) => trackCard(t, { big: true })))
+    running.length ? el('div', { class: 'rb-grid' }, ...[...running.filter((t) => !t.background), ...running.filter((t) => t.background)].map((t) => trackCard(t, { big: true })))
       : el('p', { class: 'sc-muted', text: 'Start tasks to see them here side by side — each with its own clock. Up next:' }),
     el('h3', { text: 'Up next today' }),
     upNextList(next, 8)));

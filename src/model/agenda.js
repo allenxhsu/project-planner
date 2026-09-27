@@ -11,7 +11,7 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekday } from './calendar.js';
-import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, feeds, bufferOf, getResource, identityOf, pinsOf, eventsOf, eventPieces, URGENCIES, urgencyOf } from './model.js';
+import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, feeds, bufferOf, getResource, identityOf, pinsOf, eventsOf, eventPieces, URGENCIES, urgencyOf, attentionOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
 export const BLOCK_CHOICES = [0.5, 1, 1.5, 2, 4];
@@ -367,11 +367,13 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
         day, start: pin.start, end: pin.start + minutes, minutes,
         lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day),
         overdue: info.start < floor, pinned: true, pinIndex: index, ...(pin.live ? { live: true } : {}),
+        ...(attentionOf(t) === 'background' ? { background: true } : {}),
       };
       blocks.push(block);
       if (!byTask.has(t.id)) byTask.set(t.id, []);
       byTask.get(t.id).push(block);
-      for (const lane of people) { bookedOn(lane, day).push({ start: pin.start, end: pin.start + minutes + a.gap }); fill(lane, day, minutes); }
+      // A background task runs alongside: it books nobody's time, so focus work goes over it.
+      if (attentionOf(t) !== 'background') for (const lane of people) { bookedOn(lane, day).push({ start: pin.start, end: pin.start + minutes + a.gap }); fill(lane, day, minutes); }
       left -= minutes;
       used += minutes;
     });
@@ -481,6 +483,12 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     // task's schedule from its first day on is filled before the next day is
     // used, so today holds all it can hold. (The Gantt still spreads the task
     // over its duration; the calendar is about when it actually gets done.)
+    // Background work (the washer, code running) needs starting and a look now
+    // and then, not the person: it is laid in its schedule's hours whatever
+    // else is there — meetings, focus work, other background work — and books
+    // no one's time or day's allowance. It only keeps off the past and itself.
+    const background = attentionOf(t) === 'background';
+    const ownOn = (d) => mine.filter((b) => b.day === d).map((b) => ({ start: b.start, end: b.end }));
     let day = firstDay;
     let guard = 0;
     while (left > 0 && guard++ < horizonDays) {
@@ -491,11 +499,13 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       // A day's limit, when the plan sets one, is what is left of the day's
       // allowance for the person who has the least of it left, because a
       // block belongs to everyone on the task.
-      const roomToday = Math.min(...people.map((lane) => capMinutes - filledOn(lane, day)));
+      const roomToday = background ? Infinity : Math.min(...people.map((lane) => capMinutes - filledOn(lane, day)));
       if (roomToday < Math.min(size, left)) { day = nextDay(day + 1); continue; }
       let usedToday = 0;
       // Free for everyone on the task: the union of what each of them is doing.
-      const busyForAll = [...people.flatMap((lane) => bookedOn(lane, day)), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])];
+      const busyForAll = background
+        ? [...(day === todayDay && nowMinute > 0 ? [{ start: 0, end: nowMinute }] : []), ...ownOn(day), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])]
+        : [...people.flatMap((lane) => bookedOn(lane, day)), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])];
       const slots = today.flatMap((w) => freeSlots(busyForAll, w.from, w.to)).sort((x, y) => x[0] - y[0]);
       for (const [from, to] of slots) {
         let at = from;
@@ -505,6 +515,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
             taskId: t.id, planId: project.id, planName: project.name,
             day, start: at, end: at + minutes, minutes,
             lanes, lane: lanes[0], people, critical: info.critical, dateIso: fromDay(day), overdue,
+            ...(background ? { background: true } : {}),
           };
           blocks.push(block);
           mine.push(block);
@@ -514,7 +525,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
           // booked with it, so the next thing — this task's or anyone's —
           // starts after it rather than back to back. Booked for every person
           // on the task, which is what stops the double-booking.
-          for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + minutes + a.gap }); fill(lane, day, minutes); }
+          if (!background) for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + minutes + a.gap }); fill(lane, day, minutes); }
           at += minutes + a.gap;
           left -= minutes;
           usedToday += minutes;

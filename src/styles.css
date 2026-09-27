@@ -1371,3 +1371,12 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .rt-card.is-big { padding: 14px 16px; border-radius: 0 12px 12px 0; }
 .rt-clock { font-size: 34px; font-weight: 600; line-height: 1.1; }
 .rt-card.is-over .rt-clock { color: var(--sc-danger); }
+
+/* Background work (model attentionOf): a rail down the right of the day, with its check-ins. */
+.cal-rail { position: absolute; z-index: 1; border-radius: 4px; background: color-mix(in srgb, var(--who, var(--sc-accent)) 22%, var(--sc-panel));
+  border: 1px dashed color-mix(in srgb, var(--who, var(--sc-accent)) 70%, transparent); cursor: pointer; overflow: visible; }
+.cal-rail.is-live { border-style: solid; background: color-mix(in srgb, var(--who, var(--sc-accent)) 38%, var(--sc-panel)); }
+.cal-rail-name { position: absolute; inset: 4px 0; writing-mode: vertical-rl; font-size: 10.5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sc-text); text-align: start; display: flex; align-items: center; }
+.cal-rail-check { position: absolute; left: 50%; width: 7px; height: 7px; margin-left: -4px; border-radius: 50%; background: var(--sc-panel); border: 2px solid var(--who, var(--sc-accent)); }
+.rt-card.is-background { border-left-style: dashed; }
+.rt-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--sc-text-3); }

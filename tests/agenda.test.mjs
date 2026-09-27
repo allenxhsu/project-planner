@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { toDay } from '../src/model/calendar.js';
 import {
-  createProject, insertTask, addResource, assign, setTaskField, addFeed, setFeedEvents, setFeedField, setPin, pinsOf,
+  createProject, insertTask, addResource, assign, setTaskField, addFeed, setFeedEvents, setFeedField, setPin, pinsOf, checkInsOf,
 } from '../src/model/model.js';
 import { computeSchedule } from '../src/model/schedule.js';
 import { planBlocksAcross, formatClock } from '../src/model/agenda.js';
@@ -410,4 +410,34 @@ test('a signed-in Google calendar is kept by account and calendar, with no link,
   assert.throws(() => addFeed(p, { name: 'Nothing' }), /https/, 'without an account it still needs an address');
   const back = parse(serialize(p)).project;
   assert.deepEqual(back.feeds.map((x) => [x.name, x.google?.calendarId, x.provider]), [['Work', 'primary', 'google']]);
+});
+
+test('background work runs alongside: focus work is laid over it, and several background tasks share the hours', () => {
+  const { p, ann } = week();
+  const focus = job(p, ann, 'Write the report', { work: '8' });          // fills Monday, 9 to 5
+  const wash = job(p, ann, 'Laundry', { work: '2' });
+  const build = job(p, ann, 'Claude runs the test suite', { work: '2' });
+  setTaskField(p, wash.id, 'attention', 'background');
+  setTaskField(p, wash.id, 'checkEvery', 30);
+  setTaskField(p, build.id, 'attention', 'background');
+  const { blocks } = planBlocksAcross([{ project: p, schedule: computeSchedule(p) }], { now: new Date(`${MON}T08:00:00`) });
+  const of = (t) => blocks.filter((b) => b.taskId === t.id);
+  assert.equal(of(focus).reduce((n, b) => n + b.minutes, 0), 480);
+  assert.ok(of(focus).every((b) => b.dateIso === MON), 'the focus work still gets all of Monday');
+  for (const t of [wash, build]) {
+    assert.equal(of(t)[0].dateIso, MON, `${t.name} runs on Monday too`);
+    assert.equal(of(t)[0].start, 9 * 60, 'from the start of the day, under the focus work');
+    assert.ok(of(t).every((b) => b.background));
+  }
+  // Their own chunks never overlap each other.
+  const w = of(wash).sort((a, b) => a.start - b.start);
+  for (let i = 1; i < w.length; i++) assert.ok(w[i].start >= w[i - 1].end);
+  assert.deepEqual(checkInsOf(wash, 9 * 60, 11 * 60), [570, 600, 630], 'a look every half hour');
+  assert.deepEqual(checkInsOf(focus, 9 * 60, 11 * 60), [], 'focus work has no check-ins');
+  // Kept through a save; back to focus drops the check-ins.
+  const back = parse(serialize(p)).project.tasks.find((t) => t.id === wash.id);
+  assert.equal(back.attention, 'background');
+  assert.equal(back.checkEvery, 30);
+  setTaskField(p, wash.id, 'attention', 'focus');
+  assert.equal(wash.checkEvery, undefined);
 });

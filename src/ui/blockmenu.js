@@ -16,7 +16,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase } from '../model/model.js';
+import { timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase, attentionOf, CHECK_CHOICES } from '../model/model.js';
 import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
@@ -84,17 +84,35 @@ export async function startNowDialog(t, b = null) {
   const left = info ? Math.round(hoursLeft(store.project, info, t) * 60) : 60;
   const choices = [[15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 hour'], [90, '1h 30m'], [120, '2 hours'], [180, '3 hours'], [240, '4 hours']];
   const suggested = b?.minutes || (left > 0 ? Math.min(60, Math.max(15, left)) : 60);
+  // One focus task at a time: you can only be in one place. Background tasks run alongside anything.
+  const { currentLayout } = await import('./calendar.js');
+  const busy = attentionOf(t) === 'focus'
+    ? (currentLayout().all.blocks || []).find((x) => x.live && !x.background && x.day === toDay(today()) && x.taskId !== t.id) : null;
+  const busyName = busy ? (currentLayout().entries.find((e) => e.project.id === busy.planId)?.project.tasks.find((x) => x.id === busy.taskId)?.name || 'another task') : null;
+  let stopFirst = false;
   const minutes = await open('Start task now', (close) => {
     const pick = el('select', { class: 'sc-select', 'data-autofocus': '' },
       ...choices.map(([m, label]) => el('option', { value: m, text: label, selected: m === (choices.find(([c]) => c >= suggested)?.[0] ?? 60) })));
     return [
       el('div', { class: 'sc-faint small start-now-task', text: `☐ ${t.name}` }),
       el('label', { class: 'sc-field' }, el('span', { text: 'How long are you going to work on this task now?' }), pick),
-      el('p', { class: 'sc-faint small', text: `${left ? `${hoursText(left)} left on it. ` : ''}Anything laid in that time moves somewhere else.` }),
-      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)), button('Start', () => close(+pick.value), 'sc-button--primary')),
+      el('p', { class: 'sc-faint small', text: attentionOf(t) === 'background'
+        ? `${left ? `${hoursText(left)} left on it. ` : ''}It runs in the background: nothing else moves.`
+        : `${left ? `${hoursText(left)} left on it. ` : ''}Anything laid in that time moves somewhere else.` }),
+      busy ? el('p', { class: 'sc-alert sc-alert--warning small', text: `“${busyName}” is running and needs your attention too. Only one focus task runs at a time — stop it first, or make this one a background task (its window ▸ Attention).` }) : null,
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null)),
+        busy ? button(`Stop “${busyName.length > 24 ? `${busyName.slice(0, 24)}…` : busyName}” first`, () => { stopFirst = true; close(+pick.value); }, 'sc-button--primary')
+          : button('Start', () => close(+pick.value), 'sc-button--primary')),
     ];
   });
   if (!minutes) return;
+  const planId = store.project.id;
+  if (stopFirst) {
+    await stopNowDialog({ planId: busy.planId, taskId: busy.taskId });
+    // Still running (the stop was cancelled): this one does not start.
+    if ((currentLayout().all.blocks || []).some((x) => x.live && x.taskId === busy.taskId && x.planId === busy.planId)) return;
+    if (store.project.id !== planId) { const { openPlan } = await import('../state/sync.js'); if (!(await openPlan(planId))) return; }
+  }
   if (act.startTaskNow(t.id, minutes, { pinIndex: b?.pinned ? b.pinIndex : null })) act.hint(`Started “${t.name}” — ${hoursText(minutes)} from now.`);
 }
 /**
@@ -248,6 +266,9 @@ export function blockMenu(b, x, y) {
     b.live
       ? { icon: '■', label: 'Stop task…', run: () => { void stopNowDialog({ planId: b.planId, taskId: b.taskId }); } }
       : { icon: '▶', label: 'Start task now…', disabled: done, run: run(b, (t) => { void startNowDialog(t, b); }) },
+    b.background
+      ? { icon: '◉', label: 'Needs my attention (focus)', run: run(b, (t) => act.editTask(t.id, 'attention', 'focus')) }
+      : { icon: '◌', label: 'Run in the background', run: run(b, (t) => act.editTask(t.id, 'attention', 'background')) },
     { icon: '⇥', label: 'Change start date', panel: (close) => datePanel({
       value: t0?.constraint?.date || fromDay(b.day), title: 'Start date', quick: quickStart(entry),
       onPick: (iso) => { close(); void run(b, (t) => act.editTask(t.id, 'start', iso))(); },
@@ -465,6 +486,16 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
     const hard = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!t.hardDeadline });
+    // Focus needs you there, one at a time; background runs alongside, a look now and then.
+    const attention = el('select', { class: 'sc-select' },
+      el('option', { value: 'focus', text: 'Focus — needs me there', selected: attentionOf(t) === 'focus' }),
+      el('option', { value: 'background', text: 'Background — runs alongside', selected: attentionOf(t) === 'background' }));
+    const checkEvery = el('select', { class: 'sc-select' },
+      el('option', { value: '0', text: 'No check-ins', selected: !t.checkEvery }),
+      ...CHECK_CHOICES.map((m) => el('option', { value: String(m), text: m < 60 ? `Every ${m} min` : `Every ${m / 60 === 1 ? 'hour' : `${m / 60} hours`}`.replace('1.5 hours', '1½ hours'), selected: +t.checkEvery === m })));
+    const checkRow = el('div', {});
+    const showCheck = () => { checkRow.hidden = attention.value !== 'background'; };
+    attention.addEventListener('change', showCheck);
     // How it is laid: the pieces it is cut into, and the hours it may use.
     const a0 = agendaOf(project, t);
     const chunk = el('select', { class: 'sc-select' },
@@ -507,7 +538,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
-      hard: hard.checked, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
+      hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
       auto: auto.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
@@ -627,6 +658,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Deadline', deadline),
           subFact('Hard deadline', el('label', { class: 'fact-switch', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, hard, el('span', { class: 'tp-switch' }))),
           fact('Schedule', schedule),
+          fact('Attention', attention),
+          (checkRow.append(subFact('Check on it', checkEvery)), showCheck(), checkRow),
           el('div', { class: 'fact-gap' }),
           fact('Labels', labels),
           ...custom.map((c) => fact(c.field.name, c.node)),
@@ -651,6 +684,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if ((saved.deadline || null) !== (t.deadline || null)) act.editTask(t.id, 'deadline', saved.deadline);
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
   if (saved.hard !== !!t.hardDeadline) act.editTask(t.id, 'hardDeadline', saved.hard);
+  if (saved.attention !== attentionOf(t)) act.editTask(t.id, 'attention', saved.attention);
+  if (saved.attention === 'background' && saved.checkEvery !== (+t.checkEvery || 0)) act.editTask(t.id, 'checkEvery', saved.checkEvery);
   if (saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
   const minutes = saved.duration.trim() === minText(expectedMin) ? expectedMin : parseDurationText(saved.duration);
   if (minutes === null && saved.duration.trim()) act.hint(`“${saved.duration}” is not a duration — try 45 min, 2h or 1h 30m.`);

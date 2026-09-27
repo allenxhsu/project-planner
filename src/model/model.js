@@ -474,6 +474,26 @@ export function formatAssignments(p, task) {
   }).filter(Boolean).join(', ');
 }
 
+// ---------------------------------------------------------------- attention
+//
+// Some work needs you there — writing, a call, cleaning a room. Some only
+// needs starting and a look now and then — the washer, a long download, code
+// Claude is running for you. A background task does not take your time on
+// the calendar: focus work is laid right over it, and several run at once.
+// It can say how often it wants a look; the calendar marks those check-ins.
+
+export const CHECK_CHOICES = [10, 15, 20, 30, 45, 60, 90, 120];
+/** 'focus' (needs you there; one at a time) or 'background' (runs alongside, a look now and then). */
+export const attentionOf = (t) => (t?.attention === 'background' ? 'background' : 'focus');
+/** The check-ins of a background block — minutes of the day, after its start and before its end. */
+export function checkInsOf(t, start, end) {
+  const every = attentionOf(t) === 'background' ? +t.checkEvery || 0 : 0;
+  if (!every) return [];
+  const out = [];
+  for (let m = start + every; m < end; m += every) out.push(m);
+  return out;
+}
+
 // ---------------------------------------------------------------- calendars
 //
 // A connected calendar: one of a signed-in Google account's calendars (read
@@ -1280,6 +1300,8 @@ function describeField(p, t, field) {
     case 'start': case 'constraintDate': case 'constraintType': return ['start date', t.constraint?.date || 'none'];
     case 'deadline': return ['deadline', t.deadline || 'none'];
     case 'hardDeadline': return ['hard deadline', t.hardDeadline ? 'on' : 'off'];
+    case 'attention': return ['attention', attentionOf(t) === 'background' ? 'background' : 'focus'];
+    case 'checkEvery': return ['check-ins', t.checkEvery ? `every ${t.checkEvery} min` : 'none'];
     case 'urgency': return ['priority', URGENCIES[t.urgency]?.label || 'Normal'];
     case 'notes': return ['description', null];
     case 'archived': return ['archived', t.archived ? 'yes' : 'no'];
@@ -1369,6 +1391,13 @@ function applyTaskField(p, t, id, field, value) {
     case 'archived': t.archived = !!value; break;
     // A hard deadline is one that must hold: it is placed ahead of soft ones.
     case 'hardDeadline': t.hardDeadline = !!value; if (!t.hardDeadline) delete t.hardDeadline; break;
+    case 'attention': if (value === 'background') t.attention = 'background'; else { delete t.attention; delete t.checkEvery; } break;
+    case 'checkEvery': {
+      const n = +value || 0;
+      if (n && !CHECK_CHOICES.includes(n)) throw new Error(`Check on it every ${CHECK_CHOICES.join(', ')} minutes, or not at all.`);
+      if (n) t.checkEvery = n; else delete t.checkEvery;
+      break;
+    }
     // Labels: short tags, kept as typed, each once.
     case 'labels': {
       const list = [...new Set((Array.isArray(value) ? value : String(value || '').split(',')).map((x) => String(x).trim()).filter(Boolean))];
