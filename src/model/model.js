@@ -1327,6 +1327,8 @@ function describeField(p, t, field) {
     case 'deadline': return ['deadline', t.deadline || 'none'];
     case 'hardDeadline': return ['hard deadline', t.hardDeadline ? 'on' : 'off'];
     case 'attention': return ['attention', attentionOf(t) === 'background' ? 'background' : 'focus'];
+    case 'energy': return ['energy', t.energy || 'the project’s'];
+    case 'skill': return ['skill', t.skill || 'the project’s'];
     case 'checkEvery': return ['check-ins', t.checkEvery ? `every ${t.checkEvery} min` : 'none'];
     case 'urgency': return ['priority', URGENCIES[t.urgency]?.label || 'Normal'];
     case 'notes': return ['description', null];
@@ -1418,6 +1420,10 @@ function applyTaskField(p, t, id, field, value) {
     // A hard deadline is one that must hold: it is placed ahead of soft ones.
     case 'hardDeadline': t.hardDeadline = !!value; if (!t.hardDeadline) delete t.hardDeadline; break;
     case 'attention': if (value === 'background') t.attention = 'background'; else { delete t.attention; delete t.checkEvery; } break;
+    // Physical drains stamina, mental drains magic (model/skills.js); blank is the project's.
+    case 'energy': if (value === 'physical' || value === 'mental') t.energy = value; else delete t.energy; break;
+    // The skill it trains; blank is the project's.
+    case 'skill': { const v = String(value || '').trim().slice(0, 40); if (v) t.skill = v; else delete t.skill; break; }
     case 'checkEvery': {
       const n = +value || 0;
       if (n && !CHECK_CHOICES.includes(n)) throw new Error(`Check on it every ${CHECK_CHOICES.join(', ')} minutes, or not at all.`);

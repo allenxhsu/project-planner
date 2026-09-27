@@ -1383,18 +1383,35 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .cal-stop { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 10px; line-height: 1; color: var(--sc-danger); cursor: pointer; }
 .cal-stop:hover { transform: scale(1.2); }
 
-/* Today's health bar on People (ui/people.js): a game's bar for the day's work. */
-.hp { display: grid; gap: 4px; margin: 6px 0 4px; }
-.hp-top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.hp-label { font-weight: 600; letter-spacing: .02em; }
-.hp-streak { font-size: 11.5px; }
-.hp-num { font-size: 11.5px; color: var(--sc-text-2); }
-.hp-track { position: relative; height: 12px; border-radius: 7px; overflow: hidden; background: color-mix(in srgb, var(--sc-line) 70%, var(--sc-bg)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); }
-.hp-fill { height: 100%; border-radius: 7px; transition: width .6s ease; background: linear-gradient(180deg, color-mix(in srgb, var(--hp) 80%, white) 0%, var(--hp) 55%, color-mix(in srgb, var(--hp) 75%, black) 100%); }
-.hp-notch { position: absolute; top: 2px; bottom: 2px; width: 1px; background: rgb(0 0 0 / .35); }
-.hp.is-low { --hp: #e5534b; }
-.hp.is-mid { --hp: #e3a93b; }
-.hp.is-high { --hp: #57ab5a; }
-.hp.is-full { --hp: #8c6ad9; }
-.hp.is-full .hp-label { color: #b8a3f0; }
-.hp-idle { margin: 6px 0 4px; }
+/* The character sheet on People (ui/character.js): health, stamina, magic, skills. */
+.cs { display: grid; gap: 6px; margin: 4px 0 6px; min-width: 0; }
+.cs-head { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.cs-level { display: inline-flex; align-items: baseline; gap: 2px; padding: 1px 8px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  background: color-mix(in srgb, #d9a52b 22%, transparent); color: #e9c46a; border: 1px solid color-mix(in srgb, #d9a52b 55%, transparent); }
+.cs-level small { font-size: 9.5px; font-weight: 600; opacity: .8; }
+.cs-quests { color: var(--sc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-bar { display: grid; gap: 2px; min-width: 0; }
+.cs-bar-top { display: flex; align-items: center; gap: 6px; font-size: 11px; min-width: 0; }
+.cs-bar-label { font-weight: 600; white-space: nowrap; }
+.cs-bar-num { color: var(--sc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-track { height: 9px; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--sc-line) 70%, var(--sc-bg)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); }
+.cs-fill { height: 100%; border-radius: 5px; transition: width .6s ease;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cs) 78%, white) 0%, var(--cs) 55%, color-mix(in srgb, var(--cs) 75%, black) 100%); }
+.cs-bar.is-health { --cs: #e5534b; }
+.cs-bar.is-health.is-full { --cs: #8c6ad9; }
+.cs-bar.is-stamina { --cs: #57ab5a; }
+.cs-bar.is-magic { --cs: #4a8fe0; }
+.cs-skills { display: grid; gap: 3px; margin-top: 2px; }
+.cs-skill { display: grid; grid-template-columns: minmax(0, 1fr) auto 70px 44px; align-items: center; gap: 6px; font-size: 11.5px; }
+.cs-skill-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-skill.is-special .cs-skill-name { color: #b8a3f0; }
+.cs-skill-lv { font-size: 10.5px; color: #e9c46a; }
+.cs-skill-track { height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--sc-line) 70%, var(--sc-bg)); overflow: hidden; }
+.cs-skill-track > div { height: 100%; background: #d9a52b; }
+.cs-skill-gain { font-size: 10.5px; color: #57ab5a; text-align: right; }
+/* The card never grows past its column: long names and bars shrink inside it. */
+.person-card { min-width: 0; overflow: hidden; }
+.person-card > * { min-width: 0; }
+.hp-top { min-width: 0; }
+.hp-label, .hp-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.person-plan.is-more { --tint: var(--sc-text-2); }

@@ -69,3 +69,21 @@ test('no menu command is defined twice', () => {
   assert.deepEqual(twice, [], 'a second definition silently replaces the first');
   assert.ok(keys.includes('view.today') && keys.includes('view.goToToday'));
 });
+
+test('levels, pools and what a task trains', async () => {
+  const { levelOf, poolOf, energyOf, skillOf } = await import('../src/model/skills.js');
+  assert.equal(levelOf(0).level, 1);
+  assert.equal(levelOf(119).level, 1);
+  assert.equal(levelOf(120).level, 2, 'two hours is level 2');
+  assert.equal(levelOf(360).level, 3, 'six hours is level 3');
+  assert.equal(levelOf(240).pct, 50, 'halfway from 2 h to 6 h');
+  assert.equal(poolOf('physical', 1), 240);
+  assert.equal(poolOf('mental', 5), 360 + 60, 'the pool grows a quarter hour a level');
+  assert.equal(energyOf({ energy: 'physical' }, {}), 'physical');
+  assert.equal(energyOf({ energy: 'physical' }, { energy: 'mental' }), 'mental', 'the task says first');
+  assert.equal(energyOf({}, {}), 'mental');
+  assert.equal(skillOf({ name: 'Kitchen' }, {}, { folderName: 'Cooking', workspaceName: 'Personal' }), 'Cooking');
+  assert.equal(skillOf({ name: 'Kitchen', skill: 'Housekeeping' }, {}, { folderName: 'Cooking' }), 'Housekeeping');
+  assert.equal(skillOf({ name: 'Kitchen' }, { skill: 'Knife work' }, {}), 'Knife work');
+  assert.equal(skillOf({ name: 'ISEN 665' }, {}, { workspaceName: 'School' }), 'School');
+});

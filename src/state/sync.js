@@ -526,6 +526,8 @@ const WORKSPACE_TYPE = 'workspace';
 const TIMEBLOCK_TYPE = 'timeblock';
 /** Home and work: the networks and places each is recognised by (state/mode.js). */
 const PLACE_TYPE = 'place';
+/** What each device logged about its person's days: planning time, commits, prompts (state/activity.js). */
+const STAT_TYPE = 'stat';
 
 // -------------------------------------------------------------- time blocks
 //
@@ -737,6 +739,47 @@ export async function setWorkspaceMode(id, mode) {
   const done = await patchWorkspace(id, (w) => { w.mode = mode === 'work' || mode === 'home' ? mode : null; });
   await listWorkspaces();
   return !!done;
+}
+
+// ------------------------------------------------------------------ stats
+//
+// One record per device, so two devices never write over each other's count:
+// days → { planning (minutes in this app), commits, features, prompts }.
+// Summed over every device when read.
+
+export async function listStats() {
+  if (!recordStore) return [];
+  return (await recordStore.all()).filter((r) => r && r.type === STAT_TYPE && !r.deletedAt && r.days && typeof r.days === 'object');
+}
+
+/** Change this device's day: `change(day)` edits `{ planning, commits, features, prompts }` in place. */
+export async function updateStat(date, change) {
+  if (!recordStore) return null;
+  const id = `stat_${deviceId()}`;
+  const existing = await recordStore.get(id);
+  const days = { ...(existing?.days || {}) };
+  const day = { ...(days[date] || {}) };
+  change(day);
+  days[date] = day;
+  // A year is plenty: older days fall away.
+  const cutoff = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
+  for (const k of Object.keys(days)) if (k < cutoff) delete days[k];
+  const record = { id, type: STAT_TYPE, days, updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId() };
+  await recordStore.put([record]);
+  return record;
+}
+
+/** Replace this device's counts for many days at once (software counts from the Mac app). */
+export async function setStatDays(values) {
+  if (!recordStore) return null;
+  const id = `stat_${deviceId()}`;
+  const existing = await recordStore.get(id);
+  const days = { ...(existing?.days || {}) };
+  for (const [date, v] of Object.entries(values)) days[date] = { ...(days[date] || {}), ...v };
+  const record = { id, type: STAT_TYPE, days, updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId() };
+  await recordStore.put([record]);
+  if (syncConfigured()) void syncNow();
+  return record;
 }
 
 // ------------------------------------------------------------------ places

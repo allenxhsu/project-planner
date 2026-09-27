@@ -290,6 +290,8 @@ initSync({ preferStored: !hosted && startedOnFallback })
     const mode = await import('./state/mode.js');
     mode.useWorkspaces(workspaceNow);
     mode.watchMode();
+    // Planning and software skill: time in the app, and (on the Mac) commits and prompts.
+    void import('./state/activity.js').then((m) => m.watchActivity());
     window.addEventListener('planner-mode', () => { void import('./ui/resources.js').then((m) => m.reloadUsage?.()); });
     // The task lists read the shelf: now that it is open, read it.
     void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());

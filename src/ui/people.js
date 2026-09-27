@@ -13,11 +13,10 @@
 
 import { el, clear, formatHours, formatMoney } from '../util.js';
 import { store, set } from '../state/store.js';
-import { RESOURCE_TYPES, identityOf } from '../model/model.js';
-import { toDay, today, fromDay } from '../model/calendar.js';
+import { RESOURCE_TYPES } from '../model/model.js';
 import { currentLayout, reloadCalendarPlans } from './calendar.js';
-import { visibilityOf } from '../state/mode.js';
-import { agendaOf } from '../model/agenda.js';
+import { characterScores, characterSheet, selfStats } from './character.js';
+import { taskDefaults } from './taskdefaults.js';
 import {
   peopleWithLoad, rememberPerson, updatePerson, forgetPerson,
   attachProfile, detachProfile, syncConfigured, linkPlansToDirectory, unlinkedCount,
@@ -134,98 +133,26 @@ async function mergeInto(person) {
   showText('Merged', `${person.name} is now ${keep.name} in ${n} ${n === 1 ? 'project' : 'projects'}.`);
 }
 
-// ---------------------------------------------------------------- today's bar
-//
-// A game's health bar for the day: how much of today's work a person has
-// done. Done is the time they clocked today (Start task now, then Stop or
-// Done) and, for a task simply ticked off today, its duration; to go is the
-// focus work still laid for them today (background work needs no attention,
-// so it counts for neither). A run of days with something finished is a
-// streak. At work, home projects count for nothing here (state/mode.js).
-
-const mins = (m) => { const r = Math.round(m); return r < 60 ? `${r}m` : `${Math.floor(r / 60)}h${r % 60 ? ` ${r % 60}m` : ''}`; };
-
-/** key → { done, left, finished, streak } for everyone the calendar knows about today. */
-function todayScores() {
-  const out = new Map();
-  let layout;
-  try { layout = currentLayout(); } catch { return out; }
-  const known = [...layout.entries, ...(layout.history || [])];
-  const shown = (project) => visibilityOf(project.workspaceId) !== 'hide';
-  const todayNum = toDay(today());
-  const todayIso = today();
-  const now = new Date().getHours() * 60 + new Date().getMinutes();
-  const score = (key) => { if (!out.has(key)) out.set(key, { done: 0, left: 0, finished: 0, streak: 0, days: new Set() }); return out.get(key); };
-  const planOf = (id) => known.find((e) => e.project.id === id)?.project;
-  for (const b of layout.all.blocks) {
-    if (b.day !== todayNum || b.background) continue;
-    const project = planOf(b.planId);
-    if (!project || !shown(project)) continue;
-    for (const key of b.people || []) {
-      if (b.worked) score(key).done += b.minutes;
-      else score(key).left += Math.max(0, b.end - Math.max(b.start, now));
-    }
-  }
-  // What the calendar had laid for each task today (it remembers the day's
-  // layout): the credit for a task ticked off without clocking it.
-  let laid = new Map();
-  try {
-    const saved = JSON.parse(localStorage.getItem('project-planner:today-blocks') || 'null');
-    if (saved?.day === todayNum) for (const b of saved.blocks || []) laid.set(`${b.planId}|${b.taskId}`, (laid.get(`${b.planId}|${b.taskId}`) || 0) + (b.end - b.start));
-  } catch { laid = new Map(); }
-  for (const { project, schedule } of known) {
-    if (!shown(project)) continue;
-    const clocked = new Set((project.timesheets || []).filter((x) => x.date === todayIso && Number.isFinite(x.start)).map((x) => x.taskId));
-    for (const t of project.tasks) {
-      if (!t.doneAt) continue;
-      const day = t.doneAt.slice(0, 10);
-      const keys = t.assignments.map((a) => project.resources.find((r) => r.id === a.resourceId)).filter(Boolean).map(identityOf);
-      for (const key of keys) {
-        const s = score(key);
-        s.days.add(day);
-        if (day !== todayIso) continue;
-        s.finished += 1;
-        // Ticked off without clocking: the time laid for it today, else one of its chunks.
-        if (!clocked.has(t.id)) {
-          const work = Math.round((schedule.tasks[t.id]?.work ?? t.work ?? 1) * 60);
-          s.done += laid.get(`${project.id}|${t.id}`) ?? Math.min(work, Math.round(agendaOf(project, t).blockHours * 60));
-        }
-      }
-    }
-  }
-  for (const s of out.values()) {
-    // Days in a row with something finished, up to today (or yesterday, if today has nothing yet).
-    let d = s.days.has(todayIso) ? todayNum : todayNum - 1;
-    while (s.days.has(fromDay(d))) { s.streak++; d--; }
-  }
-  return out;
-}
-
-function healthBar(s) {
-  const total = s.done + s.left;
-  if (!total && !s.finished) return el('div', { class: 'hp hp-idle sc-faint small', text: 'Nothing on today' });
-  const pct = total ? Math.min(100, Math.round((s.done / total) * 100)) : 100;
-  const tier = pct >= 100 ? 'full' : pct >= 60 ? 'high' : pct >= 25 ? 'mid' : 'low';
-  return el('div', { class: `hp is-${tier}`, title: `${mins(s.done)} done today, ${mins(s.left)} still to go` },
-    el('div', { class: 'hp-top' },
-      el('span', { class: 'hp-label', text: pct >= 100 ? '✦ Day cleared' : `Today · ${pct}%` }),
-      s.streak > 1 ? el('span', { class: 'hp-streak', title: `${s.streak} days in a row with something finished`, text: `🔥 ${s.streak}` }) : null,
-      el('span', { class: 'sc-spacer' }),
-      el('span', { class: 'hp-num sc-mono', text: `${mins(s.done)} / ${mins(total)}` })),
-    el('div', { class: 'hp-track' },
-      el('div', { class: 'hp-fill', style: { width: `${pct}%` } }),
-      // A notch every hour of the day's work, like a game's segmented bar.
-      ...Array.from({ length: Math.max(0, Math.floor(total / 60)) }, (_, i) => el('span', { class: 'hp-notch', style: { left: `${((i + 1) * 60 / total) * 100}%` } }))),
-    el('div', { class: 'hp-foot sc-faint small', text: `${s.finished} task${s.finished === 1 ? '' : 's'} finished${s.left ? ` · ${mins(s.left)} to go` : ''}` }));
-}
+// ---------------------------------------------------------------- the character sheet (ui/character.js)
 
 let scores = new Map();
 let calendarAsked = false;
+let selfStatsNow = null;
+/** Planning and Software, for the person using the app, from every device's stat records. */
+async function reloadSelfStats() {
+  try { const { listStats } = await import('../state/sync.js'); selfStatsNow = selfStats(await listStats()); } catch { selfStatsNow = null; }
+  set({});
+}
+window.addEventListener('planner-stats', () => { void reloadSelfStats(); });
+/** Whose sheet also carries Planning and Software: the one new tasks go to (Task defaults), who is the app's user. */
+function isSelf(person) {
+  const d = taskDefaults();
+  return !!person && ((d.assigneeId && person.id === d.assigneeId) || (d.assigneeName && person.name?.trim().toLowerCase() === d.assigneeName.trim().toLowerCase()));
+}
 
 function row(entry) {
   const { person, plans, tasks, hours, cost } = entry;
   const key = person.id ? `person:${person.id}` : `who:${String(person.name || '').trim().toLowerCase()}`;
-  const today_ = scores.get(key) || { done: 0, left: 0, finished: 0, streak: 0 };
   const listed = !!person.id;
   const menu = (e) => {
     e.stopPropagation();
@@ -260,23 +187,25 @@ function row(entry) {
         el('div', { class: 'sc-faint small', text: [person.role, person.team || person.group].filter(Boolean).join(' · ') || (listed ? 'In the directory' : 'Only in a plan') })),
       listed ? null : el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-warn, var(--sc-danger))' }, text: 'Not shared' }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '⋮', title: 'Actions', onclick: menu })),
-    healthBar(today_),
+    characterSheet(scores.get(key), isSelf(person) ? selfStatsNow || { planning: 0, software: 0, today: { planning: 0, software: 0 } } : null),
     profileBlock(person),
     el('div', { class: 'person-load' },
       el('span', { class: 'sc-mono', title: 'Hours of work assigned across every plan', text: formatHours(hours) }),
       el('span', { class: 'sc-faint', text: `${tasks} ${tasks === 1 ? 'task' : 'tasks'}` }),
       person.rate ? el('span', { class: 'sc-faint sc-mono', text: `${formatMoney(cost)} · ${formatMoney(person.rate)}/h` }) : null),
+    // A few of their plans, not every one: the rest are a count (hover for the names).
     el('div', { class: 'person-plans' },
       plans.length
-        ? plans.map((name) => el('span', { class: 'sc-pill person-plan', title: 'On this plan', text: name }))
+        ? [...plans.slice(0, 3).map((name) => el('span', { class: 'sc-pill person-plan', title: 'On this plan', text: name })),
+          plans.length > 3 ? el('span', { class: 'sc-pill person-plan is-more', title: plans.slice(3).join('\n'), text: `+${plans.length - 3} more` }) : null]
         : el('span', { class: 'sc-faint small', text: 'Not on any plan yet' })));
 }
 
 export function renderPeople(root) {
   clear(root);
   // The bars read every plan's day, as the calendar does: have it read them once.
-  if (!calendarAsked) { calendarAsked = true; void reloadCalendarPlans(); }
-  scores = todayScores();
+  if (!calendarAsked) { calendarAsked = true; void reloadCalendarPlans(); void reloadSelfStats(); }
+  try { scores = characterScores(currentLayout()); } catch { scores = new Map(); }
   if (!loaded && !loading) void reloadPeople();
   const pane = el('div', { class: 'projects-pane' });
   root.append(pane);

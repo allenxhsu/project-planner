@@ -171,6 +171,11 @@ function middleColumn(close, spaces) {
     onclick: () => act.editProject('colour', h),
   }, h === null ? 'A' : '')));
   const labels = el('input', { class: 'sc-input', type: 'text', value: (p.labels || []).join(', '), placeholder: 'None — comma-separated', onchange: (e) => act.editProject('labels', e.target.value) });
+  // Its tasks' energy and the skill they train, unless a task says otherwise (model/skills.js).
+  const energy = el('select', { class: 'sc-select', onchange: (e) => act.editProject('energy', e.target.value) },
+    el('option', { value: 'mental', text: 'Mental — drains magic', selected: p.energy !== 'physical' }),
+    el('option', { value: 'physical', text: 'Physical — drains stamina', selected: p.energy === 'physical' }));
+  const skill = el('input', { class: 'sc-input', type: 'text', value: p.skill || '', placeholder: 'Its folder or workspace', onkeydown: (e) => e.stopPropagation(), onchange: (e) => act.editProject('skill', e.target.value) });
   const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: p.autoAdvance !== false, onchange: (e) => act.editProject('autoAdvance', e.target.checked) });
   return el('div', { class: 'ps-col ps-mid' },
     el('div', { class: `ps-state ${health.cls}` },
@@ -191,6 +196,8 @@ function middleColumn(close, spaces) {
       fact('Color', colours)),
     el('div', { class: 'ps-group' },
       fact('Labels', labels),
+      fact('Energy', energy),
+      fact('Skill', skill),
       el('button', { class: 'sc-button sc-button--ghost sc-button--sm ps-add-field', text: '＋ Add custom field', onclick: () => { void import('./newproject.js').then((m) => m.editFieldsDialog()); } }),
       el('label', { class: 'tp-hard', title: 'When every task of the current stage is done, the project moves to the next stage by itself' },
         el('span', { text: 'Auto-advance stages' }), auto, el('span', { class: 'tp-switch' }))),

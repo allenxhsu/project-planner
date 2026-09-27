@@ -76,6 +76,15 @@ final class PlannerWindowController: EditorWindowController {
     override func handleMessage(type: String, body: [String: Any]) -> Bool {
         // Home or work: the Wi-Fi name and a rough location, back to the page
         // as a `host-network` event (src/state/mode.js).
+        // Software skill: commits and prompts a day, counted on this Mac (SkillProbe).
+        if type == "probeSkills" {
+            SkillProbe.count { [weak self] days in
+                guard let data = try? JSONSerialization.data(withJSONObject: ["days": days]),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                self?.webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('host-skills', { detail: \(json) }))")
+            }
+            return true
+        }
         if type == "probeNetwork" {
             probe.read { [weak self] reading in
                 var detail: [String: Any] = [:]

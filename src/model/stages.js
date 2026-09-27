@@ -52,6 +52,8 @@ export function setProjectField(p, field, value) {
     case 'labels': { const l = [...new Set((Array.isArray(value) ? value : String(value || '').split(',')).map((x) => String(x).trim()).filter(Boolean))]; if (l.length) p.labels = l; else delete p.labels; break; }
     case 'colour': p.colour = value === null || value === '' ? null : ((Math.round(+value) % 360) + 360) % 360; break;
     case 'autoAdvance': p.autoAdvance = !!value; break;
+    case 'energy': if (value === 'physical' || value === 'mental') p.energy = value; else delete p.energy; break;
+    case 'skill': { const v = String(value || '').trim().slice(0, 40); if (v) p.skill = v; else delete p.skill; break; }
     default: throw new Error(`“${field}” is not part of a project.`);
   }
 }

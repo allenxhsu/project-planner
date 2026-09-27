@@ -94,6 +94,8 @@ export function parse(text) {
   if (typeof raw.managerId === 'string') p.managerId = raw.managerId;
   if (Array.isArray(raw.labels)) { const l = [...new Set(raw.labels.map((x) => String(x).trim()).filter(Boolean))]; if (l.length) p.labels = l; }
   if (raw.autoAdvance === false) p.autoAdvance = false;
+  if (raw.energy === 'physical' || raw.energy === 'mental') p.energy = raw.energy;
+  if (typeof raw.skill === 'string' && raw.skill.trim()) p.skill = raw.skill.trim().slice(0, 40);
   if (Array.isArray(raw.activity)) p.activity = raw.activity
     .filter((x) => x && typeof x === 'object' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(x.at)) && typeof x.kind === 'string').slice(-300)
     .map((x) => Object.fromEntries(['at', 'kind', 'field', 'from', 'to', 'text', 'by'].filter((k) => x[k] !== undefined && x[k] !== null).map((k) => [k, String(x[k]).slice(0, 4000)])));
@@ -141,6 +143,8 @@ export function parse(text) {
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
+      ...(t.energy === 'physical' || t.energy === 'mental' ? { energy: t.energy } : {}),
+      ...(typeof t.skill === 'string' && t.skill.trim() ? { skill: t.skill.trim().slice(0, 40) } : {}),
       ...(t.attention === 'background' ? { attention: 'background', ...(CHECK_CHOICES.includes(+t.checkEvery) ? { checkEvery: +t.checkEvery } : {}) } : {}),
       // The task's history: kept as long as each line is a dated entry.
       ...(Array.isArray(t.activity) ? { activity: t.activity

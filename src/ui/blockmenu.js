@@ -519,6 +519,12 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const checkEvery = el('select', { class: 'sc-select' },
       el('option', { value: '0', text: 'No check-ins', selected: !t.checkEvery }),
       ...CHECK_CHOICES.map((m) => el('option', { value: String(m), text: m < 60 ? `Every ${m} min` : `Every ${m / 60 === 1 ? 'hour' : `${m / 60} hours`}`.replace('1.5 hours', '1½ hours'), selected: +t.checkEvery === m })));
+    // What it costs and what it trains (model/skills.js): blank is the project's.
+    const energy = el('select', { class: 'sc-select' },
+      el('option', { value: '', text: `Project’s (${project.energy === 'physical' ? 'physical' : 'mental'})`, selected: !t.energy }),
+      el('option', { value: 'mental', text: 'Mental — drains magic', selected: t.energy === 'mental' }),
+      el('option', { value: 'physical', text: 'Physical — drains stamina', selected: t.energy === 'physical' }));
+    const skill = el('input', { class: 'sc-input', type: 'text', value: t.skill || '', placeholder: project.skill || 'The project’s', onkeydown: (e) => e.stopPropagation() });
     const checkRow = el('div', {});
     const showCheck = () => { checkRow.hidden = attention.value !== 'background'; };
     attention.addEventListener('change', showCheck);
@@ -564,7 +570,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const save = () => close({
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
-      hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
+      hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, energy: energy.value, skill: skill.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
       auto: auto.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
@@ -700,6 +706,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Schedule', schedule),
           fact('Attention', attention),
           (checkRow.append(subFact('Check on it', checkEvery)), showCheck(), checkRow),
+          fact('Energy', energy),
+          fact('Skill', skill),
           el('div', { class: 'fact-gap' }),
           fact('Labels', labels),
           ...custom.map((c) => fact(c.field.name, c.node)),
@@ -725,6 +733,8 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if (saved.notes !== (t.notes || '')) act.editTask(t.id, 'notes', saved.notes);
   if (saved.hard !== !!t.hardDeadline) act.editTask(t.id, 'hardDeadline', saved.hard);
   if (saved.attention !== attentionOf(t)) act.editTask(t.id, 'attention', saved.attention);
+  if ((saved.energy || '') !== (t.energy || '')) act.editTask(t.id, 'energy', saved.energy);
+  if (saved.skill.trim() !== (t.skill || '')) act.editTask(t.id, 'skill', saved.skill);
   if (saved.attention === 'background' && saved.checkEvery !== (+t.checkEvery || 0)) act.editTask(t.id, 'checkEvery', saved.checkEvery);
   if (saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
   const minutes = saved.duration.trim() === minText(expectedMin) ? expectedMin : parseDurationText(saved.duration);
