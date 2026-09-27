@@ -197,6 +197,29 @@ initHosting();
 // The status line carries the sync indicator, so a status event redraws it.
 window.addEventListener(SYNC_EVENTS.status, () => renderStatus($('statusbar')));
 
+// The last session: which project was open and where — the view, the
+// calendar's range, the project's tab, the settings page. Kept on this device
+// as it changes, and taken up again at the next start, so the app opens where
+// it was left rather than on an empty untitled plan.
+const SESSION_KEY = 'project-planner:session';
+const SESSION_UI = ['view', 'calendarRange', 'projectTab', 'docId', 'settingsPage'];
+const lastSession = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; } })();
+if (lastSession?.ui?.view && VIEW_RENDERERS[lastSession.ui.view]) {
+  set(Object.fromEntries(SESSION_UI.filter((k) => lastSession.ui[k] !== undefined).map((k) => [k, lastSession.ui[k]])));
+}
+let sessionTimer = null;
+// The last project that was a project: an empty untitled plan is not a session worth coming back to.
+let lastRealPlan = lastSession?.planId || null;
+subscribe(() => {
+  clearTimeout(sessionTimer);
+  sessionTimer = setTimeout(() => {
+    if (!isBlank()) lastRealPlan = store.project.id;
+    const value = { planId: lastRealPlan, ui: Object.fromEntries(SESSION_UI.map((k) => [k, store.ui[k]])) };
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(value)); } catch { /* private mode */ }
+  }, 500);
+});
+const isBlank = () => store.project.tasks.length === 0 && /^untitled/i.test(store.project.name || '');
+
 let startedOnFallback = false;
 if (!hosted) {
   // Whatever localStorage still holds gets the first plan on screen without a
@@ -253,6 +276,11 @@ initSync({ preferStored: !hosted && startedOnFallback })
       if (stored && stored.id !== store.project.id) {
         try { loadProject(parse(JSON.stringify(stored)).project); } catch { /* keep what is on screen */ }
       }
+    }
+    // Opened on nothing (the Mac app's new window, or an empty plan): the project of the last session.
+    if (isBlank() && lastSession?.planId && lastSession.planId !== store.project.id && !location.hash) {
+      const { openPlan } = await import('./state/sync.js');
+      await openPlan(lastSession.planId).catch(() => false);
     }
     void storeCounts();
     void followLink();

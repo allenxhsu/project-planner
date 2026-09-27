@@ -231,7 +231,7 @@ export async function taskMenu(planId, taskId, x, y) {
     const todayNum = toDay(today());
     next = (currentLayout().all.byTask?.get(taskId) || []).filter((k) => k.planId === planId && !k.worked && k.day >= todayNum).sort((a, c) => a.day - c.day || a.start - c.start)[0] || null;
   } catch { next = null; }
-  blockMenu({ ...(next || { day: toDay(today()), dateIso: today(), start: 9 * 60, end: 10 * 60, minutes: 60 }), planId, taskId, fromList: true }, x, y);
+  blockMenu({ ...(next || { day: toDay(today()), dateIso: today(), start: 9 * 60, end: 10 * 60, minutes: 60, synthetic: true }), planId, taskId, fromList: true }, x, y);
 }
 
 export function blockMenu(b, x, y) {
@@ -282,11 +282,23 @@ export function blockMenu(b, x, y) {
     })) },
     { icon: '☾', label: 'Do later', submenu: laterChoices().map(([label, when]) => ({
       label, run: run(b, async (t) => {
-        const at = when === 'ask' ? await askLaterTime() : when;
-        if (!at) return;
+        const chosen = when === 'ask' ? await askLaterTime() : when;
+        if (!chosen) return;
+        if (b.live) { act.hint(`“${t.name}” is running — stop it first (■), then put the rest off.`); return; }
+        // Later means later than it is now: a task already laid after the
+        // chosen time goes after where it is, not nowhere.
+        const where = b.synthetic ? null : `${fromDay(b.day)}T${String(Math.floor(b.end / 60)).padStart(2, '0')}:${String(b.end % 60).padStart(2, '0')}`;
+        const at = where && where > chosen ? where : chosen;
+        const when2 = `${formatDate(at.slice(0, 10), 'day')}, ${formatClock(parseTime(at.slice(11)))}`;
+        // A fixed block moves to that time; anything else waits until then.
+        if (b.pinned && b.pinIndex !== undefined && b.pinIndex !== null) {
+          act.pinBlock(t.id, { day: at.slice(0, 10), start: parseTime(at.slice(11)), minutes: b.minutes }, b.pinIndex);
+          act.hint(`“${t.name}” is moved to ${when2}.`);
+          return;
+        }
         act.editTask(t.id, 'notBefore', at);
         if (urgencyOf(t) === 'now') act.editTask(t.id, 'urgency', 'normal');
-        act.hint(`“${t.name}” is put off to ${formatDate(at.slice(0, 10), 'day')}, ${formatClock(parseTime(at.slice(11)))}.`);
+        act.hint(`“${t.name}” is put off to ${when2}.`);
       }),
     })) },
     { icon: '!', label: 'Do ASAP', run: run(b, (t) => { act.editTask(t.id, 'urgency', 'now'); if (t.calendar?.notBefore) act.editTask(t.id, 'notBefore', null); }) },
@@ -558,6 +570,20 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           ? { icon: '■', label: 'Stop task…', run: () => { close(null); void stopNowDialog({ planId: project.id, taskId: t.id }); } }
           : { icon: '▶', label: 'Start task now…', disabled: info?.percent === 100 || t.milestone, run: () => { close(null); void startNowDialog(t, b); } },
         '-',
+        { icon: '☾', label: 'Do later', submenu: laterChoices().map(([label, when]) => ({ label, run: async () => {
+          close(null);
+          // The same as the calendar's Do later, from the task's next block.
+          const target = (layout.blocks || []).filter((x) => x.taskId === t.id && x.planId === project.id && !x.worked && x.day >= todayNum).sort((a, c) => a.day - c.day || a.start - c.start)[0];
+          const menuB = target || { day: todayNum, start: nowMin, end: nowMin, minutes: 0, synthetic: true };
+          const chosen = when === 'ask' ? await askLaterTime() : when;
+          if (!chosen) return;
+          if (menuB.live) { act.hint(`“${t.name}” is running — stop it first (■), then put the rest off.`); return; }
+          const where = menuB.synthetic ? null : `${fromDay(menuB.day)}T${String(Math.floor(menuB.end / 60)).padStart(2, '0')}:${String(menuB.end % 60).padStart(2, '0')}`;
+          const at = where && where > chosen ? where : chosen;
+          if (menuB.pinned) act.pinBlock(t.id, { day: at.slice(0, 10), start: parseTime(at.slice(11)), minutes: menuB.minutes }, menuB.pinIndex);
+          else { act.editTask(t.id, 'notBefore', at); if (urgencyOf(t) === 'now') act.editTask(t.id, 'urgency', 'normal'); }
+          act.hint(`“${t.name}” is put off to ${formatDate(at.slice(0, 10), 'day')}, ${formatClock(parseTime(at.slice(11)))}.`);
+        } })) },
         { icon: '⎘', label: 'Duplicate task', key: '⌘D', run: () => { close(null); act.duplicateTask(t.id); } },
         { icon: '⧉', label: 'Bulk duplicate task…', run: () => { close(null); void bulkDuplicate(t); } },
         { icon: '▢', label: 'Create project from task', run: () => { close(null); void projectFromTask(t); } },
