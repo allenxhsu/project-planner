@@ -283,7 +283,7 @@ export function blockMenu(b, x, y) {
       onPick: (iso) => { close(); void run(b, (t) => act.editTask(t.id, 'deadline', iso))(); },
     }) },
     { icon: '◷', label: 'Add time to task', submenu: [[15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 hour'], [90, '1h 30m'], [120, '2 hours']].map(([m, label]) => ({
-      label, run: run(b, (t) => act.editTask(t.id, 'work', String(Math.round((expectedHours(store.project, t) + m / 60) * 100) / 100))),
+      label, run: run(b, (t) => { if (act.addTimeToTask(t.id, m, expectedHours(store.project, t))) act.hint(`Added ${label} to “${t.name}”.`); }),
     })) },
     { icon: '☾', label: 'Do later', submenu: laterChoices().map(([label, when]) => ({
       label, run: run(b, async (t) => {

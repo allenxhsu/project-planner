@@ -165,7 +165,8 @@ export function showMenu(x, y, items) {
   menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - r.height - 4))}px`;
   openMenu = menu;
 }
-document.addEventListener('pointerdown', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); }, true);
+// A press in the menu's side panel (a submenu, a date picker) is in the menu too.
+document.addEventListener('pointerdown', (e) => { if (openMenu && !openMenu.contains(e.target) && !openMenu._side?.contains(e.target)) closeMenu(); }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
 /** A panel — a date picker, say — opened where a menu would be, and closed the way a menu is. */

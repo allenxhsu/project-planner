@@ -487,6 +487,25 @@ export function quickTaskInStage(stageId, name) {
 /** A comment in a task's activity. */
 export function commentOnTask(taskId, text) { return attempt('Comment', (p) => addComment(p, taskId, text)); }
 
+/**
+ * Add time to a task: that much more is left. Its duration grows by it, and a
+ * progress figure is brought in line — 50% of an hour is not 50% of an hour
+ * and a half, and left as it was it would hide half the time just added.
+ */
+export function addTimeToTask(taskId, minutes, currentHours) {
+  return attempt('Add time to task', (p) => {
+    const t = getTask(p, taskId);
+    if (!t) throw new Error('That task is gone.');
+    const work = Math.round((currentHours + minutes / 60) * 100) / 100;
+    setTaskField(p, taskId, 'work', String(work));
+    const pct = +t.percent || 0;
+    if (pct > 0 && pct < 100) {
+      const done = (currentHours * pct) / 100;
+      setTaskField(p, taskId, 'percent', Math.min(99, Math.floor((done / work) * 100)));
+    }
+  });
+}
+
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
   const d = new Date();
