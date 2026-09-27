@@ -1274,6 +1274,9 @@ export function planSummary(record) {
 }
 
 /** The raw records, for a caller that wants the plans themselves, not a summary. */
+/** Whether the record store is open, so the shelf can be read. */
+export const storeReady = () => !!recordStore;
+
 export async function planRecords() {
   if (!recordStore) return [];
   const all = await recordStore.all();

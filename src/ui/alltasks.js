@@ -111,6 +111,10 @@ export async function reloadAllTasks() {
   loading = true;
   set({});
   try {
+    const { storeReady } = await import('../state/sync.js');
+    // Before the store is open there is nothing to read yet — and nothing to
+    // conclude: read again once it is, rather than show an empty list for good.
+    if (!storeReady()) { loading = false; set({}); return; }
     const records = await planRecords();
     spaces = await listWorkspaces().catch(() => []);
     const entries = records.map(readPlan).filter((e) => e.plan);

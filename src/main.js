@@ -291,6 +291,8 @@ initSync({ preferStored: !hosted && startedOnFallback })
     mode.useWorkspaces(workspaceNow);
     mode.watchMode();
     window.addEventListener('planner-mode', () => { void import('./ui/resources.js').then((m) => m.reloadUsage?.()); });
+    // The task lists read the shelf: now that it is open, read it.
+    void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());
     return reloadPlans();
   })
   .catch((err) => console.error('sync could not start', err));
