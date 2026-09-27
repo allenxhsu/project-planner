@@ -23,12 +23,14 @@ import { currentLayout, personColour, planPalette } from './calendar.js';
 const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const span = (m) => { const a = Math.abs(Math.round(m)); return a < 60 ? `${a}m` : `${Math.floor(a / 60)}h${a % 60 ? ` ${a % 60}m` : ''}`; };
 
-/** Everything the three views need about today: its blocks, the running ones, who is where. */
-export function todaysTracks() {
+/** Everything the three views need about a day (today unless said): its blocks, the running ones. */
+export function todaysTracks(onDay = null) {
   const { entries, history = [], all } = currentLayout();
   const known = [...entries, ...history];
-  const day = toDay(today());
-  const now = nowMinutes();
+  const day = onDay ?? toDay(today());
+  const isToday = day === toDay(today());
+  // Another day has no "now": nothing on it is under way, it is all ahead or all behind.
+  const now = isToday ? nowMinutes() : (day < toDay(today()) ? 24 * 60 : 0);
   const entryOf = (planId) => known.find((e) => e.project.id === planId);
   const hidden = (planId) => visibilityOf(entryOf(planId)?.project.workspaceId) === 'hide';
   const palette = planPalette(entries);
@@ -118,11 +120,12 @@ export function renderDock(root) {
 
 // ------------------------------------------------------------------ B: the track strip
 
-/** Each of today's tasks a row against the hours; the running ones lit. */
-export function renderStrip(pane, { openAt = 8 * 60 } = {}) {
-  const { blocks, now, meetings } = todaysTracks();
-  const from = Math.max(0, Math.floor(Math.min(openAt, now - 60, ...blocks.map((b) => b.start), ...meetings.map((m) => m.start)) / 60) * 60);
-  const to = Math.min(24 * 60, Math.ceil(Math.max(from + 8 * 60, now + 60, ...blocks.map((b) => b.end), ...meetings.map((m) => m.end)) / 60) * 60);
+/** Each of a day's tasks a row against the hours (the day on screen); today, the running ones lit. */
+export function renderStrip(pane, { openAt = 8 * 60, day = null } = {}) {
+  const isToday = day === null || day === toDay(today());
+  const { blocks, now, meetings } = todaysTracks(day);
+  const from = Math.max(0, Math.floor(Math.min(openAt, isToday ? now - 60 : openAt, ...blocks.map((b) => b.start), ...meetings.map((m) => m.start)) / 60) * 60);
+  const to = Math.min(24 * 60, Math.ceil(Math.max(from + 8 * 60, isToday ? now + 60 : 0, ...blocks.map((b) => b.end), ...meetings.map((m) => m.end)) / 60) * 60);
   const x = (m) => `${((Math.max(from, Math.min(to, m)) - from) / (to - from)) * 100}%`;
   const w = (a, b) => `${((Math.min(to, b) - Math.max(from, a)) / (to - from)) * 100}%`;
   const rows = new Map();
@@ -158,12 +161,12 @@ export function renderStrip(pane, { openAt = 8 * 60 } = {}) {
         // The same menu as a block on the calendar: Do later, Add time, Start, Complete…
         oncontextmenu: t.hidden ? null : (e) => { e.preventDefault(); void import('./blockmenu.js').then((m) => m.blockMenu(t.block, e.clientX, e.clientY)); },
       }, el('span', { text: `${t.background ? '◌ ' : ''}${t.block.live ? timeLeft(t) : `${formatClock(t.start)} – ${formatClock(t.end)}`}${t.background && t.nextCheck !== null ? ` · check ${formatClock(t.nextCheck)}` : ''}` }))),
-      el('div', { class: 'rs-now', style: { left: x(now) } })));
+      isToday ? el('div', { class: 'rs-now', style: { left: x(now) } }) : null));
   pane.append(el('div', { class: 'rs' },
-    el('div', { class: 'rs-row rs-axis' }, el('div', { class: 'rs-label' }), el('div', { class: 'rs-track' }, ...hours, el('div', { class: 'rs-now', style: { left: x(now) } }))),
+    el('div', { class: 'rs-row rs-axis' }, el('div', { class: 'rs-label' }), el('div', { class: 'rs-track' }, ...hours, isToday ? el('div', { class: 'rs-now', style: { left: x(now) } }) : null)),
     meetings.length ? el('div', { class: 'rs-row' }, el('div', { class: 'rs-label' }, el('div', { class: 'rs-name', text: 'Meetings' })),
       el('div', { class: 'rs-track' }, ...meetings.map((m) => el('div', { class: 'rs-bar is-meeting', style: { left: x(m.start), width: w(m.start, m.end) }, title: m.title }, el('span', { text: m.title }))))) : null,
-    ...(ordered.length ? ordered.map(lane) : [el('p', { class: 'empty', text: 'Nothing laid for today.' })])));
+    ...(ordered.length ? ordered.map(lane) : [el('p', { class: 'empty', text: isToday ? 'Nothing laid for today.' : 'Nothing laid for this day.' })])));
 }
 
 // ------------------------------------------------------------------ D: the control board

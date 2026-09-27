@@ -33,6 +33,8 @@ let failed = null;
 let unlinked = 0;
 
 export async function reloadPeople() {
+  const { storeReady } = await import('../state/sync.js');
+  if (!storeReady()) return;   // read once the store is open (main.js), not as empty now
   loading = true; failed = null; set({});
   try {
     people = await peopleWithLoad();

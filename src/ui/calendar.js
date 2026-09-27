@@ -300,6 +300,9 @@ export const lateness = () => currentLayout().all.late || [];
 
 export async function reloadCalendarPlans() {
   try {
+    // Before the store is open there is nothing to read — not "no plans": wait for it.
+    const { storeReady } = await import('../state/sync.js');
+    if (!storeReady()) return;
     const records = await planRecords();
     const out = [];
     const past = [];
@@ -599,7 +602,7 @@ export function renderCalendar(root) {
   if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, colourMode, palette, visOf }); return; }
   // The day view's layouts: lanes (the calendar), the track strip, or the calendar with the running dock.
   const dayLayout = range === 'day' ? (ui.dayLayout || 'lanes') : 'lanes';
-  if (dayLayout === 'strip') { renderStrip(pane, { openAt: parseTime(DEFAULT_AGENDA.from) ?? 480 }); return; }
+  if (dayLayout === 'strip') { renderStrip(pane, { openAt: parseTime(DEFAULT_AGENDA.from) ?? 480, day: screen.days[0] }); return; }
   if (dayLayout === 'dock') renderDock(root);
   const columns = screen.days;
 

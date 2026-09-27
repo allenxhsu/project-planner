@@ -293,8 +293,10 @@ initSync({ preferStored: !hosted && startedOnFallback })
     // Planning and software skill: time in the app, and (on the Mac) commits and prompts.
     void import('./state/activity.js').then((m) => m.watchActivity());
     window.addEventListener('planner-mode', () => { void import('./ui/resources.js').then((m) => m.reloadUsage?.()); });
-    // The task lists read the shelf: now that it is open, read it.
+    // The task lists, the calendar and People read the shelf: now that it is open, read it.
     void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());
+    void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans());
+    void import('./ui/people.js').then((m) => m.reloadPeople());
     return reloadPlans();
   })
   .catch((err) => console.error('sync could not start', err));
