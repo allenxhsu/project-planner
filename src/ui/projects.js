@@ -5,6 +5,7 @@
 // shows up in the browser after a sync, and the other way round. It works with
 // sync switched off too; then the shelf is simply this device's own plans.
 
+import { visibilityOf } from '../state/mode.js';
 import { el, clear } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
@@ -170,7 +171,8 @@ export function renderProjects(root) {
   // A workspace is what is in front: work, personal, school. An unfiled plan
   // belongs to none of them and so shows up wherever you are.
   const active = activeWorkspace();
-  const here = plans.filter((p) => !active || (p.workspaceId || null) === active || !p.workspaceId);
+  // At work, home projects are not on the shelf (state/mode.js).
+  const here = plans.filter((p) => (!active || (p.workspaceId || null) === active || !p.workspaceId) && visibilityOf(p.workspaceId) !== 'hide');
 
   pane.append(el('div', { class: 'projects-head people-head' },
     el('div', { class: 'people-head-text' },

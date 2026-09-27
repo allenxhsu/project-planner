@@ -54,7 +54,26 @@ final class ModelDocument: WebDocument {
 /// The document window, plus the one message the kit does not know: an export
 /// the page cannot write itself, because only MPXJ can.
 final class PlannerWindowController: EditorWindowController {
+    private lazy var probe = NetworkProbe()
+
     override func handleMessage(type: String, body: [String: Any]) -> Bool {
+        // Home or work: the Wi-Fi name and a rough location, back to the page
+        // as a `host-network` event (src/state/mode.js).
+        if type == "probeNetwork" {
+            probe.read { [weak self] reading in
+                var detail: [String: Any] = [:]
+                if let ssid = reading.ssid { detail["ssid"] = ssid }
+                if let lat = reading.latitude, let lng = reading.longitude {
+                    detail["lat"] = lat
+                    detail["lng"] = lng
+                    detail["accuracy"] = reading.accuracy ?? 1000
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: detail),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                self?.webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('host-network', { detail: \(json) }))")
+            }
+            return true
+        }
         // Google's sign-in for calendars, in the default browser: Google does
         // not allow it inside an app's web view. Only https addresses.
         if type == "openURL" {

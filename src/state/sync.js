@@ -524,6 +524,8 @@ function load(remote) {
 const PERSON_TYPE = 'person';
 const WORKSPACE_TYPE = 'workspace';
 const TIMEBLOCK_TYPE = 'timeblock';
+/** Home and work: the networks and places each is recognised by (state/mode.js). */
+const PLACE_TYPE = 'place';
 
 // -------------------------------------------------------------- time blocks
 //
@@ -728,6 +730,41 @@ export async function listWorkspaces() {
     // In the order they were dragged into, then by name.
     .sort((a, b) => (Number.isFinite(a.order) ? a.order : Infinity) - (Number.isFinite(b.order) ? b.order : Infinity) || String(a.name).localeCompare(String(b.name)));
   return workspacesKnown;
+}
+
+/** Whether a workspace counts as home or work, for home mode and work mode. */
+export async function setWorkspaceMode(id, mode) {
+  const done = await patchWorkspace(id, (w) => { w.mode = mode === 'work' || mode === 'home' ? mode : null; });
+  await listWorkspaces();
+  return !!done;
+}
+
+// ------------------------------------------------------------------ places
+//
+// Home and work, as this person's devices recognise them: Wi-Fi names,
+// internet addresses and points on the map. Synced like the rest, so a
+// network taught to the Mac is known to the browser too. One record each.
+
+export async function listPlaces() {
+  if (!recordStore) return [];
+  return (await recordStore.all()).filter((r) => r && r.type === PLACE_TYPE && !r.deletedAt && (r.kind === 'home' || r.kind === 'work'));
+}
+
+/** Write one place — `{ kind, ssids, ips, points }` — as the record for its kind. */
+export async function savePlace(place) {
+  if (!recordStore || (place.kind !== 'home' && place.kind !== 'work')) return null;
+  const id = `place_${place.kind}`;
+  const existing = await recordStore.get(id);
+  const record = {
+    id, type: PLACE_TYPE, kind: place.kind,
+    ssids: [...new Set(place.ssids || [])].slice(-20),
+    ips: [...new Set(place.ips || [])].slice(-20),
+    points: (place.points || []).slice(-20),
+    updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId(),
+  };
+  await recordStore.put([record]);
+  if (syncConfigured()) void syncNow();
+  return record;
 }
 
 /** Give every open, unassigned task of a workspace's projects to `who`; how many it gave. */

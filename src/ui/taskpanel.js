@@ -8,6 +8,7 @@
 // hard that is, in which schedule, with which labels, and the project's own
 // custom fields. Opened from a spot on the calendar or from + New.
 
+import { visibilityOf } from '../state/mode.js';
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
@@ -36,7 +37,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
   const [shelf, spaces] = await Promise.all([sync.listPlans().catch(() => []), sync.listWorkspaces().catch(() => [])]);
   const plans = [
     { id: store.project.id, name: store.project.name, workspaceId: store.project.workspaceId || null },
-    ...shelf.filter((p) => p.ok && !p.template && !p.archived && p.id !== store.project.id),
+    ...shelf.filter((p) => p.ok && !p.template && !p.archived && p.id !== store.project.id && visibilityOf(p.workspaceId) !== 'hide'),
   ];
   const planOf = async (id) => (id === store.project.id ? store.project : (await sync.readPlan(id)) || store.project);
 

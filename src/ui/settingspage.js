@@ -18,10 +18,12 @@ import { BLOCK_CHOICES } from '../model/agenda.js';
 import { taskDefaults, setTaskDefaults, DEADLINE_RULES } from './taskdefaults.js';
 import { icon } from './icons.js';
 import { promptText, confirmDialog, typedConfirm } from './dialog.js';
+import { modeChoice, currentMode, modeReason, setModeChoice, workspaceKind, teach, lastSignals, detectMode } from '../state/mode.js';
 
 /** [id, label, icon, section] — the settings list in the sidebar. */
 export const SETTINGS_PAGES = [
   ['calendars', 'Calendars', 'calendar', 'General'],
+  ['homework', 'Home & work', 'workspace', 'General'],
   ['scheduling', 'Auto-scheduling', 'clock', 'General'],
   ['taskDefaults', 'Task defaults', 'list', 'General'],
   ['theme', 'Theme', 'star', 'General'],
@@ -111,6 +113,46 @@ const PAGES = {
     try { short = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date()).find((p) => p.type === 'timeZoneName')?.value || ''; } catch { short = ''; }
     return page('Timezone',
       section(null, row('Timezone', el('strong', { text: `${zone || 'This computer’s'}${short ? ` (${short})` : ''}` }), 'the calendar and the schedule use this computer’s time zone')));
+  },
+  homework() {
+    const host = el('div');
+    const why = { wifi: 'recognised by Wi-Fi', address: 'recognised by internet address', location: 'recognised by location', asked: 'as you said', hand: 'set by hand' }[modeReason()] || 'not worked out yet';
+    const draw = async () => {
+      const sync = await import('../state/sync.js');
+      const [spaces, places] = await Promise.all([sync.listWorkspaces(), sync.listPlaces()]);
+      const here = lastSignals() || {};
+      const placeOf = (kind) => places.find((p) => p.kind === kind) || { kind, ssids: [], ips: [], points: [] };
+      const forget = async (kind, list, value) => {
+        const p = placeOf(kind);
+        await sync.savePlace({ ...p, [list]: (p[list] || []).filter((x) => (list === 'points' ? `${x.lat},${x.lng}` : x) !== value) });
+        void draw();
+      };
+      const known = (kind) => {
+        const p = placeOf(kind);
+        const chip = (text, list, value) => el('span', { class: 'ps-chip hw-chip' }, text,
+          el('button', { class: 'hw-x', text: '×', title: 'Forget this', onclick: () => { void forget(kind, list, value); } }));
+        const chips = [
+          ...p.ssids.map((s) => chip(`Wi-Fi “${s}”`, 'ssids', s)),
+          ...p.ips.map((ip) => chip(`Address ${ip}`, 'ips', ip)),
+          ...p.points.map((q) => chip(`Near ${q.lat.toFixed(3)}, ${q.lng.toFixed(3)}`, 'points', `${q.lat},${q.lng}`)),
+        ];
+        return section(kind === 'home' ? '🏠 Home is recognised by' : '💼 Work is recognised by',
+          chips.length ? el('div', { class: 'hw-chips' }, ...chips) : note('Nothing yet.'),
+          button(kind === 'home' ? 'This network is home' : 'This network is work', async () => { await teach(kind); void draw(); }));
+      };
+      host.replaceChildren(
+        section('Mode', row('Now', el('strong', { text: `${currentMode() === 'work' ? '💼 Work' : '🏠 Home'} — ${why}` })),
+          row('Choose', select(modeChoice(), [['auto', 'Auto — from where I am'], ['home', 'Home'], ['work', 'Work']], (v) => { setModeChoice(v); void draw(); })),
+          row('Here', el('span', { class: 'sc-faint', text: [here.ssid ? `Wi-Fi “${here.ssid}”` : null, here.ip ? `address ${here.ip}` : null, here.pos ? 'location known' : null].filter(Boolean).join(' · ') || 'not read yet' }),
+            null),
+          button('Check where I am now', async () => { await detectMode({ ask: true }); void draw(); })),
+        note('At work, home projects are hidden everywhere and their calendar time shows only as “Busy”. At home, work is dimmed. A network the app does not know is asked about once, then remembered — on every device you sync.'),
+        section('Which workspaces are work', note('Everything else counts as home.'),
+          ...spaces.map((w) => row(w.name, select(workspaceKind(w), [['home', '🏠 Home'], ['work', '💼 Work']], async (v) => { await sync.setWorkspaceMode(w.id, v); set({}); void draw(); })))),
+        known('home'), known('work'));
+    };
+    void draw();
+    return page('Home & work', host);
   },
   schedules() {
     const host = el('div', { class: 'st-embed' });
@@ -313,6 +355,8 @@ async function workspacePage(id) {
     const unassigned = open.reduce((n, p) => n + p.tasks.filter((t) => !t.milestone && !t.archived && (t.percent ?? 0) < 100 && !t.assignments.length && !p.tasks.some((c, j) => j === p.tasks.indexOf(t) + 1 && c.level > t.level)).length, 0);
     body = el('div', { class: 'st-body' },
       section('Workspace name', name),
+      section('Home or work', note('At work, home workspaces are hidden and their calendar time shows as Busy; at home, work is dimmed.'),
+        select(workspaceKind(w), [['home', '🏠 Home'], ['work', '💼 Work']], async (v) => { await sync.setWorkspaceMode(id, v); set({}); redraw(); })),
       section('Default assignee', note(`New tasks in ${w.name}’s projects go to this person when nobody else is named.`), assignee,
         current && unassigned ? button(`Assign ${unassigned} unassigned open task${unassigned === 1 ? '' : 's'} to ${current.name}`, async () => {
           const n = await sync.assignUnassigned(id, current);

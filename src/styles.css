@@ -1316,3 +1316,21 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .gcal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gcal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gcal-whose { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+/* Home mode and work mode (state/mode.js). */
+.is-dimmed { opacity: .42; }
+.is-dimmed:hover { opacity: .8; }
+.cal-block.is-dimmed { filter: saturate(.3); }
+.cal-busy { background: repeating-linear-gradient(135deg, rgb(var(--sc-text-rgb) / .10) 0 6px, rgb(var(--sc-text-rgb) / .05) 6px 12px) !important;
+  border-left: 3px solid var(--sc-text-3) !important; color: var(--sc-text-3) !important; cursor: default; pointer-events: none; }
+.cal-block.cal-busy { position: absolute; border-radius: 6px; padding: 3px 6px; font-size: 11.5px; overflow: hidden; }
+.side-mode { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 8px; border: 1px solid var(--sc-line); border-radius: 999px;
+  background: none; color: var(--sc-text-2); font: inherit; font-size: 11.5px; cursor: pointer; }
+.side-mode.is-work { border-color: color-mix(in srgb, var(--sc-accent) 60%, transparent); color: var(--sc-text); }
+.side-mode-auto { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--sc-text-3); }
+.mode-cover { max-width: 420px; margin: 12vh auto; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.mode-cover-icon { font-size: 34px; }
+.mode-cover-actions { display: flex; gap: 8px; }
+.hw-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.hw-chip { display: inline-flex; align-items: center; gap: 4px; }
+.hw-x { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 2px; font: inherit; }

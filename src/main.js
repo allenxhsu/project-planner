@@ -7,6 +7,7 @@ import { sampleProject } from './model/sample.js';
 import { parse, serialize } from './io/json.js';
 import { hosted, post, initHost } from './host.js';
 import { saveOpenDialog } from './ui/dialog.js';
+import { isHidden, setModeChoice } from './state/mode.js';
 import { initSidebar, renderSidebar } from './ui/sidebar.js';
 import { renderGantt, scrollToToday } from './ui/gantt.js';
 import { renderTaskSheet, editActiveCell, moveActiveCol } from './ui/taskgrid.js';
@@ -42,6 +43,18 @@ function tabs(root, key, items) {
 
 const VIEW_RENDERERS = { today: renderToday, projects: renderProjects, people: renderPeople, gantt: renderGantt, kanban: renderKanban, alltasks: renderAllTasks, list: (root) => renderAllTasks(root, { scope: 'project' }), settings: renderSettings, doc: renderDoc, team: renderTeamSchedule, calendar: renderCalendar, priority: renderPriority, sheet: renderTaskSheet, resources: renderResourceSheet, usage: renderResourceUsage, network: renderNetwork, schedules: renderSchedules };
 
+/** What a home project's page is, in work mode: a cover, with the ways out. */
+function renderCovered(root) {
+  clear(root);
+  root.append(el('div', { class: 'mode-cover' },
+    el('div', { class: 'mode-cover-icon', text: '🏠' }),
+    el('h2', { text: 'A home project' }),
+    el('p', { class: 'sc-muted', text: 'Work mode keeps home projects out of sight. Switch to home mode to see it, or go to a work project.' }),
+    el('div', { class: 'mode-cover-actions' },
+      el('button', { class: 'sc-button sc-button--sm', text: '🏠 Switch to home mode', onclick: () => setModeChoice('home') }),
+      el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: 'Projects & Tasks', onclick: () => set({ view: 'alltasks' }) }))));
+}
+
 function render() {
   const { ui } = store;
   renderHeader();
@@ -53,9 +66,12 @@ function render() {
   $('app').classList.toggle('no-bottom', !ui.bottomOpen);
   // A Microsoft Project view is a view of the open project: its tabs sit above it.
   const mspView = ['gantt', 'sheet', 'kanban', 'network', 'resources', 'usage', 'priority'].includes(ui.view);
-  $('app').classList.toggle('has-project-tabs', mspView);
-  if (mspView) renderProjectTabs($('view-tabs'));
-  VIEW_RENDERERS[ui.view]($('stage'));
+  // At work, a home project's own pages are covered rather than shown (state/mode.js).
+  const covered = (mspView || ['list', 'doc'].includes(ui.view)) && isHidden(store.project.workspaceId);
+  $('app').classList.toggle('has-project-tabs', mspView && !covered);
+  if (mspView && !covered) renderProjectTabs($('view-tabs'));
+  if (covered) renderCovered($('stage'));
+  else VIEW_RENDERERS[ui.view]($('stage'));
   renderStatus($('statusbar'));
   tabs($('bottom-tabs'), 'bottomTab', [['checks', 'Checks', checkBadge()], ['stats', 'Statistics']]);
   if (ui.bottomOpen) renderBottom($('bottom-body'));
@@ -239,6 +255,13 @@ initSync({ preferStored: !hosted && startedOnFallback })
     }
     void storeCounts();
     void followLink();
+    // Home or work: which workspaces show, dim or hide depends on where this is.
+    const { listWorkspaces, workspaceNow } = await import('./state/sync.js');
+    await listWorkspaces();
+    const mode = await import('./state/mode.js');
+    mode.useWorkspaces(workspaceNow);
+    mode.watchMode();
+    window.addEventListener('planner-mode', () => { void import('./ui/resources.js').then((m) => m.reloadUsage?.()); });
     return reloadPlans();
   })
   .catch((err) => console.error('sync could not start', err));

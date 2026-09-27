@@ -17,6 +17,7 @@ import { toDay, today, formatDate, WEEKDAY_NAMES, weekday } from '../model/calen
 import { showMenu, promptText } from './dialog.js';
 import { currentLayout, lateness } from './calendar.js';
 import { icon as ic, projectColour } from './icons.js';
+import { visibilityOf, currentMode, modeChoice, modeReason, setModeChoice, teach, detectMode } from '../state/mode.js';
 
 const PLACES = [
   { view: 'today', icon: 'agenda', label: 'Agenda' },
@@ -111,6 +112,7 @@ export function initSidebar(node, { newMenu, findResults, settings }) {
     el('button', { class: 'side-rail', text: '»', title: 'Show the sidebar', onclick: toggleSidebar }),
     el('div', { class: 'side-top' },
       el('span', { class: 'sc-brand-mark side-brand', text: 'PJ', title: 'Project Planner' }),
+      parts.mode = el('button', { class: 'side-mode', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); modeMenu(r.left, r.bottom + 4); } }),
       el('span', { class: 'sc-spacer' }),
       el('button', { class: 'side-icon', id: 'btn-undo', text: '↶', title: 'Undo (⌘Z)', onclick: () => { void import('../state/store.js').then((m) => m.undo()); } }),
       el('button', { class: 'side-icon', id: 'btn-redo', text: '↷', title: 'Redo (⇧⌘Z)', onclick: () => { void import('../state/store.js').then((m) => m.redo()); } }),
@@ -346,6 +348,34 @@ export function planMenu(p, siblings = []) {
   };
 }
 
+/** Home or work, and how it was decided: the button at the top of the sidebar. */
+function renderMode() {
+  const node = parts.mode;
+  if (!node) return;
+  const mode = currentMode();
+  const why = { wifi: 'by Wi-Fi', address: 'by internet address', location: 'by location', asked: 'as you said', hand: 'set by hand' }[modeReason()] || 'not detected yet';
+  node.replaceChildren(...[el('span', { text: mode === 'work' ? '💼' : '🏠' }), el('span', { text: mode === 'work' ? 'Work' : 'Home' }),
+    modeChoice() === 'auto' ? el('span', { class: 'side-mode-auto', text: 'auto' }) : null].filter(Boolean));
+  node.className = `side-mode is-${mode}`;
+  node.title = `${mode === 'work' ? 'Work mode: home projects are hidden, their calendar time shows as Busy' : 'Home mode: work is dimmed'} — ${why}. Click to switch.`;
+}
+
+function modeMenu(x, y) {
+  const choice = modeChoice();
+  showMenu(x, y, [
+    { note: `Now: ${currentMode() === 'work' ? 'work' : 'home'}` },
+    { icon: '⟳', label: 'Auto — from where I am', checked: choice === 'auto', run: () => setModeChoice('auto') },
+    { icon: '🏠', label: 'Home', checked: choice === 'home', run: () => setModeChoice('home') },
+    { icon: '💼', label: 'Work', checked: choice === 'work', run: () => setModeChoice('work') },
+    '-',
+    { icon: '📍', label: 'This network is home', run: async () => { await teach('home'); act.hint('Remembered: this network is home.'); } },
+    { icon: '📍', label: 'This network is work', run: async () => { await teach('work'); act.hint('Remembered: this network is work.'); } },
+    { icon: '↻', label: 'Check where I am now', run: async () => { await detectMode({ ask: true }); } },
+    '-',
+    { icon: '⚙', label: 'Home & work settings…', run: () => set({ view: 'settings', settingsPage: 'homework' }) },
+  ]);
+}
+
 /** What is happening now — a started task, the block or meeting on now — or what is next today. */
 function renderNow() {
   const node = parts.now;
@@ -360,11 +390,16 @@ function renderNow() {
       const nowMin = d.getHours() * 60 + d.getMinutes();
       const day = toDay(today());
       const nameOf = (b) => layout.entries.find((e) => e.project.id === b.planId)?.project.tasks.find((t) => t.id === b.taskId)?.name;
-      const live = layout.all.blocks.find((b) => b.live && b.day === day);
-      const onNow = live || layout.all.blocks.find((b) => !b.worked && b.day === day && b.start <= nowMin && b.end > nowMin);
-      const meeting = (layout.all.meetings || []).find((m) => m.day === day && !m.allDay && m.start <= nowMin && m.end > nowMin);
-      const next = [...layout.all.blocks.filter((b) => !b.worked && b.day === day && b.start > nowMin).map((b) => ({ kind: 'block', b, start: b.start })),
-        ...(layout.all.meetings || []).filter((m) => m.day === day && !m.allDay && m.start > nowMin).map((m) => ({ kind: 'meeting', m, start: m.start }))]
+      // At work, what is on at home is nobody's business here (state/mode.js).
+      const wsOf = (planId) => layout.entries.find((e) => e.project.id === planId)?.project.workspaceId;
+      const shown = (x) => visibilityOf(wsOf(x.planId)) !== 'hide';
+      const blocks = layout.all.blocks.filter(shown);
+      const meetings = (layout.all.meetings || []).filter(shown);
+      const live = blocks.find((b) => b.live && b.day === day);
+      const onNow = live || blocks.find((b) => !b.worked && b.day === day && b.start <= nowMin && b.end > nowMin);
+      const meeting = meetings.find((m) => m.day === day && !m.allDay && m.start <= nowMin && m.end > nowMin);
+      const next = [...blocks.filter((b) => !b.worked && b.day === day && b.start > nowMin).map((b) => ({ kind: 'block', b, start: b.start })),
+        ...meetings.filter((m) => m.day === day && !m.allDay && m.start > nowMin).map((m) => ({ kind: 'meeting', m, start: m.start }))]
         .sort((a, b) => a.start - b.start)[0];
       if (onNow) { label = `${live ? '▶ ' : ''}${nameOf(onNow) || 'Task'}`; time = formatClock(onNow.start); open = () => (live ? import('./blockmenu.js').then((m) => m.stopNowDialog({ planId: live.planId, taskId: live.taskId })) : import('./blockmenu.js').then((m) => m.taskSheet({ planId: onNow.planId, taskId: onNow.taskId, block: onNow }))); }
       else if (meeting) { label = meeting.title; time = formatClock(meeting.start); open = () => import('./blockmenu.js').then((m) => m.meetingSheet(meeting)); }
@@ -424,10 +459,11 @@ export function renderSidebar() {
 
 
   clear(parts.favorites);
-  const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived));
+  renderMode();
+  const pinned = ordered(cache.plans.filter((p) => p.pinned && !p.archived && visibilityOf(p.workspaceId) !== 'hide'));
   if (!pinned.length) parts.favorites.append(el('div', { class: 'side-empty', text: 'Right-click a project below to add it here.' }));
   for (const p of pinned) {
-    parts.favorites.append(item({ icon: ic('project', projectColour(p.colour)), label: p.name, active: p.id === project.id, onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, pinned) }));
+    parts.favorites.append(item({ icon: ic('project', projectColour(p.colour)), label: p.name, active: p.id === project.id, cls: visibilityOf(p.workspaceId) === 'dim' ? 'is-dimmed' : '', onclick: () => { void selectPlanFromSidebar(p.id); }, open: () => { void openPlanFromSidebar(p.id); }, plus: () => { void newTaskIn(p.id); }, menu: planMenu(p, pinned) }));
   }
 
   clear(parts.workspaces);
@@ -468,7 +504,15 @@ export function renderSidebar() {
     return row;
   };
 
+  // Home or work (state/mode.js): at work the home workspaces are not listed;
+  // at home, work is listed dimmed — every row a workspace adds.
+  let dimFrom = null;
+  const dimSince = () => { if (dimFrom !== null) for (const n of [...parts.workspaces.children].slice(dimFrom)) n.classList.add('is-dimmed'); dimFrom = null; };
   for (const w of groups) {
+    dimSince();
+    const seen = visibilityOf(w.id || null);
+    if (seen === 'hide') continue;
+    if (seen === 'dim') dimFrom = parts.workspaces.children.length;
     const plansHere = live.filter((p) => (p.workspaceId || '') === w.id);
     if (!w.id && !plansHere.length) continue;
     const folderIds = new Set(w.folders.map((f) => f.id));
@@ -590,5 +634,6 @@ export function renderSidebar() {
     for (const p of loose) parts.workspaces.append(planRow(p, loose, w.id || null, null, 'side-child'));
     if (!plansHere.length && !w.folders.length) parts.workspaces.append(el('div', { class: 'side-empty side-child', text: 'No projects yet' }));
   }
+  dimSince();
   renderNow();
 }

@@ -9,6 +9,7 @@
 // "today's tasks" is exactly what the calendar has put on today, not a second
 // opinion about it.
 
+import { visibilityOf } from '../state/mode.js';
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
@@ -65,10 +66,14 @@ export function renderToday(root) {
     return task ? { e, task, info: e.schedule.tasks[taskId] } : null;
   };
 
+  // At work, home projects are left out of the lists, and their time on the day is only "Busy" (state/mode.js).
+  const hiddenPlan = (planId) => visibilityOf((entries.find((x) => x.project.id === planId) || history.find((x) => x.project.id === planId))?.project.workspaceId) === 'hide';
+  const shownEntries = entries.filter((e) => !hiddenPlan(e.project.id));
+
   // Today's tasks: what the calendar laid on this day, one row a task.
   const onDay = all.blocks.filter((b) => b.day === day);
   const byTask = new Map();
-  for (const b of onDay) {
+  for (const b of onDay.filter((x) => !hiddenPlan(x.planId))) {
     const key = `${b.planId}|${b.taskId}`;
     const row = byTask.get(key) || { planId: b.planId, taskId: b.taskId, minutes: 0, first: b.start };
     row.minutes += b.minutes;
@@ -79,7 +84,7 @@ export function renderToday(root) {
 
   // Past deadline: not done, not archived, due before this day — anywhere.
   const past = [];
-  for (const e of entries) {
+  for (const e of shownEntries) {
     e.project.tasks.forEach((task, i) => {
       const info = e.schedule.tasks[task.id];
       if (!info || isSummary(e.project, i) || task.archived || info.percent === 100 || !task.deadline) return;
@@ -88,11 +93,11 @@ export function renderToday(root) {
     });
   }
   past.sort((a, b) => a.task.deadline.localeCompare(b.task.deadline));
-  const late = (all.late || []).filter((l) => l.deadline >= day);
+  const late = (all.late || []).filter((l) => l.deadline >= day && !hiddenPlan(l.planId));
 
   // Completed on this day: every task, anywhere, finished that day.
   const finished = [];
-  for (const e of entries) {
+  for (const e of shownEntries) {
     e.project.tasks.forEach((task, i) => {
       const info = e.schedule.tasks[task.id];
       if (!info || isSummary(e.project, i) || doneDay(task) !== iso || info.percent !== 100) return;
@@ -147,7 +152,7 @@ export function renderToday(root) {
   // The day beside it: the hours, with the blocks and the meetings on them.
   const side = el('aside', { class: 'today-day' });
   const meetings = (all.meetings || []).filter((m) => m.day === day && !m.allDay);
-  const allDay = (all.meetings || []).filter((m) => m.day === day && m.allDay);
+  const allDay = (all.meetings || []).filter((m) => m.day === day && m.allDay && !hiddenPlan(m.planId));
   const starts = [...onDay.map((b) => b.start), ...meetings.map((m) => m.start - m.bufferBefore)];
   const ends = [...onDay.map((b) => b.end), ...meetings.map((m) => m.end + m.bufferAfter)];
   const from = Math.max(0, Math.min(6 * 60, ...starts) - 60);
@@ -160,6 +165,10 @@ export function renderToday(root) {
     col.append(el('div', { class: 'today-hour', style: { top: `${y(h * 60)}px` } }, el('span', { class: 'sc-mono', text: formatClock(h * 60) })));
   }
   for (const m of meetings) {
+    if (hiddenPlan(m.planId)) {
+      col.append(el('div', { class: 'today-meeting cal-busy', style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 2)}px` }, title: 'Busy' }, el('span', { text: 'Busy' })));
+      continue;
+    }
     col.append(el('div', {
       class: 'today-meeting', style: { top: `${y(m.start)}px`, height: `${Math.max(14, y(m.end) - y(m.start) - 2)}px` },
       title: `${m.title} · ${formatClock(m.start)} – ${formatClock(m.end)}`,
@@ -167,6 +176,10 @@ export function renderToday(root) {
     }, el('span', { text: m.title }), el('span', { class: 'sc-faint', text: `${formatClock(m.start)} – ${formatClock(m.end)}` })));
   }
   for (const b of onDay) {
+    if (hiddenPlan(b.planId)) {
+      col.append(el('div', { class: 'today-block cal-busy', style: { top: `${y(b.start)}px`, height: `${Math.max(14, y(b.end) - y(b.start) - 2)}px` }, title: 'Busy' }, el('span', { text: 'Busy' })));
+      continue;
+    }
     const hit = find(b.planId, b.taskId);
     if (!hit) continue;
     const colour = palette.get(b.planId) || personColour(b.planName);

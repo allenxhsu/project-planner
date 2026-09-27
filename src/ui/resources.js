@@ -1,5 +1,6 @@
 // Resource Sheet (edit the people and things) and Resource Usage (hours per week).
 
+import { visibilityOf } from '../state/mode.js';
 import { el, clear, formatMoney, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
@@ -120,12 +121,13 @@ export async function reloadUsage() {
     const out = [];
     for (const r of await planRecords()) {
       const hit = usageCache.get(r.id);
-      if (hit && hit.updatedAt === r.updatedAt) { if (isCurrentWork(hit.entry.project)) out.push(hit.entry); continue; }
+      // At work, home projects carry no visible load here (state/mode.js).
+      if (hit && hit.updatedAt === r.updatedAt) { if (isCurrentWork(hit.entry.project) && visibilityOf(hit.entry.project.workspaceId) !== 'hide') out.push(hit.entry); continue; }
       try {
         const project = parse(r.body).project;
         const entry = { project, schedule: computeSchedule(project) };
         usageCache.set(r.id, { updatedAt: r.updatedAt, entry });
-        if (isCurrentWork(project)) out.push(entry);
+        if (isCurrentWork(project) && visibilityOf(project.workspaceId) !== 'hide') out.push(entry);
       } catch { /* a plan that cannot be read carries no load */ }
     }
     usagePlans = out;

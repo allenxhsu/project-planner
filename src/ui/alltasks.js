@@ -33,6 +33,7 @@ import { showMenu, promptText, confirmDialog, open as openDialog, foot, button }
 import { renderResourceUsage } from './resources.js';
 import { renderNavigate } from './docs.js';
 import { switchToggle } from './toggle.js';
+import { visibilityOf } from '../state/mode.js';
 
 /** planId → { updatedAt, plan, rows }. */
 const cache = new Map();
@@ -379,14 +380,16 @@ async function newViewDialog() {
 
 // ---------------------------------------------------------------- the rows
 
+// Every project-wide list leaves out, at work, what is at home (state/mode.js).
+const inMode = (p) => visibilityOf(p.workspaceId) !== 'hide';
 const inScopePlans = (view) => (scope === 'project'
   ? plans.filter((p) => p.id === store.project.id)
-  : plans.filter((p) => !p.archived && (!view.filters.workspace || p.workspaceId === view.filters.workspace)));
+  : plans.filter((p) => !p.archived && inMode(p) && (!view.filters.workspace || p.workspaceId === view.filters.workspace)));
 
 /** The tasks the scope has, before the view's own filters. */
 const scopeRows = (view) => rows.filter((r) => (scope === 'project'
   ? r.planId === store.project.id
-  : !r.planArchived && (!view.filters.workspace || r.workspaceId === view.filters.workspace)));
+  : !r.planArchived && visibilityOf(r.workspaceId) !== 'hide' && (!view.filters.workspace || r.workspaceId === view.filters.workspace)));
 
 function deadlineMatch(r, rule) {
   const todayDay = toDay(today());
@@ -783,7 +786,7 @@ function controls(count) {
           const r = e.currentTarget.getBoundingClientRect();
           showMenu(r.left, r.bottom + 4, [{ note: 'Show one project' },
             { label: `▢ ${store.project.name} (open)`, run: () => set({ view: 'list', projectTab: 'navigate' }) }, '-',
-            ...plans.filter((p) => !p.archived && p.id !== store.project.id).sort((a2, b2) => a2.name.localeCompare(b2.name)).slice(0, 40)
+            ...plans.filter((p) => !p.archived && inMode(p) && p.id !== store.project.id).sort((a2, b2) => a2.name.localeCompare(b2.name)).slice(0, 40)
               .map((p) => ({ label: p.name, run: async () => { if (await openPlan(p.id)) set({ view: 'list', projectTab: 'navigate' }); } }))]);
         } }, 'All projects ▾')),
     scope === 'project' ? el('button', { class: `pt-tab tl-nav-tab${navOn() ? ' is-on' : ''}`, onclick: () => { closePop(); set({ view: 'list', projectTab: 'navigate' }); } }, el('span', { text: '▭ Navigate' })) : null,
@@ -910,7 +913,7 @@ function listLayout(list, view, layout) {
   const addRow = (target, level) => body.append(el('tr', { class: 'tl-add' },
     el('td', { colspan: cols.length + 2, style: pad(level) }, el('button', { class: 'ps-add', text: '＋ Add task', onclick: () => { void addTo(target); } }))));
   const leaf = (rs, level, target) => {
-    sortRows(rs, view, layout).forEach((r, i) => body.append(el('tr', { class: `clickable tl-task${r.percent === 100 ? ' is-done' : ''}${r.cancelled ? ' is-cancelled' : ''}`, onclick: () => { void openRow(r); } },
+    sortRows(rs, view, layout).forEach((r, i) => body.append(el('tr', { class: `clickable tl-task${r.percent === 100 ? ' is-done' : ''}${r.cancelled ? ' is-cancelled' : ''}${visibilityOf(r.workspaceId) === 'dim' ? ' is-dimmed' : ''}`, onclick: () => { void openRow(r); } },
       el('td', { style: pad(level) }, el('span', { class: 'sc-faint tl-n', text: String(i + 1) }), el('span', { class: `tl-ring${r.percent === 100 ? ' is-done' : ''}` }), el('span', { class: 'tl-name', text: r.name }),
         r.percent < 100 && !r.cancelled ? switchToggle({ on: r.auto, title: r.auto ? 'Auto-scheduled — switch off to keep it off the calendar' : 'Not auto-scheduled — switch on to let the calendar lay it',
           onchange: (on) => { void setAuto(r, on); } }) : null),
@@ -943,7 +946,7 @@ function listLayout(list, view, layout) {
 // ---------------------------------------------------------------- kanban
 
 function card(r) {
-  return el('div', { class: `ts-card${r.percent === 100 ? ' is-done' : ''}`, onclick: () => { void openRow(r); } },
+  return el('div', { class: `ts-card${r.percent === 100 ? ' is-done' : ''}${visibilityOf(r.workspaceId) === 'dim' ? ' is-dimmed' : ''}`, onclick: () => { void openRow(r); } },
     el('div', { class: 'ts-card-project sc-faint small' }, el('span', { class: 'tl-value' }, icon('project', projectColour(planOf(r.planId)?.colour)), el('span', { text: r.planName })),
       el('span', { class: `ts-health${r.pastDeadline ? ' is-late' : ''}`, text: r.pastDeadline ? '!' : '✓' })),
     el('div', { class: 'ts-card-row' },
@@ -1011,7 +1014,7 @@ function ganttKey(field, p) {
     default: return '';
   }
 }
-const ganttPlans = (view) => plans.filter((p) => (view.completedProjects || !p.archived) && (!view.filters.workspace || p.workspaceId === view.filters.workspace))
+const ganttPlans = (view) => plans.filter((p) => (view.completedProjects || !p.archived) && inMode(p) && (!view.filters.workspace || p.workspaceId === view.filters.workspace))
   .filter((p) => !page.query.trim() || p.name.toLowerCase().includes(page.query.trim().toLowerCase()));
 const ZOOMS = { month: ['Month', 36], quarter: ['Quarter', 14], year: ['Year', 4] };
 const pxDay = () => (ZOOMS[page.ganttZoom] || ZOOMS.quarter)[1];

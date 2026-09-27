@@ -7,6 +7,7 @@
 // Scheduled means the calendar's own layout (ui/calendar.js), so this board
 // and the calendar never disagree.
 
+import { visibilityOf } from '../state/mode.js';
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
@@ -43,6 +44,7 @@ export function renderTeamSchedule(root) {
   // Each open task, once: the first day the calendar has it on from today.
   const cards = [];
   for (const e of entries) {
+    if (visibilityOf(e.project.workspaceId) === 'hide') continue;   // at work, home is not on the board
     e.project.tasks.forEach((t, i) => {
       const info = e.schedule.tasks[t.id];
       if (!info || isSummary(e.project, i) || t.archived || info.milestone) return;

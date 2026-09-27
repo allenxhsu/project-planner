@@ -17,6 +17,7 @@ import { isSummary, phases, getResource, URGENCIES, urgencyOf } from '../model/m
 import { showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
+import { visibilityOf } from '../state/mode.js';
 import { icon } from './icons.js';
 
 /** Which day is on screen, or a day inside the week or month that is. */
@@ -254,7 +255,9 @@ export function renderCalendarSide(root) {
   };
   drawPeople();
   const palette = planPalette(entries);
-  const feedsList = entries.flatMap((e) => (e.project.feeds || []).map((f) => ({ f, plan: e.project })));
+  // At work, home projects and their calendars are not listed (state/mode.js).
+  const listed = entries.filter((e) => visibilityOf(e.project.workspaceId) !== 'hide');
+  const feedsList = listed.flatMap((e) => (e.project.feeds || []).map((f) => ({ f, plan: e.project })));
   const section = (title, count, body, extra = null) => el('details', { class: 'cals-section', open: true },
     el('summary', {}, el('span', { text: `${title}${count !== null ? ` (${count})` : ''}` }), extra), body);
   root.append(el('div', { class: 'cal-side' },
@@ -274,8 +277,8 @@ export function renderCalendarSide(root) {
         el('span', { class: 'cals-chip', style: { background: 'var(--sc-accent-2)' } }), el('span', { text: f.name }),
         el('span', { class: 'cals-src', text: f.provider === 'google' ? 'G' : f.provider === 'outlook' ? 'O' : 'ics' })))
         : [el('div', { class: 'sc-faint small', text: 'None connected. Add a Google or Outlook calendar and its meetings become busy time.' })]))),
-    section('Projects', entries.length, el('div', { class: 'cals-list' },
-      ...entries.map((e) => {
+    section('Projects', listed.length, el('div', { class: 'cals-list' },
+      ...listed.map((e) => {
         const c = palette.get(e.project.id) || personColour(e.project.name);
         const hours = Math.round(all.blocks.filter((b) => b.planId === e.project.id && onScreen.has(b.day)).reduce((n, b) => n + b.minutes, 0) / 6) / 10;
         return el('button', { class: `cals-item${e.project.id === project.id ? ' is-on' : ''}`, title: e.project.id === project.id ? 'The open project' : 'Open this project',
@@ -542,6 +545,8 @@ export function renderCalendar(root) {
     .sort((a, b) => a[1].localeCompare(b[1]));
   const who = ui.calendarWho && everyone.some(([k]) => k === ui.calendarWho) ? ui.calendarWho : '';
   const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : [...all.blocks];
+  // Home or work (state/mode.js): at work a home project's time is only "Busy"; at home work is dimmed.
+  const visOf = (planId) => visibilityOf(known.find((e) => e.project.id === planId)?.project.workspaceId);
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who || m.lane === '*') : all.meetings;
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
@@ -567,10 +572,10 @@ export function renderCalendar(root) {
   // The most valuable sentence the view can say: "you cannot finish this by
   // Friday". One line per task that will not make its deadline at this rate,
   // with how much will not fit and when it would really be done.
-  const lateHere = (all.late || []).filter((l) => !who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who)));
+  const lateHere = (all.late || []).filter((l) => visOf(l.planId) !== 'hide' && (!who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who))));
   if (lateHere.length) pane.append(lateBanner(lateHere));
 
-  if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, colourMode, palette }); return; }
+  if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, colourMode, palette, visOf }); return; }
   const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
@@ -671,6 +676,12 @@ export function renderCalendar(root) {
     // Meetings from a connected calendar sit behind the work, because that is
     // what they are: hours already spoken for.
     for (const m of (meetings || []).filter((x) => x.day === d)) {
+      if (visOf(m.planId) === 'hide') {
+        col.append(el('div', { class: 'cal-meeting cal-busy', title: 'Busy',
+          style: { top: `${y(m.start - (m.bufferBefore || 0))}px`, height: `${Math.max(14, y(m.end + (m.bufferAfter || 0)) - y(m.start - (m.bufferBefore || 0)) - 1)}px` } },
+        el('div', { class: 'cal-meeting-name', text: 'Busy' })));
+        continue;
+      }
       // Travel time, when the event is somewhere: booked as busy, drawn as a
       // hatched edge so it is clear why no work sits right up against it.
       if (m.bufferBefore) {
@@ -690,6 +701,14 @@ export function renderCalendar(root) {
         m.own && !m.allDay ? el('div', { class: 'cal-meeting-time', text: `${formatClock(m.start)} – ${formatClock(m.end)}${m.location ? ` · ${m.location}` : ''}` }) : null));
     }
     for (const { block: b, lane: slot, lanes } of sideBySide(blocks.filter((x) => x.day === d))) {
+      const shown = visOf(b.planId);
+      if (shown === 'hide') {
+        const width = 100 / lanes;
+        col.append(el('div', { class: 'cal-block cal-busy', title: 'Busy',
+          style: { top: `${y(b.start)}px`, height: `${Math.max(16, y(b.end) - y(b.start) - 2)}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto' } },
+        el('span', { class: 'cal-block-name', text: 'Busy' })));
+        continue;
+      }
       const entry = known.find((e) => e.project.id === b.planId) || known[0];
       const t = entry.project.tasks.find((x) => x.id === b.taskId);
       const info = entry.schedule.tasks[b.taskId];
@@ -714,7 +733,7 @@ export function renderCalendar(root) {
       const oneDay = range === 'day';
       col.append(el('div', {
         'data-task': b.taskId,
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, left: `calc(${slot * width}% + 3px)`, width: `calc(${width}% - 6px)`, right: 'auto',
           '--who': colour.line, borderLeftColor: colour.line,
@@ -821,7 +840,7 @@ export function renderCalendar(root) {
  * one. A cell says the hours it holds, lists its blocks in order, and clicking
  * one goes to that day.
  */
-function renderMonth(pane, { entries, blocks, meetings, screen, project, who, colourMode, palette }) {
+function renderMonth(pane, { entries, blocks, meetings, screen, project, who, colourMode, palette, visOf }) {
   const { ui } = store;
   const todayDay = toDay(today());
   const monthOf = (d) => fromDay(d).slice(0, 7);
@@ -862,10 +881,17 @@ function renderMonth(pane, { entries, blocks, meetings, screen, project, who, co
         hours ? el('span', { class: 'sc-faint sc-mono small', text: `${Math.round(hours * 10) / 10}h` }) : null));
 
     for (const m of meets.slice(0, 2)) {
-      cell.append(el('div', { class: 'cal-month-item is-meeting', title: `${m.title}\n${m.allDay ? 'All day' : formatClock(m.start)}`, text: m.allDay ? m.title : `${formatClock(m.start)} ${m.title}` }));
+      const title = visOf(m.planId) === 'hide' ? 'Busy' : m.title;
+      cell.append(el('div', { class: 'cal-month-item is-meeting', title: `${title}\n${m.allDay ? 'All day' : formatClock(m.start)}`, text: m.allDay ? title : `${formatClock(m.start)} ${title}` }));
     }
     const room = Math.max(1, 4 - meets.slice(0, 2).length);
     for (const b of mine.slice(0, room)) {
+      const shown = visOf(b.planId);
+      if (shown === 'hide') {
+        cell.append(el('div', { class: 'cal-month-item cal-busy', title: 'Busy' },
+          el('span', { class: 'cal-month-time sc-mono', text: formatClock(b.start) }), el('span', { class: 'cal-month-name', text: 'Busy' })));
+        continue;
+      }
       const entry = entries.find((e) => e.project.id === b.planId) || entries[0];
       const t = entry?.project.tasks.find((x) => x.id === b.taskId);
       if (!t) continue;
@@ -875,7 +901,7 @@ function renderMonth(pane, { entries, blocks, meetings, screen, project, who, co
         : personColour(person.names[0] || 'unassigned');
       const foreign = b.planId !== project.id;
       cell.append(el('div', {
-        class: `cal-month-item${b.critical ? ' is-critical' : ''}`,
+        class: `cal-month-item${b.critical ? ' is-critical' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
         style: { background: colour.fill, borderLeftColor: colour.line },
         title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h`,
         onclick: (e) => { e.stopPropagation(); if (foreign) { void openOther(b.planId, t.id); return; } act.selectTask(t.id); void taskSheet({ taskId: t.id }); },
