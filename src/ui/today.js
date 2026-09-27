@@ -80,7 +80,8 @@ export function renderToday(root) {
     row.first = Math.min(row.first, b.start);
     byTask.set(key, row);
   }
-  const todays = [...byTask.values()].sort((a, b) => a.first - b.first);
+  // A task finished today is listed under Completed today, not here as well.
+  const todays = [...byTask.values()].filter((r) => (find(r.planId, r.taskId)?.info?.percent ?? 0) < 100).sort((a, b) => a.first - b.first);
 
   // Past deadline: not done, not archived, due before this day — anywhere.
   const past = [];

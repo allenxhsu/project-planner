@@ -494,6 +494,20 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const day = b ? dateInput(b.dateIso) : null;
     const from = b ? timeInput(b.start) : null;
     const to = b ? timeInput(b.end) : null;
+    // A new start moves the end with it: the block keeps its length.
+    if (from && to) {
+      const minutesOf = (v) => { const [h, m] = String(v || '').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null; };
+      let lastStart = b.start;
+      from.addEventListener('change', () => {
+        const start = minutesOf(from.value);
+        const end = minutesOf(to.value);
+        if (start === null || end === null) return;
+        const length = Math.max(15, end - lastStart);
+        const next = Math.min(24 * 60 - 1, start + length);
+        to.value = `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+        lastStart = start;
+      });
+    }
     const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: urgencyOf(t) === id })));
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
