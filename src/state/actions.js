@@ -567,6 +567,16 @@ export function completeFromBlock(taskId, { day, start, end }) {
   return attempt('Complete task', (p) => {
     const t = getTask(p, taskId);
     if (!t) throw new Error('That task is gone.');
+    // Running: Done is Stop and finished — the clock stops now, the time from
+    // its start to now is logged (however long it was meant to take), and the
+    // duration becomes the time spent. The calendar keeps that span.
+    const live = pinsOf(t).find((x) => x.live);
+    if (live) {
+      const ran = live.day === todayIso ? Math.max(1, nowMin - live.start) : live.minutes;
+      stopWork(p, taskId, { worked: ran, more: 0 });
+      autoAdvance(p);
+      return;
+    }
     if (worked >= 5) {
       const who = t.assignments.map((a) => getResource(p, a.resourceId)).find(Boolean);
       addTimesheet(p, { taskId, resourceId: who?.id || null, date: day, start, hours: Math.round((worked / 60) * 100) / 100, note: 'Worked' });

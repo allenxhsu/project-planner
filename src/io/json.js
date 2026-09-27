@@ -1,7 +1,7 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
 import { cleanDocs } from '../model/docs.js';
-import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES } from '../model/model.js';
+import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES, settleFinishedRunning } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -255,5 +255,6 @@ export function parse(text) {
   p.events = (Array.isArray(raw.events) ? raw.events : []).map((e) => cleanEvent(p, e)).filter(Boolean);
 
   repairs.push(...normalizeLevels(p));
+  for (const name of settleFinishedRunning(p)) repairs.push(`“${name}” was marked done while running: stopped, with the time from its start to when it was done.`);
   return { project: p, repairs };
 }

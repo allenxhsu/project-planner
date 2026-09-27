@@ -441,3 +441,18 @@ test('background work runs alongside: focus work is laid over it, and several ba
   setTaskField(p, wash.id, 'attention', 'focus');
   assert.equal(wash.checkEvery, undefined);
 });
+
+test('Done on a running task stops it: the time from its start to now, and the duration it really took', () => {
+  const { p, ann } = week();
+  const t = job(p, ann, 'Tidy the kitchen', { work: '1.5' });
+  setPin(p, t.id, { day: MON, start: 671, minutes: 60, live: true });
+  // Marked done at 12:38 before Done stopped the clock: the old data this repairs.
+  setTaskField(p, t.id, 'percent', 100);
+  t.doneAt = `${MON}T12:38`;
+  p.timesheets.push({ id: 'ts_x', taskId: t.id, resourceId: ann.id, date: MON, start: 671, hours: 1, note: 'Worked' });
+  const back = parse(serialize(p)).project;
+  const bt = back.tasks.find((x) => x.id === t.id);
+  assert.equal(pinsOf(bt).some((x) => x.live), false, 'no longer running');
+  assert.equal(back.timesheets.find((x) => x.taskId === t.id).hours, 1.45, '11:11 to 12:38');
+  assert.equal(bt.work, 1.45, 'the duration is what it took');
+});

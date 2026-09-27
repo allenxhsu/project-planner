@@ -704,10 +704,36 @@ export function stopWork(p, taskId, { worked, more }) {
   }
   logActivity(t, { kind: 'stopped', text: `worked ${hoursWords(w / 60)}${m > 0 ? `, ${hoursWords(m / 60)} more needed` : ', finished'}` });
   const spent = spentOn(p, taskId);
-  if (m === 0) { setTaskField(p, taskId, 'percent', 100); return; }
+  // Finished: what it took is what it was — the duration becomes the time spent.
+  if (m === 0) { if (spent > 0) t.work = Math.round(spent * 100) / 100; setTaskField(p, taskId, 'percent', 100); return; }
   setTaskField(p, taskId, 'work', String(Math.round((spent + m / 60) * 100) / 100));
   // Floored, so "what is left by progress" is never less than what was said.
   setTaskField(p, taskId, 'percent', Math.min(99, Math.floor((spent / (spent + m / 60)) * 100)));
+}
+
+/**
+ * A running task finished and left running: from before Done stopped the
+ * clock. Its running block goes; the time logged for it runs from when it
+ * started to when it was marked done (not to when it was meant to end); and
+ * its duration becomes the time spent. What was changed, for the repairs list.
+ */
+export function settleFinishedRunning(p) {
+  const fixed = [];
+  const minuteOf = (stamp) => { const m = /T(\d{2}):(\d{2})$/.exec(stamp || ''); return m ? +m[1] * 60 + +m[2] : null; };
+  for (const t of p.tasks) {
+    if ((t.percent ?? 0) !== 100) continue;
+    const i = pinsOf(t).findIndex((x) => x.live);
+    if (i < 0) continue;
+    const pin = pinsOf(t)[i];
+    removePin(p, t.id, i);
+    const done = t.doneAt?.slice(0, 10) === pin.day ? minuteOf(t.doneAt) : null;
+    const line = (p.timesheets || []).find((x) => x.taskId === t.id && x.date === pin.day && x.start === pin.start);
+    if (line && done !== null && done > pin.start) line.hours = Math.max(Number(line.hours) || 0, Math.round(((done - pin.start) / 60) * 100) / 100);
+    const spent = spentOn(p, t.id);
+    if (spent > 0) t.work = Math.round(spent * 100) / 100;
+    fixed.push(t.name);
+  }
+  return fixed;
 }
 
 /** Pin a block, or move a pin that is already there when `index` names it. */

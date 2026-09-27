@@ -1380,3 +1380,5 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .cal-rail-check { position: absolute; left: 50%; width: 7px; height: 7px; margin-left: -4px; border-radius: 50%; background: var(--sc-panel); border: 2px solid var(--who, var(--sc-accent)); }
 .rt-card.is-background { border-left-style: dashed; }
 .rt-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--sc-text-3); }
+.cal-stop { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 10px; line-height: 1; color: var(--sc-danger); cursor: pointer; }
+.cal-stop:hover { transform: scale(1.2); }

@@ -816,6 +816,10 @@ export function renderCalendar(root) {
           el('span', { class: 'cal-block-name' }, t.name),
           el('span', { class: 'cal-block-icons' },
             b.live ? el('span', { class: 'cal-live', title: 'Running now', text: '▶' }) : null,
+            // Running: stop it here — log the time and say what is left (Done, the circle, finishes it).
+            b.live && !foreign ? el('button', { class: 'cal-stop', title: 'Stop — log the time worked and say what is left',
+              onpointerdown: (e) => e.stopPropagation(),
+              onclick: (e) => { e.stopPropagation(); void import('./blockmenu.js').then((m) => m.stopNowDialog({ planId: b.planId, taskId: b.taskId })); } }, '■') : null,
             urgencyOf(t) === 'now' || urgencyOf(t) === 'high' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: `${URGENCIES[urgencyOf(t)].label} priority` }) : null,
             b.late || (t.deadline && toDay(t.deadline) < toDay(today()) && info.percent < 100) ? el('span', { class: 'cal-due-dot', title: t.deadline ? `Deadline ${formatDate(t.deadline, 'long')}` : 'Late' }) : null,
             // Fixed at this time: a lock, and clicking it lets the calendar place the task again.
