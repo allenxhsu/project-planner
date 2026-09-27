@@ -10,7 +10,7 @@
 // has missed it, and says how: which tasks, and when the stage would really
 // be done, so the deadline can be extended or the tasks brought in.
 
-import { phases, getPhase, phaseOf, isSummary, logActivity, setTaskField, URGENCIES } from './model.js';
+import { phases, getPhase, phaseOf, isSummary, setTaskField, URGENCIES } from './model.js';
 import { toDay, fromDay, isoValid, makeCalendar } from './calendar.js';
 
 export const PROJECT_STATUSES = ['Backlog', 'Todo', 'In Progress', 'Blocked', 'Completed', 'Cancelled'];

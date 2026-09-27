@@ -5,13 +5,13 @@
 // shows up in the browser after a sync, and the other way round. It works with
 // sync switched off too; then the shelf is simply this device's own plans.
 
-import { el, clear, formatMoney } from '../util.js';
+import { el, clear } from '../util.js';
 import { store, set, loadProject } from '../state/store.js';
 import { createProject } from '../model/model.js';
 import { sampleProject } from '../model/sample.js';
 import { listPlans, refreshPlans, openPlan, deletePlan, duplicatePlan, setPlanTemplate, setPlanArchived, setPlanWorkspace, setPlanPinned, listWorkspaces, activeWorkspace, syncConfigured, syncStatus } from '../state/sync.js';
 import { formatDate, localDate } from '../model/calendar.js';
-import { showMenu, confirmDialog, promptText } from './dialog.js';
+import { showMenu, promptText } from './dialog.js';
 import { newProjectWizard } from './newproject.js';
 import { refreshSidebar } from './sidebar.js';
 

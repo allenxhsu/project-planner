@@ -8,13 +8,13 @@
 import { el, clear } from '../util.js';
 import { store, set, revision } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf, DEFAULT_AGENDA } from '../model/agenda.js';
+import { DEFAULT_AGENDA, planBlocksAcross, agendaOf, formatClock, parseTime, personKeyOf } from '../model/agenda.js';
 import { planRecords, isLiveWork } from '../state/sync.js';
 import { parse } from '../io/json.js';
 import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
-import { isSummary, phases, getPhase, getTask, getResource, URGENCIES, urgencyOf } from '../model/model.js';
-import { showMenu, showText } from './dialog.js';
+import { isSummary, phases, getResource, URGENCIES, urgencyOf } from '../model/model.js';
+import { showText } from './dialog.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
 import { icon } from './icons.js';
@@ -546,16 +546,12 @@ export function renderCalendar(root) {
   const overflow = all.overflow;
   const colourMode = colourModeFor(blocks);
   const palette = planPalette(known);
-  const phaseList = phases(project);
-  const current = project.currentPhaseId ? getPhase(project, project.currentPhaseId) : null;
-  const planCount = entries.length;
   // The filters live in Display options (the toolbar) and the colours in
   // the right-hand panel, as Motion keeps them: the page is the week.
   const showTasks = ui.calShowTasks !== false;
   const showWorked = ui.calShowWorked !== false;
   if (!showTasks) blocks.splice(0, blocks.length, ...blocks.filter((b) => b.worked && showWorked));
   else if (!showWorked) blocks.splice(0, blocks.length, ...blocks.filter((b) => !b.worked));
-  void current; void phaseList;
 
   const shown = entries.flatMap((e) => e.project.tasks.filter((t, i) => !isSummary(e.project, i) && agendaOf(e.project, t).show));
   if (!shown.length) {
@@ -574,15 +570,15 @@ export function renderCalendar(root) {
   const lateHere = (all.late || []).filter((l) => !who || (all.byTask.get(l.taskId) || []).some((b) => (b.people || []).includes(who)));
   if (lateHere.length) pane.append(lateBanner(lateHere));
 
-  if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, planCount, colourMode, palette }); return; }
+  if (range === 'month') { renderMonth(pane, { entries: known, blocks, meetings, screen, project, who, colourMode, palette }); return; }
   const columns = screen.days;
 
   // The hours to draw: every task's window, and every block, has to fit.
   const base = { ...DEFAULT_AGENDA, ...(project.agenda || {}) };
-  let from = parseTime(base.from) ?? 540, to = parseTime(base.to) ?? 1020;
-  for (const e of entries) for (const t of e.project.tasks) { if (!agendaOf(e.project, t).show) continue; const a = agendaOf(e.project, t); from = Math.min(from, a.from); to = Math.max(to, a.to); }
-  for (const b of blocks) if (columns.includes(b.day)) { from = Math.min(from, b.start); to = Math.max(to, b.end); }
-  for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) { from = Math.min(from, m.start - (m.bufferBefore || 0)); to = Math.max(to, m.end + (m.bufferAfter || 0)); }
+  let from = parseTime(base.from) ?? 540;
+  for (const e of entries) for (const t of e.project.tasks) { const a = agendaOf(e.project, t); if (a.show) from = Math.min(from, a.from); }
+  for (const b of blocks) if (columns.includes(b.day)) from = Math.min(from, b.start);
+  for (const m of (meetings || [])) if (columns.includes(m.day) && !m.allDay) from = Math.min(from, m.start - (m.bufferBefore || 0));
   // The whole day is drawn, and scrolls; `from` is only where it opens.
   const hourFrom = 0, hourTo = 24;
   const y = (min) => ((min - hourFrom * 60) / 60) * HOUR_H;
@@ -825,7 +821,7 @@ export function renderCalendar(root) {
  * one. A cell says the hours it holds, lists its blocks in order, and clicking
  * one goes to that day.
  */
-function renderMonth(pane, { entries, blocks, meetings, screen, project, who, planCount, colourMode, palette }) {
+function renderMonth(pane, { entries, blocks, meetings, screen, project, who, colourMode, palette }) {
   const { ui } = store;
   const todayDay = toDay(today());
   const monthOf = (d) => fromDay(d).slice(0, 7);
@@ -899,5 +895,4 @@ function renderMonth(pane, { entries, blocks, meetings, screen, project, who, pl
     grid.append(cell);
   }
   pane.append(grid);
-  void planCount;
 }

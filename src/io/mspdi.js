@@ -5,7 +5,7 @@
 
 import { escapeXml, parseXml, child, childText, children } from '../util.js';
 import { createProject, newTask, newResource, normalizeLevels, LINK_TYPES, CONSTRAINTS, URGENCIES, urgencyOf, urgencyFromMsp } from '../model/model.js';
-import { isoValid, weekday } from '../model/calendar.js';
+import { isoValid } from '../model/calendar.js';
 
 const LINK_CODE = { FF: 0, FS: 1, SF: 2, SS: 3 };
 const LINK_FROM = { 0: 'FF', 1: 'FS', 2: 'SF', 3: 'SS' };

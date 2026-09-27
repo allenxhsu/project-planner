@@ -207,7 +207,6 @@ const switchable = () => layoutsHere().filter(([k]) => !MSP_LAYOUTS[k]);
 
 let scope = 'all';              // 'all' — Projects & Tasks — or 'project' — the open plan's Task list
 let lastRoot = null;
-const page = { query: '', ganttZoom: readJsonSafe('project-planner:gantt-zoom', 'quarter'), ganttScroll: null };
 const folded = new Set();
 const working = new Map();      // `${scopeKey}|${viewId}` → the view as edited, not yet saved
 const scopeKey = () => (scope === 'project' ? `plan:${store.project.id}` : 'all');
@@ -215,7 +214,7 @@ const ALL_KEY = 'project-planner:views:all';
 const ACTIVE_KEY = 'project-planner:view-active';
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 const writeJson = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } };
-function readJsonSafe(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
+const page = { query: '', ganttZoom: readJson('project-planner:gantt-zoom', 'quarter'), ganttScroll: null };
 const newId = () => `v_${Math.random().toString(36).slice(2, 10)}`;
 
 function normal(v) {
@@ -327,6 +326,30 @@ async function arrangeViews(ids) {
   await writeViews(ids.map((id) => list.find((v) => v.id === id)).filter(Boolean));
   redraw();
 }
+/**
+ * Follow a view's link — `#view=all:<id>` (Projects & Tasks) or
+ * `#view=plan:<planId>:<id>` (a project's view) — as Copy link hands out.
+ */
+export async function openViewLink(value) {
+  const at = value.lastIndexOf(':');
+  if (at < 0) return false;
+  const key = value.slice(0, at);
+  const id = value.slice(at + 1);
+  if (key === 'all') {
+    scope = 'all';
+    writeJson(ACTIVE_KEY, { ...readJson(ACTIVE_KEY, {}), all: id });
+    set({ view: 'alltasks' });
+    void reloadAllTasks();
+    return true;
+  }
+  if (!key.startsWith('plan:')) return false;
+  const planId = key.slice(5);
+  if (planId !== store.project.id && !(await openPlan(planId))) return false;
+  scope = 'project';
+  setActive(id);
+  return true;
+}
+
 function copyViewLink(id) {
   const url = `${location.origin}${location.pathname}#view=${encodeURIComponent(scopeKey())}:${encodeURIComponent(id)}`;
   navigator.clipboard?.writeText(url).then(() => act.hint('Link copied.'), () => act.hint(url));

@@ -94,7 +94,7 @@ enum MainMenu {
                     .separator(),
                     ShellMenu.web("Zoom In", "view.zoomIn", "+"),
                     ShellMenu.web("Zoom Out", "view.zoomOut", "-"),
-                    ShellMenu.web("Go to Today", "view.today", "0"),
+                    ShellMenu.web("Go to Today", "view.goToToday", "0"),
                     .separator(),
                     ShellMenu.web("Expand All", "view.expandAll"),
                     ShellMenu.web("Collapse All", "view.collapseAll"),

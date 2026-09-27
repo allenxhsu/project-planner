@@ -6,7 +6,7 @@ import { el, svg, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { makeCalendar, toDay, fromDay, weekStart, monthStart, addMonths, MONTH_NAMES, WEEKDAY_NAMES, today, formatDate, formatDuration } from '../model/calendar.js';
-import { formatPredecessors, formatAssignments, isSummary, taskIndex } from '../model/model.js';
+import { formatAssignments, taskIndex } from '../model/model.js';
 import { renderGrid, ROW_H, HEAD_H, scrollRowIntoView } from './grid.js';
 import { taskColumns, taskRows, gridHandlers } from './taskgrid.js';
 import { showMenu } from './dialog.js';
@@ -24,7 +24,6 @@ export function zoomGantt(dir) {
   if (next !== store.ui.zoom) set({ zoom: next });
 }
 export function scrollToToday() { pendingReveal = { day: toDay(today()) }; set({}); }
-export function scrollToTask(id) { pendingReveal = { task: id }; set({}); }
 
 /** Days the chart spans: a little before the earliest start, a little after the latest finish. */
 export function chartRange(project, sched, zoom) {

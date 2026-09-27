@@ -55,7 +55,6 @@ export const store = {
     usageGrain: 'week',     // resource usage: 'day' or 'week' columns
     usageScope: 'plan',     // resource usage: the open project, or every one
     split: 560,             // gantt: width of the grid half
-    rightTab: 'task',
     settingsPage: 'calendars',
     projectTab: 'navigate',  // a project's page: 'navigate' (docs and sheets) or 'views'
     docId: null,
@@ -201,6 +200,5 @@ export function readAutosave() {
 export function clearLocalAutosave() {
   try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* nothing to remove */ }
 }
-export const AUTOSAVE_STORAGE_KEY = AUTOSAVE_KEY;
 
 recompute();

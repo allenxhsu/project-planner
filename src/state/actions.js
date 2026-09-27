@@ -3,21 +3,12 @@
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
-import {
-  insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants,
-  setTaskField, setFinish, isSummary, getTask, addResource, removeResource, setResourceField, assign, unassign,
-  setStage, addStage, renameStage, removeStage, moveStage, setStageDone,
-  addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt,
-  addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed,
-  addPhase, setPhaseField, removePhase, movePhase, getPhase, phases,
-  cleanField, fieldsOf, getField, removeField, setFieldValue, getResource,
-  setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment,
-} from '../model/model.js';
+import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment } from '../model/model.js';
 import { workspaceNow } from './sync.js';
 import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
 import { taskDefaults } from '../ui/taskdefaults.js';
-import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, logProject, insertStage } from '../model/stages.js';
+import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, insertStage } from '../model/stages.js';
 
 export const hint = (text) => set({ hint: text });
 /** Run an undoable edit; true when it applied, false when it threw (the message is shown as the hint). */
@@ -25,7 +16,6 @@ function attempt(label, fn) { try { commit(label, fn); return true; } catch { re
 
 export const activeId = () => store.ui.selection[store.ui.selection.length - 1] || null;
 export const activeTask = () => getTask(store.project, activeId());
-export const activeInfo = () => (activeId() ? store.schedule.tasks[activeId()] : null);
 
 // ---------------------------------------------------------------- selection
 
@@ -103,9 +93,7 @@ export function applyDefaultAssignee(p, t) {
   if (!t || t.assignments.length || t.milestone) return;
   const who = defaultAssigneeFor(p);
   if (!who) return;
-  const same = (r) => (who.personId && r.personId === who.personId) || String(r.name).trim().toLowerCase() === String(who.name).trim().toLowerCase();
-  const r = p.resources.find((x) => x.type !== 'material' && x.type !== 'cost' && same(x)) || addResource(p, { name: who.name, personId: who.personId || null });
-  assign(p, t.id, r.id, 1);
+  assign(p, t.id, personResource(p, who).id, 1);
 }
 /** A task inserted by the planner: as the model makes it, then given its default assignee. */
 function insertTask(p, at, props = {}) {
@@ -386,10 +374,6 @@ export async function refreshCalendar(id) {
   }
 }
 
-export async function refreshAllCalendars() {
-  for (const f of feeds(store.project)) await refreshCalendar(f.id);
-}
-
 /** Calendars last read more than half an hour ago, read again — quietly, as the calendar opens. */
 let refreshingStale = false;
 export async function refreshStaleCalendars(maxAgeMs = 30 * 60_000) {
@@ -481,17 +465,6 @@ export const cancelStageNow = (id) => attempt('Cancel the stage', (p) => cancelS
 export const reopenStageNow = (id) => attempt('Reopen the stage', (p) => reopenStage(p, id));
 export const goToStage = (id) => attempt('Change stage', (p) => setCurrentStage(p, id));
 export const createStage = (opts) => attempt('Create a stage', (p) => { insertStage(p, opts); });
-export function addStageAfter(afterId, name = 'New stage') {
-  return attempt('Add a stage', (p) => {
-    const ph = addPhase(p, { name });
-    const list = phases(p);
-    list.splice(list.indexOf(ph), 1);
-    const at = afterId ? list.findIndex((x) => x.id === afterId) + 1 : list.length;
-    list.splice(at, 0, ph);
-    p.phases = list;
-    logProject(p, { kind: 'change', field: 'stages', from: '', to: `added ${ph.name}` });
-  });
-}
 export function quickTaskInStage(stageId, name) {
   let made = null;
   const ok = attempt('New task', (p) => {
@@ -550,7 +523,10 @@ export function newTaskFromEvent({ name, day, start, minutes, notes = '' }) {
 export function createTask(spec) {
   let made = null;
   const ok = attempt('New task', (p) => {
-    const t = insertTask(p, p.tasks.length, { name: spec.name, duration: 1, level: 1 });
+    // Named someone, or said nobody (''): exactly that. Said nothing: the default assignee.
+    const named = spec.resourceId !== undefined;
+    const t = named ? insertTaskRaw(p, p.tasks.length, { name: spec.name, duration: 1, level: 1 })
+      : insertTask(p, p.tasks.length, { name: spec.name, duration: 1, level: 1 });
     if (spec.resourceId && getResource(p, spec.resourceId)) assign(p, t.id, spec.resourceId, 1);
     setTaskField(p, t.id, 'work', String(Math.round((spec.minutes / 60) * 100) / 100));
     if (spec.startDay) setTaskField(p, t.id, 'start', spec.startDay);
@@ -662,7 +638,6 @@ export function newTaskInPhase(phaseId) {
 export function unpinBlock(taskId, index) { return attempt('Unpin a block', (p) => removePin(p, taskId, index)); }
 export function unpinAll(taskId) { return attempt('Unpin every block', (p) => clearPins(p, taskId)); }
 
-export function newPhase(name) { return commit('New stage', (p) => addPhase(p, name ? { name } : {})); }
 export function editPhase(id, name) { return attempt('Rename the stage', (p) => setPhaseField(p, id, 'name', name)); }
 export function setPhaseDeadline(id, iso) { return attempt('Stage deadline', (p) => setPhaseField(p, id, 'deadline', iso || null)); }
 export function deletePhase(id) { return attempt('Delete the stage', (p) => removePhase(p, id)); }
@@ -692,28 +667,6 @@ export function setTaskPhase(taskId, phaseId) {
   });
 }
 
-export async function newTimeBlock(props = {}) {
-  const { saveTimeBlock } = await import('./sync.js');
-  const made = await saveTimeBlock({ name: 'New block', from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], ...props });
-  if (!made) hint('Time blocks need the record store; this one could not be saved.');
-  set({});
-  return made;
-}
-export async function editTimeBlock(id, field, value) {
-  const { listTimeBlocks, saveTimeBlock } = await import('./sync.js');
-  const block = (await listTimeBlocks()).find((b) => b.id === id);
-  if (!block) { hint('No such time block.'); return false; }
-  const next = { ...block };
-  if (field === 'name') next.name = String(value).trim() || block.name;
-  else if (field === 'from' || field === 'to') next[field] = String(value).trim();
-  else if (field === 'days') next.days = [...new Set((value || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
-  try {
-    checkBlock(next);
-  } catch (err) { hint(err.message); return false; }
-  await saveTimeBlock(next);
-  set({});
-  return true;
-}
 export async function deleteTimeBlock(id) {
   const { removeTimeBlockEverywhere } = await import('./sync.js');
   const ok = await removeTimeBlockEverywhere(id);
@@ -722,13 +675,6 @@ export async function deleteTimeBlock(id) {
   return ok;
 }
 
-/** The same rules the model applied, now that the blocks live outside a plan. */
-function checkBlock(b) {
-  const { parseTime } = agendaModule;
-  if (parseTime(b.from) === null || parseTime(b.to) === null) throw new Error('A time of day looks like 09:00.');
-  if (parseTime(b.to) <= parseTime(b.from)) throw new Error('A time block has to end after it starts.');
-  if (!Array.isArray(b.days) || !b.days.length) throw new Error('A time block needs at least one day.');
-}
 export function setTaskTimeBlock(taskId, blockId) { return editTask(taskId, 'timeBlock', blockId); }
 
 // ---------------------------------------------------------------- calendar

@@ -148,7 +148,6 @@ export const getTask = (p, id) => p.tasks.find((t) => t.id === id) || null;
 export const getResource = (p, id) => p.resources.find((r) => r.id === id) || null;
 
 export const isSummary = (p, i) => i >= 0 && i < p.tasks.length - 1 && p.tasks[i + 1].level > p.tasks[i].level;
-export const isSummaryTask = (p, id) => isSummary(p, taskIndex(p, id));
 
 /** Indices of every task under task i. */
 export function descendants(p, i) {
@@ -391,6 +390,20 @@ export function formatPredecessors(p, task) {
 }
 
 // ---------------------------------------------------------------- resources
+
+/**
+ * The work resource that is this person — by their directory id, else by
+ * name — or a new one for them. Never a material or cost resource that
+ * happens to share the name: a person is not a crate of bolts.
+ */
+export function personResource(p, who) {
+  const name = String(who?.name || '').trim();
+  if (!name) throw new Error('A person needs a name.');
+  const key = name.toLowerCase();
+  const same = (r) => (who.personId && r.personId === who.personId) || String(r.name).trim().toLowerCase() === key;
+  return p.resources.find((r) => r.type !== 'material' && r.type !== 'cost' && same(r))
+    || addResource(p, { name, personId: who.personId || null });
+}
 
 export function addResource(p, props = {}) {
   // The same person is never added twice to one plan.
@@ -1127,15 +1140,22 @@ export function setStage(p, taskId, stageId) {
   const t = getTask(p, taskId);
   const st = getStage(p, stageId);
   if (!t || !st) throw new Error('No such task or stage.');
-  const was = getStage(p, t.stageId)?.name || null;
-  const wasCancelled = !!getStage(p, t.stageId)?.cancelled;
+  const from = getStage(p, t.stageId);
+  moveToStage(t, st, from);
+}
+
+/**
+ * The one place a task changes stage, so what a stage means goes with it:
+ * a done stage completes the task; cancelled archives it (Microsoft
+ * Project's inactive task), and leaving cancelled brings it back. `from` is
+ * the stage it was in, when that is not findable any more.
+ */
+function moveToStage(t, st, from) {
   t.stageId = st.id;
   if (st.done) { t.percent = 100; stampDone(t, 100); if (t.milestone) t.duration = 0; }
-  // Cancelled is resolved without being done: archived, which is what
-  // Microsoft Project calls an inactive task. Leaving it brings it back.
   if (st.cancelled) t.archived = true;
-  else if (wasCancelled) t.archived = false;
-  if (was !== st.name) logActivity(t, { kind: 'change', field: 'status', from: was || 'none', to: st.name });
+  else if (from?.cancelled) t.archived = false;
+  if ((from?.name || null) !== st.name) logActivity(t, { kind: 'change', field: 'status', from: from?.name || 'none', to: st.name });
 }
 
 export function addStage(p, name = 'New stage') {
@@ -1161,15 +1181,20 @@ export function setStageDone(p, id, done) {
   if (st.done) for (const t of p.tasks) if (t.stageId === st.id) { t.percent = 100; stampDone(t, 100); }
 }
 
-/** Remove a stage; its tasks fall back to the first one. */
+/**
+ * Remove a stage. Its tasks go to a stage that means the same: a done
+ * column's to the next done column (they stay complete), a cancelled one's to
+ * another cancelled column, anything else to where new tasks start.
+ */
 export function removeStage(p, id) {
   const list = stages(p);
   if (list.length <= 1) throw new Error('A board needs at least one column.');
   const st = getStage(p, id);
   if (!st) return;
+  if (st.done && list.filter((x) => x.done).length === 1) throw new Error('A board needs one column that means finished.');
   p.stages = list.filter((x) => x.id !== id);
-  const fallback = openStage(p).id;
-  for (const t of p.tasks) if (t.stageId === id) t.stageId = fallback;
+  const fallback = (st.done && stages(p).find((x) => x.done)) || (st.cancelled && stages(p).find((x) => x.cancelled)) || openStage(p);
+  for (const t of p.tasks) if (t.stageId === id) moveToStage(t, fallback, st);
 }
 
 /**
@@ -1187,7 +1212,8 @@ export function mapStatus(p, fromName, toName) {
   const moving = p.tasks.filter((t) => stageOf(p, t).id === src.id);
   if (!dst) { src.name = String(toName).trim(); p.stages = list; return true; }
   p.stages = list.filter((s) => s.id !== src.id);
-  for (const t of moving) t.stageId = dst.id;
+  // Through moveToStage, so a task mapped into a done status is complete.
+  for (const t of moving) moveToStage(t, dst, src);
   return true;
 }
 

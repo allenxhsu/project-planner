@@ -1,143 +1,21 @@
-// The right-hand panel: the selected task, the selected resource, or the project.
-
-import { el, clear, formatMoney, formatHours } from '../util.js';
+// Project scheduling settings (working time, calendars, schedules) and a task's logged time, each in a window.
+import { el, clear, formatHours } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { CONSTRAINTS, LINK_TYPES, RESOURCE_TYPES, taskIndex, isAncestor, linkError, getResource, timesheetsFor, stages, stageOf, timeBlockIdsOf } from '../model/model.js';
-import { formatDate, formatDuration, fromDay, today, WEEKDAY_NAMES } from '../model/calendar.js';
-import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, agendaOf, formatTime, hoursLeft } from '../model/agenda.js';
-import { hueColour } from './calendar.js';
-import { timeBlocks, phases, phaseOf, feeds, PROVIDERS, URGENCIES, urgencyOf, pinsOf, bufferOf, BUFFER_CHOICES } from '../model/model.js';
-import { currentLayout } from './calendar.js';
+import { getResource, timesheetsFor, stages } from '../model/model.js';
+import { today, WEEKDAY_NAMES } from '../model/calendar.js';
+import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA } from '../model/agenda.js';
+import { timeBlocks, feeds, PROVIDERS, bufferOf, BUFFER_CHOICES } from '../model/model.js';
 import { describeSchedule } from './schedules.js';
-import { tryCommit, subscribe as subscribeStore } from '../state/store.js';
+import { subscribe as subscribeStore } from '../state/store.js';
 
 const field = (label, input, hint) => el('label', { class: 'sc-field' }, el('span', { class: 'sc-label', text: label }), input, hint ? el('span', { class: 'sc-faint field-hint', text: hint }) : null);
 const readout = (rows) => el('div', { class: 'readout sc-mono' }, ...rows.map(([k, v]) => el('div', { class: 'readout-row' }, el('span', { class: 'sc-muted', text: k }), el('span', { text: v }))));
-const dayNames = (days) => (!days || days.length === 7 ? 'every day'
-  : days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d)) ? 'weekdays'
-  : days.map((d) => WEEKDAY_NAMES[d].slice(0, 3)).join(' '));
 
 const stopKeys = (input) => { input.addEventListener('keydown', (e) => e.stopPropagation()); return input; };
 const text = (value, onchange, attrs = {}) => stopKeys(el('input', { class: 'sc-input', type: 'text', value, spellcheck: false, onchange: (e) => onchange(e.target.value), ...attrs }));
 const date = (value, onchange) => stopKeys(el('input', { class: 'sc-input', type: 'date', value: value || '', onchange: (e) => onchange(e.target.value) }));
 const select = (value, options, onchange) => el('select', { class: 'sc-select', onchange: (e) => onchange(e.target.value) }, ...options.map((o) => el('option', { value: o.value, text: o.label, selected: o.value === value })));
-
-export function renderInspector(root) {
-  const { ui } = store;
-  clear(root);
-  if (ui.rightTab === 'resource') renderResource(root);
-  else if (ui.rightTab === 'project') renderProject(root);
-  else renderTask(root);
-}
-
-function renderTask(root) {
-  const { project, schedule } = store;
-  const t = act.activeTask();
-  if (!t) { root.append(el('p', { class: 'empty-note sc-muted', text: 'Select a task to see and edit its details.' })); return; }
-  const s = schedule.tasks[t.id];
-  const id = t.id;
-  const setF = (f) => (v) => act.editTask(id, f, v);
-  root.append(el('div', { class: 'sc-panel sc-brackets insp-head' },
-    el('div', { class: 'sc-label', text: `Task ${s.index} · WBS ${s.wbs}${s.summary ? ' · summary' : s.milestone ? ' · milestone' : ''}` }),
-    el('div', { class: 'sc-display insp-title', text: t.name }),
-    el('div', { class: 'row insp-pills' },
-      s.critical ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Critical' }) : el('span', { class: 'sc-pill', text: `Slack ${s.slack}d` }),
-      s.percent === 100 ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-success)' }, text: 'Complete' }) : null,
-      s.deadlineMissed ? el('span', { class: 'sc-pill', style: { '--tint': 'var(--sc-danger)' }, text: 'Deadline missed' }) : null),
-    // Name, priority, status, stage, dates, notes, auto-scheduling and who is
-    // on it live in the task's own window; this panel is the scheduling a
-    // Microsoft Project plan needs besides.
-    el('button', { class: 'sc-button sc-button--sm insp-open', text: 'Open task…', title: 'Name, status, priority, dates, auto-scheduling, notes and activity', onclick: () => { void import('./blockmenu.js').then((m) => m.taskSheet({ taskId: id })); } })));
-
-  const form = el('div', { class: 'insp-form' });
-  if (!s.summary) {
-    form.append(el('div', { class: 'two' },
-      field('Duration', text(formatDuration(t.duration), setF('duration')), 'how long it is open: 5d · 2w'),
-      field('Work', text(t.work == null ? '' : String(t.work), setF('work')),
-        t.work == null ? `${formatHours(s.work)} implied by the assignment` : `${Math.round((s.work / Math.max(1, s.duration)) * 10) / 10}h a day over ${formatDuration(s.duration)}`)));
-    form.append(field('% complete', text(String(t.percent), setF('percent'))));
-    form.append(el('label', { class: 'row check-row' }, el('input', { class: 'sc-check', type: 'checkbox', checked: !!t.milestone, onchange: (e) => act.editTask(id, 'milestone', e.target.checked) }), el('span', { text: 'Milestone (zero duration)' })));
-  } else form.append(el('p', { class: 'sc-muted small', text: `Summary of ${s.children.length} subtasks: ${formatDuration(s.duration)}, ${s.percent}% complete. Its dates come from them.` }));
-  form.append(el('div', { class: 'two' },
-    field('Start', date(s.startIso, setF('start')), s.summary ? 'from subtasks' : 'typing a date pins it'),
-    field('Finish', date(s.finishIso, setF('finish')), s.summary ? 'from subtasks' : 'changes the duration')));
-  if (!s.summary) {
-    form.append(el('div', { class: 'two' },
-      field('Constraint', select(t.constraint?.type || 'ASAP', Object.entries(CONSTRAINTS).map(([value, c]) => ({ value, label: c.label })), setF('constraintType'))),
-      CONSTRAINTS[t.constraint?.type || 'ASAP'].dated ? field('Constraint date', date(t.constraint.date, setF('constraintDate'))) : el('span')));
-  }
-  form.append(field('Fixed cost', text(String(t.fixedCost || 0), setF('fixedCost'))));
-  root.append(form);
-
-  // ---- the calendar: auto-scheduling, block size and schedules are in the
-  // task's window; fixed blocks and cutting a task up are here.
-  if (!s.summary && !s.milestone) {
-    root.append(el('div', { class: 'sc-section-title', text: 'Calendar' }));
-    const cal = el('div', { class: 'insp-form' });
-    const pins = pinsOf(t);
-    if (pins.length) {
-      let dropped = [];
-      try { dropped = currentLayout().all.droppedPins.filter((d) => d.taskId === id && d.planId === project.id); } catch { dropped = []; }
-      const live = pins.length - dropped.length;
-      cal.append(el('div', { class: 'row pin-row' },
-        el('span', { class: 'sc-mono small', text: `⌖ ${live} pinned block${live === 1 ? '' : 's'}${dropped.length ? ` · ${dropped.length} no longer possible` : ''}` }),
-        el('span', { class: 'sc-spacer' }),
-        el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Unpin all', title: 'Let the calendar place every block of this task', onclick: () => act.unpinAll(id) })));
-    }
-    cal.append(el('p', { class: 'sc-faint small', text: agendaOf(project, t).show ? 'Auto-scheduled. Block size and schedule are in the task’s window.' : 'Not auto-scheduled — switch it on in the task’s window.' }));
-    cal.append(el('button', { class: 'sc-button sc-button--sm', text: 'Break into subtasks…', onclick: () => act.breakUpDialog(id) }));
-    root.append(cal);
-  }
-
-  root.append(el('div', { class: 'sc-section-title', text: 'Schedule' }));
-  root.append(readout([
-    ['Early start', formatDate(s.startIso)], ['Early finish', formatDate(s.finishIso)],
-    ['Late start', formatDate(fromDay(s.ls))], ['Late finish', formatDate(fromDay(s.lf))],
-    ['Total slack', `${s.slack} d`], ['Work', formatHours(s.work)], ['Cost', formatMoney(s.cost, project.currency)],
-  ]));
-
-  // predecessors
-  root.append(el('div', { class: 'sc-section-title', text: 'Predecessors' }));
-  const preds = el('div', { class: 'link-list' });
-  const i = taskIndex(project, id);
-  const candidates = project.tasks.map((x, j) => ({ x, j })).filter(({ x, j }) => x.id !== id && !isAncestor(project, j, i) && !isAncestor(project, i, j));
-  for (const l of t.predecessors) {
-    const p = project.tasks[taskIndex(project, l.id)];
-    if (!p) continue;
-    preds.append(el('div', { class: 'link-row' },
-      select(l.id, candidates.map(({ x, j }) => ({ value: x.id, label: `${j + 1} ${x.name}` })), (v) => { if (!linkError(project, v, id) || v === l.id) tryCommit('Change link', (pr) => { const tt = pr.tasks.find((a) => a.id === id); const ll = tt.predecessors.find((a) => a.id === l.id); ll.id = v; if (tt.predecessors.filter((a) => a.id === v).length > 1) tt.predecessors = tt.predecessors.filter((a) => a !== ll); }); else act.hint(linkError(project, v, id)); }),
-      select(l.type, Object.entries(LINK_TYPES).map(([value, label]) => ({ value, label: value, title: label })), (v) => tryCommit('Link type', (pr) => { pr.tasks.find((a) => a.id === id).predecessors.find((a) => a.id === l.id).type = v; })),
-      text(`${l.lag || 0}d`, (v) => tryCommit('Link lag', (pr) => { const n = parseFloat(v); if (Number.isNaN(n)) throw new Error('Lag is a number of days, e.g. 2 or -1.'); pr.tasks.find((a) => a.id === id).predecessors.find((a) => a.id === l.id).lag = n; }), { class: 'sc-input lag', title: 'Lag in working days (negative for lead)' }),
-      el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Remove link', onclick: () => act.unlinkTasks(l.id, id) })));
-  }
-  const addSel = select('', [{ value: '', label: '+ Add predecessor…' }, ...candidates.filter(({ x }) => !t.predecessors.some((l) => l.id === x.id)).map(({ x, j }) => ({ value: x.id, label: `${j + 1} ${x.name}` }))], (v) => { if (v) act.linkTasks(v, id); });
-  preds.append(addSel);
-  root.append(preds);
-
-  // resources
-  root.append(el('div', { class: 'sc-section-title', text: 'Resources' }));
-  const res = el('div', { class: 'link-list' });
-  for (const a of t.assignments) {
-    const r = getResource(project, a.resourceId);
-    if (!r) continue;
-    res.append(el('div', { class: 'link-row' },
-      select(r.id, project.resources.map((x) => ({ value: x.id, label: x.name })), (v) => { act.unassignResource(id, r.id); act.assignResource(id, v, a.units); }),
-      text(r.type === 'work' ? `${Math.round(a.units * 100)}%` : String(a.units), (v) => { const n = parseFloat(v); if (Number.isNaN(n)) { act.hint('Units is a number.'); return; } act.assignResource(id, r.id, r.type === 'work' ? (n > 5 ? n / 100 : n) : n); }, { class: 'sc-input lag', title: r.type === 'work' ? 'Units, as a percentage of the resource' : 'Quantity' }),
-      el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Unassign', onclick: () => act.unassignResource(id, r.id) })));
-  }
-  const free = project.resources.filter((r) => !t.assignments.some((a) => a.resourceId === r.id));
-  res.append(select('', [{ value: '', label: project.resources.length ? '+ Assign resource…' : '+ New resource…' }, ...free.map((r) => ({ value: r.id, label: r.name })), { value: '__new', label: '＋ New resource…' }], async (v) => {
-    if (v === '__new') { const r = act.newResource(); set({ editing: null, view: store.ui.view }); act.assignResource(id, r.id, 1); set({ rightTab: 'resource' }); }
-    else if (v) act.assignResource(id, v, 1);
-  }));
-  root.append(res);
-
-  // ---- time: what was expected, what was spent, what is left
-  if (!s.summary || timesheetsFor(project, id).length) {
-    renderTimeLines(root, t.id);
-  }
-}
 
 /** A task's logged time: what was allocated, spent and is left, and each line, editable. */
 export function renderTimeLines(root, id) {
@@ -190,45 +68,17 @@ function liveDialog(title, draw, { wide = true } = {}) {
 }
 
 /** Project settings: working time and how the calendar schedules — Motion keeps these in Settings. */
-export const projectSettingsDialog = () => liveDialog(`Project settings — ${store.project.name}`, (root) => renderProject(root, { dialog: true }));
+export const projectSettingsDialog = () => liveDialog(`Project settings — ${store.project.name}`, (root) => renderProject(root));
 /** Logged time for one task. */
 export const timeLogDialog = (taskId) => liveDialog('Logged time', (root) => renderTimeLines(root, taskId), { wide: false });
 
-function renderResource(root) {
-  const { project, schedule, ui } = store;
-  const r = getResource(project, ui.resourceId);
-  if (!r) { root.append(el('p', { class: 'empty-note sc-muted', text: 'Select a resource in the Resource Sheet or Resource Usage view.' })); return; }
-  const setF = (f) => (v) => act.editResource(r.id, f, v);
-  root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: `${RESOURCE_TYPES[r.type]} resource` }), el('div', { class: 'sc-display insp-title', text: r.name })));
-  const form = el('div', { class: 'insp-form' });
-  form.append(el('div', { class: 'two' }, field('Name', text(r.name, setF('name'))), field('Initials', text(r.initials, setF('initials')))));
-  form.append(el('div', { class: 'two' },
-    field('Type', select(r.type, Object.entries(RESOURCE_TYPES).map(([value, label]) => ({ value, label })), setF('type'))),
-    r.type === 'work' ? field('Max units', text(`${Math.round(r.maxUnits * 100)}%`, setF('maxUnits'))) : el('span')));
-  form.append(el('div', { class: 'two' }, field(r.type === 'work' ? 'Rate per hour' : 'Rate per unit', text(String(r.rate), setF('rate'))), field('Group', text(r.group, setF('group')))));
-  root.append(form);
-  root.append(el('div', { class: 'sc-section-title', text: 'Assigned tasks' }));
-  const list = el('div', { class: 'assign-list' });
-  const tasks = project.tasks.filter((t) => t.assignments.some((a) => a.resourceId === r.id));
-  if (!tasks.length) list.append(el('p', { class: 'sc-muted small', text: 'Nothing assigned.' }));
-  for (const t of tasks) {
-    const s = schedule.tasks[t.id];
-    const a = t.assignments.find((x) => x.resourceId === r.id);
-    list.append(el('button', { class: 'link-item', onclick: () => { set({ view: ['gantt', 'sheet'].includes(ui.view) ? ui.view : 'gantt', rightTab: 'task' }); act.selectTask(t.id); act.revealTask(t.id); } },
-      el('span', { class: 'grow', text: `${s.index} ${t.name}` }), el('span', { class: 'sc-mono sc-muted', text: `${formatDate(s.startIso, 'day')} – ${formatDate(s.finishIso, 'day')}${a.units !== 1 ? ` · ${Math.round(a.units * 100)}%` : ''}` })));
-  }
-  root.append(list);
-  root.append(el('div', { class: 'insp-actions' }, el('button', { class: 'sc-button sc-button--danger sc-button--sm', text: 'Delete resource', onclick: () => act.deleteResource(r.id) })));
-}
-
 /** The open project's scheduling settings, drawn in `root`; `only` picks one part: 'working', 'calendars' or 'schedules'. */
-export const renderProjectSettings = (root, only = null) => renderProject(root, { dialog: true, only });
+export const renderProjectSettings = (root, only = null) => renderProject(root, { only });
 
-function renderProject(root, { dialog = false, only = null } = {}) {
-  const { project, schedule } = store;
+function renderProject(root, { only = null } = {}) {
+  const { project } = store;
   // The project itself — name, dates, stages, status, colour — is in its
   // window; this is how it is scheduled: working time and the calendar.
-  if (!dialog) root.append(el('div', { class: 'sc-panel sc-brackets insp-head' }, el('div', { class: 'sc-label', text: 'Project settings' }), el('div', { class: 'sc-display insp-title', text: project.name })));
   const want = (part) => !only || only === part;
   const form = el('div', { class: 'insp-form' });
   form.append(field('Status date', date(project.statusDate, (v) => act.setProjectInfo({ statusDate: v })), 'what “today” is for progress — blank is today'));
@@ -295,13 +145,4 @@ function renderProject(root, { dialog = false, only = null } = {}) {
   }
   sched.append(el('button', { class: 'sc-button sc-button--sm', text: 'Edit schedules…', onclick: () => set({ view: 'schedules' }) }));
   root.append(sched);
-
-  // Statistics are in the Statistics tab under the page; the window does not repeat them.
-  if (dialog) return;
-  root.append(el('div', { class: 'sc-section-title', text: 'Statistics' }));
-  root.append(readout([
-    ['Start', formatDate(schedule.startIso)], ['Finish', formatDate(schedule.finishIso)], ['Duration', `${schedule.duration} d`],
-    ['Work', formatHours(schedule.work)], ['Cost', formatMoney(schedule.cost, project.currency)], ['Complete', `${schedule.percent}%`],
-    ['Tasks', String(project.tasks.length)], ['Critical', String(schedule.criticalCount)], ['Resources', String(project.resources.length)],
-  ]));
 }

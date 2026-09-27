@@ -10,7 +10,7 @@ import { serialize, parse, FILE_EXT } from '../io/json.js';
 import { exportMspdi, importMspdi } from '../io/mspdi.js';
 import { exportCsv, importCsv } from '../io/csv.js';
 import { exportSvg, exportPng, exportPdf } from '../io/exportImage.js';
-import { showMenu, showPanel, confirmDialog, showText, promptText } from './dialog.js';
+import { showMenu, showPanel, confirmDialog, showText, pickFile } from './dialog.js';
 import { settingsDialog } from './settings.js';
 import { reloadPlans } from './projects.js';
 import { reloadPeople } from './people.js';
@@ -18,8 +18,7 @@ import { reloadUsage } from './resources.js';
 import { GROUPINGS } from './kanban.js';
 import { reloadAllTasks } from './alltasks.js';
 import { shiftWeek, showThisWeek, reloadCalendarPlans, RANGES, rangeOf, currentLayout, calendarTitle, displayOptions } from './calendar.js';
-import { formatClock } from '../model/agenda.js';
-import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, persistence, lastCounts, storeCounts, listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace, activeWorkspace, setActiveWorkspace } from '../state/sync.js';
+import { exportStore, importStore, syncAfterSave, syncConfigured, syncStatus, saveToCloud, getSettings, inPortal, persistence, lastCounts } from '../state/sync.js';
 import { zoomGantt, scrollToToday, ZOOMS } from './gantt.js';
 import { zoomNetwork } from './network.js';
 import { RULES } from '../model/validate.js';
@@ -70,7 +69,6 @@ export function saveProjectAs() {
 /** File name extensions the MPXJ converter reads (Microsoft Project and its neighbours). */
 export const CONVERTER_EXTS = ['mpp', 'mpt', 'mpx', 'xer', 'pmxml', 'pod', 'gan', 'planner', 'pp', 'prx', 'sp', 'ppx', 'cdpx', 'cdpz', 'mdb', 'p3', 'stx', 'fts', 'pc', 'zip', 'pep', 'schedule_grid', 'gnt'];
 const needsConverter = (name) => CONVERTER_EXTS.includes((name || '').toLowerCase().split('.').pop());
-export const CONVERTER_EXPORTS = { mpx: 'Microsoft Project MPX', xer: 'Primavera P6 XER', pmxml: 'Primavera P6 PMXML', planner: 'GNOME Planner' };
 
 /** Run a file through MPXJ (tools/mpp2xml.sh) and get the result's bytes. */
 async function convertViaServer(bytes, name, to) {
@@ -187,29 +185,22 @@ async function exportEverything() {
 
 /** Merge one back, by the rule sync already uses: the newer record wins. */
 async function importEverything() {
-  const input = document.getElementById('file-input');
-  const previous = input.accept;
-  input.value = ''; input.accept = '.json,application/json';
-  input.onchange = async () => {
-    input.accept = previous;
-    const file = input.files[0];
-    if (!file) return;
-    try {
-      const result = await importStore(await file.text());
-      const { reloadPlans: reload } = await import('./projects.js');
-      await reload();
-      showText('Imported', [
-        `${result.added} record${result.added === 1 ? '' : 's'} added.`,
-        `${result.replaced} replaced by a newer copy.`,
-        `${result.kept} already newer here, so kept.`,
-        '',
-        'Nothing was deleted: what is here and not in the file was left alone.',
-      ].join('\n'));
-    } catch (err) {
-      showText('That file could not be imported', err.message);
-    }
-  };
-  input.click();
+  const file = await pickFile('.json,application/json');
+  if (!file) return;
+  try {
+    const result = await importStore(await file.text());
+    const { reloadPlans: reload } = await import('./projects.js');
+    await reload();
+    showText('Imported', [
+      `${result.added} record${result.added === 1 ? '' : 's'} added.`,
+      `${result.replaced} replaced by a newer copy.`,
+      `${result.kept} already newer here, so kept.`,
+      '',
+      'Nothing was deleted: what is here and not in the file was left alone.',
+    ].join('\n'));
+  } catch (err) {
+    showText('That file could not be imported', err.message);
+  }
 }
 
 const exportXml = () => downloadText(exportMspdi(store.project, store.schedule), `${slugify(store.project.name)}.xml`, 'application/xml');
@@ -280,7 +271,9 @@ export const COMMANDS = {
   'task.calendar': () => { const id = act.activeId(); if (!id) return; const t = store.project.tasks.find((x) => x.id === id); act.editTask(id, 'calendarShow', !(t?.calendar?.show)); },
   'view.refreshPlans': () => { void reloadPlans({ pull: true }); },
   'view.today': goView('today'), 'view.people': goView('people'), 'view.schedules': goView('schedules'), 'view.gantt': goView('gantt'), 'view.sheet': goView('sheet'), 'view.resources': goView('resources'), 'view.usage': goView('usage'), 'view.network': goView('network'),
-  'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.today': scrollToToday,
+  'view.settings': goView('settings'),
+  // Scrolls the Gantt to today; `view.today` is the Today view.
+  'view.zoomIn': zoomIn, 'view.zoomOut': zoomOut, 'view.goToToday': scrollToToday,
   'view.expandAll': () => act.collapseAll(false), 'view.collapseAll': () => act.collapseAll(true),
   'view.inspector': () => set({ rightOpen: !store.ui.rightOpen }), 'view.checks': () => set({ bottomOpen: !store.ui.bottomOpen }),
   'view.appearance': appearance, 'view.sync': settingsDialog,
@@ -341,9 +334,9 @@ const MENUS = {
     { label: 'New resource', run: run('resource.new') }, { label: 'Delete resource', danger: true, run: run('resource.delete') },
   ],
   View: () => [
-    ...Object.entries(VIEWS).map(([id, v]) => ({ label: v.label, checked: store.ui.view === id, run: run(`view.${id}`) })), '-',
+    ...Object.entries(VIEWS).filter(([id]) => COMMANDS[`view.${id}`]).map(([id, v]) => ({ label: v.label, checked: store.ui.view === id, run: run(`view.${id}`) })), '-',
     ...(store.ui.view === 'calendar' ? [{ note: 'Calendar shows' }, ...Object.entries(RANGES).map(([id, r]) => ({ label: `  ${r.label}`, checked: rangeOf() === id, run: () => set({ calendarRange: id }) })), '-'] : []),
-    { label: 'Zoom in', key: '⌘+', run: run('view.zoomIn') }, { label: 'Zoom out', key: '⌘−', run: run('view.zoomOut') }, { label: 'Go to today', key: '⌘0', run: run('view.today') }, '-',
+    { label: 'Zoom in', key: '⌘+', run: run('view.zoomIn') }, { label: 'Zoom out', key: '⌘−', run: run('view.zoomOut') }, { label: 'Go to today', key: '⌘0', run: run('view.goToToday') }, '-',
     { label: 'Expand all', run: run('view.expandAll') }, { label: 'Collapse all', run: run('view.collapseAll') }, '-',
 { label: 'Checks panel', checked: store.ui.bottomOpen, run: run('view.checks') }, '-',
     { label: 'Appearance…', run: run('view.appearance') },
@@ -389,55 +382,6 @@ export function initHeader(root) {
   root.append(menubar);
 }
 
-/**
- * Which workspace is in front, and the making of new ones.
- *
- * Work, personal and school are different lives sharing one tool. Switching
- * here changes what every screen counts: the projects on the shelf, the tasks
- * in All Tasks, the hours on the calendar and what each person is carrying.
- */
-export async function workspaceMenu(x, y) {
-  const spaces = await listWorkspaces();
-  const active = activeWorkspace();
-  const { reloadPlans: reload } = await import('./projects.js');
-  const refresh = async () => {
-    const { reloadCalendarPlans: rc } = await import('./calendar.js');
-    const { reloadAllTasks: ra } = await import('./alltasks.js');
-    const { reloadPeople: rp } = await import('./people.js');
-    // The button's own label is read from a record, so it has to be re-read
-    // too — otherwise the shelf changes and the header keeps the old name.
-    await Promise.all([refreshWorkspaceLabel(), reload(), rc(), ra(), rp()]);
-  };
-  const items = [
-    { note: 'Workspace' },
-    { label: 'All workspaces', checked: !active, run: async () => { setActiveWorkspace(''); await refresh(); } },
-    ...spaces.map((w) => ({ label: w.name, checked: active === w.id, run: async () => { setActiveWorkspace(w.id); await refresh(); } })),
-    '-',
-    { label: 'New workspace…', run: async () => {
-      const name = await promptText('New workspace', 'Work, personal, school — whatever the projects in it have in common.', '');
-      if (!name?.trim()) return;
-      const made = await createWorkspace(name.trim());
-      if (made) { setActiveWorkspace(made.id); await refresh(); }
-    } },
-  ];
-  if (active) {
-    const here = spaces.find((w) => w.id === active);
-    items.push(
-      { label: `Rename “${here?.name || 'this workspace'}”…`, run: async () => {
-        const name = await promptText('Rename this workspace', 'What should it be called?', here?.name || '');
-        if (name?.trim()) { await renameWorkspace(active, name.trim()); await refresh(); }
-      } },
-      { label: `Delete “${here?.name || 'this workspace'}”`, danger: true, run: async () => {
-        const yes = await confirmDialog('Delete this workspace?', 'The projects in it are kept. They become unfiled and show up wherever you are.');
-        if (!yes) return;
-        await deleteWorkspace(active);
-        await refresh();
-      } },
-    );
-  }
-  showMenu(x, y, items);
-}
-
 export function findResults(input) {
   const q = input.value.trim().toLowerCase();
   if (!q) return;
@@ -450,38 +394,15 @@ export function findResults(input) {
   input.focus();
 }
 
-let workspaceLabel = 'All workspaces';
-/** Keep the header's workspace button in step with the records. */
-export async function refreshWorkspaceLabel() {
-  const active = activeWorkspace();
-  if (!active) { workspaceLabel = 'All workspaces'; }
-  else {
-    const here = (await listWorkspaces()).find((w) => w.id === active);
-    workspaceLabel = here ? here.name : 'All workspaces';
-  }
-  const btn = document.getElementById('workspace-pick');
-  if (btn) btn.textContent = workspaceLabel;
-}
 
 export function renderHeader() {
-  const { project, ui } = store;
-  const btn = document.getElementById('workspace-pick');
-  if (btn) btn.textContent = workspaceLabel;
+  const { project } = store;
   for (const [id, can] of [['btn-undo', canUndo()], ['btn-redo', canRedo()]]) { const n = document.getElementById(id); if (n) n.disabled = !can; }
-  void slugify; void FILE_EXT; void ui;
   document.title = `${project.name} — Project Planner`;
   // What is on now is drawn by the sidebar (ui/sidebar.js).
 }
-const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // ---------------------------------------------------------------- view tabs, toolbar, status
-
-export function renderViewTabs(root) {
-  clear(root);
-  for (const [id, v] of Object.entries(VIEWS)) {
-    root.append(el('button', { class: `sc-tab${store.ui.view === id ? ' is-active' : ''}`, title: v.label, onclick: goView(id) }, el('span', { class: 'tab-glyph', text: v.glyph }), el('span', { text: v.short || v.label })));
-  }
-}
 
 export function renderToolbar(root) {
   clear(root);

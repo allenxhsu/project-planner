@@ -32,11 +32,7 @@ export function validate(p, sched = computeSchedule(p)) {
   p.tasks.forEach((t, i) => {
     const info = sched.tasks[t.id];
     if (info.cyclic) return;
-    if (info.summary) {
-      if (t.assignments.length) add('summary-assigned', `${label(t)} has resources assigned.`, { taskId: t.id });
-    } else if (i === p.tasks.length - 1 && p.tasks.length > 1 && !hasSucc.has(t.id) && p.tasks.length === 1) {
-      // single task: nothing to say
-    }
+    if (info.summary && t.assignments.length) add('summary-assigned', `${label(t)} has resources assigned.`, { taskId: t.id });
     if (info.deadlineMissed) add('deadline-missed', `${label(t)} finishes ${formatDate(info.finishIso)}, after its deadline ${formatDate(t.deadline)}.`, { taskId: t.id });
     if (!info.summary && info.slack < 0) add('negative-slack', `${label(t)} has ${info.slack} days of slack.`, { taskId: t.id });
     if (t.constraint?.date && Number.isNaN(toDay(t.constraint.date))) add('bad-date', `${label(t)}: constraint date “${t.constraint.date}”.`, { taskId: t.id });

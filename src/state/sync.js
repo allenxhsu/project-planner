@@ -15,7 +15,7 @@ import {
   SYNC_CURSOR_KEYS, SYNC_EVENTS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus,
 } from '../../sync-kit/js/index.js';
-import { store, set, loadProject, markSaved, subscribe, revision, tryCommit, setAutosaveSink, readAutosave, clearLocalAutosave, AUTOSAVE_STORAGE_KEY } from './store.js';
+import { store, set, loadProject, markSaved, subscribe, revision, tryCommit, setAutosaveSink, readAutosave, clearLocalAutosave } from './store.js';
 import { uid } from '../util.js';
 import { hosted as hostedPage } from '../host.js';
 import { today } from '../model/calendar.js';
@@ -733,15 +733,14 @@ export async function listWorkspaces() {
 /** Give every open, unassigned task of a workspace's projects to `who`; how many it gave. */
 export async function assignUnassigned(workspaceId, who) {
   if (!who?.name) return 0;
-  const { assign, addResource, isSummary } = await import('../model/model.js');
-  const norm = (s) => String(s || '').trim().toLowerCase();
+  const { assign, personResource, isSummary } = await import('../model/model.js');
   let n = 0;
   for (const s of await listPlans()) {
     if (s.workspaceId !== workspaceId || s.template) continue;
     await patchPlan(s.id, (p) => {
       const open = p.tasks.filter((t, i) => !isSummary(p, i) && !t.milestone && !t.archived && (t.percent ?? 0) < 100 && !t.assignments.length);
       if (!open.length) return;
-      const r = p.resources.find((x) => (who.personId && x.personId === who.personId) || norm(x.name) === norm(who.name)) || addResource(p, { name: who.name, personId: who.personId || null });
+      const r = personResource(p, who);
       for (const t of open) { assign(p, t.id, r.id, 1); n++; }
     }, 'Assign unassigned tasks');
   }
@@ -1420,15 +1419,6 @@ export async function setPlanTemplate(id, on) {
 export async function refreshPlans() {
   if (syncConfigured()) await syncNow();
   return listPlans();
-}
-
-/** Stop everything. Only tests need this. */
-export function stopSync() {
-  clearInterval(timer);
-  clearTimeout(commitTimer);
-  unlisten?.();
-  timer = null;
-  engine = null;
 }
 
 export { SYNC_EVENTS };

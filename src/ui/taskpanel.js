@@ -11,7 +11,7 @@
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { stages, URGENCIES, timeBlocks, fieldsOf, phases } from '../model/model.js';
+import { timeBlocks, stages, URGENCIES, fieldsOf, phases } from '../model/model.js';
 import { BLOCK_CHOICES, parseTime, formatClock } from '../model/agenda.js';
 import { formatDate } from '../model/calendar.js';
 import { open, foot, button } from './dialog.js';
@@ -85,8 +85,12 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
     const fact = (key, label, value) => (rows[key] = el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), value));
 
     const drawPlanParts = () => {
+      // Who it starts on: the default assignee when they are on this plan, else the first person.
+      const who = act.defaultAssigneeFor(plan);
+      const work = plan.resources.filter((r) => r.type === 'work');
+      const preferredId = (who && work.find((r) => (who.personId && r.personId === who.personId) || r.name.trim().toLowerCase() === who.name.trim().toLowerCase())?.id) || work[0]?.id || '';
       assignee = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Nobody' }),
-        ...plan.resources.filter((r) => r.type === 'work').map((r, i) => el('option', { value: r.id, text: r.name, selected: i === 0 })));
+        ...plan.resources.filter((r) => r.type === 'work').map((r) => el('option', { value: r.id, text: r.name, selected: r.id === preferredId })));
       stage = el('select', { class: 'sc-select' }, ...stages(plan).map((st) => el('option', { value: st.id, text: st.name })));
       schedule = el('select', { class: 'sc-select' }, el('option', { value: '', text: defaultScheduleLabel(plan) }),
         ...timeBlocks(plan).map((b) => el('option', { value: b.id, text: b.name })));
@@ -142,7 +146,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       const from = parseTime(fixedFrom.value);
       close({
         planId: project.value, phaseId: phase.value || null, name: name.value.trim(), notes: notesBox.get(),
-        resourceId: assignee.value || null, stageId: stage.value, urgency: urgency.value, minutes,
+        resourceId: assignee.value, stageId: stage.value, urgency: urgency.value, minutes,
         blockHours: isAuto && chunk.value && chunk.value !== 'whole' ? +chunk.value : null,
         whole: isAuto && chunk.value === 'whole',
         startDay: isAuto ? (startDate.value || null) : fixedDay.value,

@@ -45,6 +45,21 @@ export function open(title, build, { dismissable = true, wide = false } = {}) {
   });
 }
 
+/**
+ * Choose a file, with its own throwaway input: the page's shared file input
+ * keeps its own filter, whether this one is used or cancelled.
+ * @returns {Promise<File|null>}
+ */
+export function pickFile(accept = '') {
+  return new Promise((resolve) => {
+    const input = el('input', { type: 'file', accept, hidden: true });
+    input.addEventListener('change', () => { resolve(input.files[0] || null); input.remove(); });
+    input.addEventListener('cancel', () => { resolve(null); input.remove(); });
+    document.body.append(input);
+    input.click();
+  });
+}
+
 export const foot = (...buttons) => el('div', { class: 'dialog-foot' }, ...buttons);
 export const button = (text, onclick, variant = '') => el('button', { class: `sc-button ${variant}`, text, onclick });
 

@@ -10,7 +10,7 @@
 // schedule is, so moving a task or logging four hours against it re-lays the
 // week without anything to keep in step.
 
-import { makeCalendar, toDay, fromDay, weekStart, weekday } from './calendar.js';
+import { makeCalendar, toDay, fromDay, weekday } from './calendar.js';
 import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, feeds, bufferOf, getResource, identityOf, pinsOf, eventsOf, eventPieces, URGENCIES, urgencyOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
@@ -413,12 +413,12 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
   // toward nothing but the task's logged hours.
   // Finished and archived projects (`history`) are not planned, but the time
   // worked on them is still where it was worked.
-  const since = -Infinity;   // all of it: the calendar can be scrolled back to any week, and it draws only the days on screen
+  // Logged time from any day at all: the calendar can be scrolled back to any week, and it draws only the days on screen.
   for (const { project } of [...entries, ...history]) {
     for (const x of project.timesheets || []) {
       if (!Number.isInteger(x.start) || !x.date || !(x.hours > 0)) continue;
       const day = toDay(x.date);
-      if (day < since || day > todayDay + horizonDays) continue;
+      if (day > todayDay + horizonDays) continue;
       const t = project.tasks.find((k) => k.id === x.taskId);
       if (!t) continue;
       const minutes = Math.max(5, Math.round(x.hours * 60));
@@ -551,15 +551,6 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
   blocks.sort((x, y) => x.day - y.day || x.start - y.start);
   meetings.sort((x, y) => x.day - y.day || x.start - y.start);
   return { blocks, byTask, overflow, meetings, late, droppedPins };
-}
-
-/** The blocks that fall in one week, keyed by day number. */
-export function weekOf(blocks, anyDayInWeek) {
-  const start = weekStart(anyDayInWeek);
-  const days = new Map();
-  for (let d = start; d < start + 7; d++) days.set(d, []);
-  for (const b of blocks) if (days.has(b.day)) days.get(b.day).push(b);
-  return { start, days };
 }
 
 /**

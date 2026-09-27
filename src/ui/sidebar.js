@@ -57,7 +57,6 @@ export async function refreshSidebar() {
   renderSidebar();
 }
 
-export const sidebarOpen = () => state.open;
 export function toggleSidebar() { state.open = !state.open; remember(); set({}); }
 
 let root = null;
@@ -286,9 +285,6 @@ export function planMenu(p, siblings = []) {
       set({});
     };
     showMenu(x, y, [
-      { panel: null, note: 'Colour' },
-      { label: 'colours', panel: null, render: true },
-      '-',
       { icon: '↗', label: 'Open project', run: () => { void openPlanFromSidebar(p.id); } },
       ...(p.archived ? [{ icon: '↺', label: 'Reopen project', run: () => { void status('Todo'); } }] : [
         { icon: '✓', label: 'Complete project', run: () => { void status('Completed'); } },
@@ -327,7 +323,7 @@ export function planMenu(p, siblings = []) {
         await refreshSidebar();
         set({});
       } },
-    ].filter((it) => !it.render && !(it.note === 'Colour')));
+    ]);
     // The colour grid sits above the items, as in Motion.
     const menu = document.querySelector('.pop-menu:last-of-type');
     if (menu) {
@@ -521,8 +517,6 @@ export function renderSidebar() {
       row.onclick = async () => {
         const sync = await import('../state/sync.js');
         sync.setActiveWorkspace(active ? '' : w.id);
-        const { refreshWorkspaceLabel } = await import('./toolbar.js');
-        await refreshWorkspaceLabel();
         await refreshSidebar();
         set({});
       };

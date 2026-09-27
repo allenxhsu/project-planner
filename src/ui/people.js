@@ -19,7 +19,7 @@ import {
   attachProfile, detachProfile, syncConfigured, linkPlansToDirectory, unlinkedCount,
 } from '../state/sync.js';
 import { profilerUrl } from '../io/profile.js';
-import { showMenu, confirmDialog, formDialog, showText } from './dialog.js';
+import { showMenu, confirmDialog, formDialog, showText, pickFile } from './dialog.js';
 
 /** The last reading of the directory. Rendering is synchronous; reading is not. */
 let people = [];
@@ -51,23 +51,16 @@ function openProfiler(person) {
 }
 
 /** Read a Profiler export file onto a person. */
-function pickProfile(person) {
-  const input = document.getElementById('file-input');
-  const previous = input.accept;
-  input.value = ''; input.accept = '.json,application/json';
-  input.onchange = async () => {
-    input.accept = previous;
-    const file = input.files[0];
-    if (!file) return;
-    try {
-      const record = await attachProfile(person.id, await file.text());
-      if (!record) throw new Error('That person is no longer in the directory.');
-      await reloadPeople();
-    } catch (err) {
-      showText('That profile could not be read', err.message);
-    }
-  };
-  input.click();
+async function pickProfile(person) {
+  const file = await pickFile('.json,application/json');
+  if (!file) return;
+  try {
+    const record = await attachProfile(person.id, await file.text());
+    if (!record) throw new Error('That person is no longer in the directory.');
+    await reloadPeople();
+  } catch (err) {
+    showText('That profile could not be read', err.message);
+  }
 }
 
 async function editPerson(person) {

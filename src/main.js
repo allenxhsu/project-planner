@@ -1,17 +1,17 @@
 // Wires the store to the panels and owns the global keyboard shortcuts.
 
 import { el, clear } from './util.js';
-import { store, subscribe, set, undo, redo, loadProject, markSaved, readAutosave, revision } from './state/store.js';
+import { store, subscribe, set, undo, redo, loadProject, markSaved, readAutosave } from './state/store.js';
 import * as act from './state/actions.js';
 import { sampleProject } from './model/sample.js';
 import { parse, serialize } from './io/json.js';
 import { hosted, post, initHost } from './host.js';
-import { saveOpenDialog, showMenu } from './ui/dialog.js';
-import { initSidebar, renderSidebar, refreshSidebar } from './ui/sidebar.js';
-import { renderGantt, zoomGantt, scrollToToday } from './ui/gantt.js';
+import { saveOpenDialog } from './ui/dialog.js';
+import { initSidebar, renderSidebar } from './ui/sidebar.js';
+import { renderGantt, scrollToToday } from './ui/gantt.js';
 import { renderTaskSheet, editActiveCell, moveActiveCol } from './ui/taskgrid.js';
 import { renderResourceSheet, renderResourceUsage } from './ui/resources.js';
-import { renderNetwork, zoomNetwork } from './ui/network.js';
+import { renderNetwork } from './ui/network.js';
 import { renderProjects, reloadPlans } from './ui/projects.js';
 import { renderPeople } from './ui/people.js';
 import { renderSchedules } from './ui/schedules.js';
@@ -19,12 +19,12 @@ import { renderSettings } from './ui/settingspage.js';
 import { renderDoc } from './ui/docs.js';
 import { renderToday } from './ui/today.js';
 import { renderKanban } from './ui/kanban.js';
-import { renderAllTasks, reloadAllTasks, renderProjectTabs } from './ui/alltasks.js';
+import { renderAllTasks, renderProjectTabs } from './ui/alltasks.js';
 import { renderTeamSchedule } from './ui/teamschedule.js';
-import { renderCalendar, renderCalendarSide, shiftWeek, showThisWeek } from './ui/calendar.js';
+import { renderCalendar, renderCalendarSide } from './ui/calendar.js';
 import { renderPriority } from './ui/priority.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
-import { initHeader, renderHeader, refreshWorkspaceLabel, renderViewTabs, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
+import { initHeader, renderHeader, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
 import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, keepsEdits, APP_ID } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
@@ -203,6 +203,8 @@ if (!hosted) {
  */
 async function followLink() {
   const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  // #view=… — a saved view of Projects & Tasks or of a project (Copy link on a view).
+  if (h.get('view')) { const { openViewLink } = await import('./ui/alltasks.js'); await openViewLink(h.get('view')); return; }
   const planId = h.get('plan');
   const taskId = h.get('task');
   if (!planId) return;
@@ -237,6 +239,6 @@ initSync({ preferStored: !hosted && startedOnFallback })
     }
     void storeCounts();
     void followLink();
-    return Promise.all([reloadPlans(), refreshWorkspaceLabel()]);
+    return reloadPlans();
   })
   .catch((err) => console.error('sync could not start', err));

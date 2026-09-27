@@ -16,14 +16,13 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { getTask, isSummary, URGENCIES, urgencyOf, pinsOf, feeds, getFeed, bufferOf, BUFFER_CHOICES, addFeed as _unused, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, TRAVEL_CHOICES, timeBlocks, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase } from '../model/model.js';
+import { timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase } from '../model/model.js';
 import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
 import { defaultScheduleLabel } from './schedules.js';
 import { datePanel, quickDates } from './datepick.js';
 import { markdownNotes } from './mdnotes.js';
-void _unused;
 
 /** Make `planId` the open plan if it is not, then hand back the task. */
 async function withTask(planId, taskId) {
@@ -228,7 +227,6 @@ export function blockMenu(b, x, y) {
   }
   const entry = store.project.id === b.planId ? store.project : null;
   const t0 = entry ? getTask(entry, b.taskId) : null;
-  const nameOf = () => t0?.name || 'this task';
   const quickStart = (project) => quickDates(project, project ? [{ label: 'Project start', day: toDay(project.start) }] : []);
   const quickDue = (project) => quickDates(project, []);
 
@@ -283,7 +281,6 @@ export function blockMenu(b, x, y) {
       act.deleteSelection();
     }) },
   ]);
-  void nameOf;
 }
 
 // ------------------------------------------------------------------ sheets
