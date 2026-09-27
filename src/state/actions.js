@@ -559,27 +559,26 @@ export function createTask(spec) {
  * the clock is logged as worked there — so the finished work stays on the
  * calendar where it happened, as Motion keeps it — and the task is complete.
  */
-export function completeFromBlock(taskId, { day, start, end }) {
+/**
+ * A block's circle ticked: the task is done. Only time someone clocked —
+ * Start task now, then Stop or Done — is kept on the calendar as a record; a
+ * task simply ticked off leaves none. A running task's Done is its Stop:
+ * the clock stops now, the time from its start is logged, and its duration
+ * becomes the time spent.
+ */
+export function completeFromBlock(taskId) {
   const d = new Date();
   const nowMin = d.getHours() * 60 + d.getMinutes();
   const todayIso = localToday();
-  const worked = day === todayIso && start < nowMin ? Math.min(end, nowMin) - start : 0;
   return attempt('Complete task', (p) => {
     const t = getTask(p, taskId);
     if (!t) throw new Error('That task is gone.');
-    // Running: Done is Stop and finished — the clock stops now, the time from
-    // its start to now is logged (however long it was meant to take), and the
-    // duration becomes the time spent. The calendar keeps that span.
     const live = pinsOf(t).find((x) => x.live);
     if (live) {
       const ran = live.day === todayIso ? Math.max(1, nowMin - live.start) : live.minutes;
       stopWork(p, taskId, { worked: ran, more: 0 });
       autoAdvance(p);
       return;
-    }
-    if (worked >= 5) {
-      const who = t.assignments.map((a) => getResource(p, a.resourceId)).find(Boolean);
-      addTimesheet(p, { taskId, resourceId: who?.id || null, date: day, start, hours: Math.round((worked / 60) * 100) / 100, note: 'Worked' });
     }
     setTaskField(p, taskId, 'percent', 100);
   });

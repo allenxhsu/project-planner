@@ -55,6 +55,23 @@ final class ModelDocument: WebDocument {
 /// the page cannot write itself, because only MPXJ can.
 final class PlannerWindowController: EditorWindowController {
     private lazy var probe = NetworkProbe()
+    private var titleWatch: NSKeyValueObservation?
+
+    /// The window is named for what is open — the page's title, "Home
+    /// Organization Project — Project Planner" — not the document's file name,
+    /// which for a plan kept in the store is only ever "Untitled".
+    override func windowTitle(forDocumentDisplayName displayName: String) -> String {
+        if let title = webView?.title, !title.isEmpty { return title }
+        return "Project Planner"
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        guard titleWatch == nil, let webView else { return }
+        titleWatch = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.synchronizeWindowTitleWithDocumentName() }
+        }
+    }
 
     override func handleMessage(type: String, body: [String: Any]) -> Bool {
         // Home or work: the Wi-Fi name and a rough location, back to the page
