@@ -1415,3 +1415,8 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .hp-top { min-width: 0; }
 .hp-label, .hp-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .person-plan.is-more { --tint: var(--sc-text-2); }
+.rs-label-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rs-label-row .rs-name { flex: 1; min-width: 0; }
+.rs-more { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 4px; font: inherit; opacity: 0; }
+.rs-row:hover .rs-more { opacity: 1; }
+.rs-more:hover { color: var(--sc-text); }

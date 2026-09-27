@@ -90,7 +90,9 @@ function trackCard(t, { big = false } = {}) {
     t.hidden ? null : el('div', { class: 'rt-actions' },
       el('button', { class: 'sc-button sc-button--sm', text: '■ Stop', title: 'Log the time and say what is left', onclick: () => { void stop(t); } }),
       el('button', { class: 'sc-button sc-button--sm', text: '✓ Done', onclick: () => { void done(t); } }),
-      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { void openTrack(t); } })));
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open', onclick: () => { void openTrack(t); } }),
+      el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: '⋯', title: 'Do later, add time, complete…',
+        onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); void import('./blockmenu.js').then((m) => m.blockMenu(t.block, r.left, r.bottom + 4)); } })));
 }
 
 function upNextList(next, limit = 6) {
@@ -134,14 +136,27 @@ export function renderStrip(pane, { openAt = 8 * 60 } = {}) {
   const ordered = [...rows.values()].sort((a, b) => (b.live - a.live) || Math.min(...a.items.map((i) => i.start)) - Math.min(...b.items.map((i) => i.start)));
   const hours = [];
   for (let h = from; h <= to; h += 60) hours.push(el('span', { class: 'rs-hour sc-mono', style: { left: x(h) }, text: formatClock(h) }));
+  // A row's ⋯: the menu of its next block today (or its first, if they have all passed).
+  const rowMenu = (row) => (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const b = (row.items.find((t) => !t.block.worked && t.end > now) || row.items.find((t) => !t.block.worked) || row.items[0]).block;
+    void import('./blockmenu.js').then((m) => m.blockMenu(b, r.left, r.bottom + 4));
+  };
   const lane = (row) => el('div', { class: `rs-row${row.live ? ' is-live' : ''}${row.dimmed ? ' is-dimmed' : ''}` },
-    el('div', { class: 'rs-label' }, el('div', { class: 'rs-name', text: row.name }), row.planName ? el('div', { class: 'sc-faint small', text: row.planName }) : null),
+    el('div', { class: 'rs-label' },
+      el('div', { class: 'rs-label-row' },
+        el('div', { class: 'rs-name', text: row.name }),
+        row.items[0]?.hidden ? null : el('button', { class: 'rs-more', text: '⋯', title: 'Do later, add time, start, complete…', onclick: rowMenu(row) })),
+      row.planName ? el('div', { class: 'sc-faint small', text: row.planName }) : null),
     el('div', { class: 'rs-track' },
       ...row.items.map((t) => el('button', {
         class: `rs-bar${t.block.live ? ' is-live' : ''}${t.block.worked ? ' is-worked' : ''}${t.hidden ? ' cal-busy' : ''}`,
         style: { left: x(t.start), width: w(t.start, t.end), '--rt': t.colour.line, background: t.hidden ? '' : t.colour.fill },
         title: `${t.name} · ${formatClock(t.start)} – ${formatClock(t.end)}`,
         onclick: t.hidden ? null : () => { void openTrack(t); },
+        // The same menu as a block on the calendar: Do later, Add time, Start, Complete…
+        oncontextmenu: t.hidden ? null : (e) => { e.preventDefault(); void import('./blockmenu.js').then((m) => m.blockMenu(t.block, e.clientX, e.clientY)); },
       }, el('span', { text: `${t.background ? '◌ ' : ''}${t.block.live ? timeLeft(t) : `${formatClock(t.start)} – ${formatClock(t.end)}`}${t.background && t.nextCheck !== null ? ` · check ${formatClock(t.nextCheck)}` : ''}` }))),
       el('div', { class: 'rs-now', style: { left: x(now) } })));
   pane.append(el('div', { class: 'rs' },
