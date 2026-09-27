@@ -797,7 +797,8 @@ export function setAgenda(patch) {
     const cap = +(next.dailyCap ?? DEFAULT_AGENDA.dailyCap);
     if (!CAP_CHOICES.includes(cap)) throw new Error(`A day's limit is one of ${CAP_CHOICES.join(', ')} hours.`);
     const capSet = 'dailyCap' in patch || p.agenda?.capSet === true;
-    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap, ...(capSet ? { capSet: true } : {}) };
+    const scheduleChosen = patch.scheduleChosen === true || p.agenda?.scheduleChosen === true;
+    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap, ...(capSet ? { capSet: true } : {}), ...(scheduleChosen ? { scheduleChosen: true } : {}) };
   });
 }
 

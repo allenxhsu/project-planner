@@ -113,6 +113,8 @@ export function parse(text) {
       // there was "no limit" carry the old default of 6 hours, which nobody picked.
       dailyCap: a.capSet === true && CAP_CHOICES.includes(+a.dailyCap) ? +a.dailyCap : DEFAULT_AGENDA.dailyCap,
       ...(a.capSet === true ? { capSet: true } : {}),
+      // Picked by hand in the project's panel: no migration moves it again.
+      ...(a.scheduleChosen === true ? { scheduleChosen: true } : {}),
     };
   }
 

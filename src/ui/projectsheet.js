@@ -15,7 +15,8 @@ import { markdownNotes } from './mdnotes.js';
 import { el, clear } from '../util.js';
 import { store, set, subscribe } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { phases, getPhase, phaseOf, isSummary, URGENCIES, stages, stageOf } from '../model/model.js';
+import { phases, getPhase, phaseOf, isSummary, URGENCIES, stages, stageOf, timeBlocks, getTimeBlock } from '../model/model.js';
+import { describeSchedule } from './schedules.js';
 import { PROJECT_STATUSES, stageRange, stageStatus, stageHealth, stageTasks, stageColour } from '../model/stages.js';
 import { expectedHours, agendaOf } from '../model/agenda.js';
 import { toDay, fromDay, today, formatDate, WEEKDAY_NAMES, weekday, makeCalendar } from '../model/calendar.js';
@@ -176,6 +177,10 @@ function middleColumn(close, spaces) {
     el('option', { value: 'mental', text: 'Mental — drains magic', selected: p.energy !== 'physical' }),
     el('option', { value: 'physical', text: 'Physical — drains stamina', selected: p.energy === 'physical' }));
   const skill = el('input', { class: 'sc-input', type: 'text', value: p.skill || '', placeholder: 'Its folder or workspace', onkeydown: (e) => e.stopPropagation(), onchange: (e) => act.editProject('skill', e.target.value) });
+  // Where its tasks are laid when they name no schedule of their own; a new task starts with it.
+  const schedule = el('select', { class: 'sc-select', title: 'The hours this project’s tasks are laid in, unless a task picks its own',
+    onchange: (e) => act.setAgenda({ timeBlockId: e.target.value, scheduleChosen: true }) },
+  ...timeBlocks(p).map((tb) => el('option', { value: tb.id, text: `${tb.name} (${describeSchedule(tb)})`, selected: (getTimeBlock(p, p.agenda?.timeBlockId) || timeBlocks(p)[0])?.id === tb.id })));
   const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: p.autoAdvance !== false, onchange: (e) => act.editProject('autoAdvance', e.target.checked) });
   return el('div', { class: 'ps-col ps-mid' },
     el('div', { class: `ps-state ${health.cls}` },
@@ -193,6 +198,7 @@ function middleColumn(close, spaces) {
       fact('Start date', dateBtn(p.start, 'start', 'Start')),
       fact('Deadline', dateBtn(p.deadline, 'deadline', 'No deadline')),
       fact('Priority', urgency),
+      fact('Schedule', schedule),
       fact('Color', colours)),
     el('div', { class: 'ps-group' },
       fact('Labels', labels),

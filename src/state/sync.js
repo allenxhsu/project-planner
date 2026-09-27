@@ -585,16 +585,18 @@ export async function saveTimeBlocks(blocks) {
 }
 
 /** The schedule every project's tasks use when they name none. */
-export async function setDefaultScheduleEverywhere(id) {
+export async function setDefaultScheduleEverywhere(id, { keepChosen = false } = {}) {
   if (!recordStore) return 0;
   const set = (p) => { p.agenda = { ...(p.agenda || {}), timeBlockId: id }; };
-  if (store.project.agenda?.timeBlockId !== id) tryCommit('Default schedule', set);
+  // A migration leaves a project whose schedule someone picked for it; Settings ▸ Schedules does not.
+  const skip = (p) => keepChosen && p.agenda?.scheduleChosen === true;
+  if (store.project.agenda?.timeBlockId !== id && !skip(store.project)) tryCommit('Default schedule', set);
   let n = 0;
   for (const record of await planRecords()) {
     if (record.id === store.project.id) continue;
     let project;
     try { project = parse(record.body).project; } catch { continue; }
-    if (project.agenda?.timeBlockId === id) continue;
+    if (project.agenda?.timeBlockId === id || skip(project)) continue;
     set(project);
     await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
     n++;
@@ -675,7 +677,7 @@ async function ensureAnySchedule() {
   let done = false;
   try { done = localStorage.getItem(ANY_DEFAULT_KEY) === '1'; } catch { /* private mode */ }
   if (done) return;
-  await setDefaultScheduleEverywhere('tb_any');
+  await setDefaultScheduleEverywhere('tb_any', { keepChosen: true });
   try { localStorage.setItem(ANY_DEFAULT_KEY, '1'); } catch { /* private mode */ }
 }
 
