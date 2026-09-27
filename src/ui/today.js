@@ -142,7 +142,9 @@ export function renderToday(root) {
     main.append(el('h2', { class: 'today-section is-warning', text: 'Will be late' }));
     main.append(el('ul', { class: 'today-list' }, ...late.map((l) => el('li', {
       class: 'today-row today-late', onclick: () => { void taskSheet({ planId: l.planId, taskId: l.taskId }); },
-    }, el('span', { class: 'today-name', text: lateSentence(l) }), many ? el('span', { class: 'sc-pill today-plan', text: l.planName }) : null))));
+    }, el('span', { class: 'today-name', text: lateSentence(l) }), many ? el('span', { class: 'sc-pill today-plan', text: l.planName }) : null,
+    el('button', { class: 'sc-button sc-button--sm', text: 'Resolve',
+      onclick: (e) => { e.stopPropagation(); void import('./resolve.js').then((m) => m.resolveLate({ planId: l.planId, taskId: l.taskId })); } })))));
   }
 
   section('Tasks past deadline', past.map(({ e, task, info }) => taskRow({

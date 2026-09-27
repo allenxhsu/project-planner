@@ -25,7 +25,7 @@ import { datePanel, quickDates } from './datepick.js';
 import { markdownNotes } from './mdnotes.js';
 
 /** Make `planId` the open plan if it is not, then hand back the task. */
-async function withTask(planId, taskId) {
+export async function withTask(planId, taskId) {
   if (planId && planId !== store.project.id) {
     const { openPlan } = await import('../state/sync.js');
     if (!(await openPlan(planId))) return null;
@@ -249,7 +249,12 @@ export function blockMenu(b, x, y) {
   const quickDue = (project) => quickDates(project, []);
 
   const done = t0 ? (store.schedule.tasks[t0.id]?.percent ?? 0) === 100 : false;
+  const resolving = b.missed ? { icon: '!', label: 'Resolve — it went by, not done…', run: () => { void import('./resolve.js').then((m) => m.resolveMissed(b)); } }
+    : b.late ? { icon: '!', label: 'Resolve — it will be late…', run: () => { void import('./resolve.js').then((m) => m.resolveLate({ planId: b.planId, taskId: b.taskId })); } }
+    : null;
   showMenu(x, y, [
+    resolving,
+    resolving ? '-' : null,
     done
       ? { icon: '↺', label: 'Mark not complete', run: run(b, (t) => act.setPercent(t.id, 0)) }
       : { icon: '✓', label: 'Complete task', run: run(b, (t) => act.setPercent(t.id, 100)) },
@@ -682,7 +687,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           notes,
           activityBox(project, t)),
         el('aside', { class: 'task-sheet-facts' },
-          el('div', { class: `sheet-state ${state.cls}`, title: state.title || '', text: state.text }),
+          el('div', { class: `sheet-state ${state.cls}`, title: state.title || '' }, el('span', { text: state.text }),
+            state.cls === 'is-late' ? el('button', { class: 'sc-button sc-button--sm sheet-resolve', text: 'Resolve',
+              onclick: () => leave(async () => { const m = await import('./resolve.js'); await m.resolveLate({ planId: project.id, taskId: t.id }); }) }) : null),
           whenLine ? el('div', { class: `sheet-sched${next?.pinned ? ' is-fixed' : ''}`, text: whenLine }) : null,
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),

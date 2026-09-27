@@ -15,9 +15,11 @@ import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getResource, URGENCIES, urgencyOf, checkInsOf } from '../model/model.js';
 import { showText } from './dialog.js';
+import { resolveLate, resolveMissed } from './resolve.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
 import { renderDock, renderStrip, runningCount } from './running.js';
+import { carryMissed, missedBlocks, missedKey } from '../model/missed.js';
 import { visibilityOf } from '../state/mode.js';
 import { icon } from './icons.js';
 
@@ -115,7 +117,7 @@ export function currentLayout() {
   // The quarter hour is in the key: as the day goes on, the hours behind now
   // stop being free, and the layout has to say so.
   const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${Math.floor(Date.now() / 900000)}`;
-  if (layoutMemo.key === key && layoutMemo.value) return layoutMemo.value;
+  if (layoutMemo.key === `${key}|${missedVersion}` && layoutMemo.value) return layoutMemo.value;
   // Live projects are planned; finished and archived ones are history — their
   // logged time is drawn, nothing of them is laid. The open project is
   // whichever it is.
@@ -124,9 +126,12 @@ export function currentLayout() {
   const onlyOpen = ui.calendarScope === 'plan';
   const entries = [...(openIsLive ? [open] : []), ...(onlyOpen ? [] : others.filter((e) => e.project.id !== project.id))];
   const history = [...(openIsLive || project.template ? [] : [open]), ...(onlyOpen ? [] : historyPlans.filter((e) => e.project.id !== project.id))];
-  const value = { entries, history, all: planBlocksAcross(entries, { held: heldBlocks(), history }) };
-  layoutMemo = { key, value };
-  rememberToday(value.all.blocks);
+  const all = planBlocksAcross(entries, { held: heldBlocks(), history });
+  rememberToday(all.blocks);
+  // Blocks that went by with the task still open: kept where they were, with a "!" (model/missed.js).
+  all.missed = missedBlocks(readMissed(), [...entries, ...history]);
+  const value = { entries, history, all };
+  layoutMemo = { key: `${key}|${missedVersion}`, value };
   return value;
 }
 
@@ -146,9 +151,30 @@ function heldBlocks() {
 }
 function rememberToday(blocks) {
   const day = toDay(today());
+  // What the last drawing had, whose time has gone by since, is missed — unless it was done.
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(HELD_KEY) || 'null'); } catch { saved = null; }
+  const before = readMissed();
+  const after = carryMissed(before, saved, { todayNum: day, nowMin: nowMinutes(), grace: GRACE_MIN });
+  if (after.length !== before.length) writeMissed(after);
   const mine = blocks.filter((b) => b.day === day && !b.worked && !b.pinned && !b.live)
     .map((b) => ({ planId: b.planId, taskId: b.taskId, start: b.start, end: b.end }));
   try { localStorage.setItem(HELD_KEY, JSON.stringify({ day, blocks: mine })); } catch { /* private mode */ }
+}
+
+const MISSED_KEY = 'project-planner:missed-blocks';
+let missedVersion = 0;
+function readMissed() {
+  try { const v = JSON.parse(localStorage.getItem(MISSED_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function writeMissed(list) {
+  try { localStorage.setItem(MISSED_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+  missedVersion++;
+}
+/** A missed block resolved (done, logged or not done): it is no longer drawn with its "!". */
+export function dismissMissed(key) {
+  writeMissed(readMissed().filter((m) => missedKey(m) !== key));
+  set({});
 }
 
 // The clock moves the calendar on: the now-line every minute, and the layout
@@ -462,7 +488,9 @@ function lateBanner(list) {
     ul.append(el('li', {
       class: 'clickable', title: `${l.planName} — click to open the task`,
       onclick: () => { void taskSheet({ planId: l.planId, taskId: l.taskId }); },
-    }, lateSentence(l), el('span', { class: 'sc-faint', text: ` · ${l.planName}` })));
+    }, lateSentence(l), el('span', { class: 'sc-faint', text: ` · ${l.planName}` }),
+    el('button', { class: 'sc-button sc-button--sm cal-late-resolve', text: 'Resolve',
+      onclick: (e) => { e.stopPropagation(); void resolveLate({ planId: l.planId, taskId: l.taskId }); } })));
   }
   if (list.length > 12) ul.append(el('li', { class: 'sc-faint', text: `and ${list.length - 12} more.` }));
   box.append(ul);
@@ -556,7 +584,7 @@ export function renderCalendar(root) {
   const everyone = [...new Map(entries.flatMap((e) => e.project.resources.map((r) => [personKeyOf(r), r.name]))).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
   const who = ui.calendarWho && everyone.some(([k]) => k === ui.calendarWho) ? ui.calendarWho : '';
-  const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : [...all.blocks];
+  const blocks = who ? all.blocks.filter((b) => (b.people || []).includes(who)) : [...all.blocks, ...(all.missed || [])];
   // Home or work (state/mode.js): at work a home project's time is only "Busy"; at home work is dimmed.
   const visOf = (planId) => visibilityOf(known.find((e) => e.project.id === planId)?.project.workspaceId);
   const meetings = who ? (all.meetings || []).filter((m) => m.lane === who || m.lane === '*') : all.meetings;
@@ -786,25 +814,28 @@ export function renderCalendar(root) {
       // a week is too short to stack that, which is why the week keeps to the
       // task's name and the day says the rest.
       const oneDay = range === 'day';
+      // A fixed block that went by with the task open is missed too; resolving "not done" frees it.
+      const missed = b.missed || (b.pinned && !b.live && info.percent < 100 && (b.day < toDay(today()) || (b.day === toDay(today()) && b.end + GRACE_MIN <= nowMinutes())));
+      const lateLine = (all.late || []).find((l) => l.taskId === t.id && l.planId === b.planId);
       col.append(el('div', {
         'data-task': b.taskId,
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${!foreign && !b.worked ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${missed ? ' is-missed' : ''}${!foreign && !b.worked && !b.missed ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, ...within(slot, width), right: 'auto',
           '--who': colour.line, borderLeftColor: colour.line,
         },
-        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
+        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${missed ? '\nWent by and not done — click to resolve' : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
         onclick: (e) => {
           if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; }
-          const lateLine = (all.late || []).find((l) => l.taskId === t.id && l.planId === b.planId);
           if (b.worked) { void taskSheet({ planId: b.planId, taskId: b.taskId }); return; }
+          if (b.missed) { void resolveMissed(b); return; }
           void blockSheet(b, { late: lateLine ? lateSentence(lateLine) : null });
         },
-        onpointerdown: foreign || b.worked ? null : (e) => startDrag(e, b, { hourFrom, y }),
+        onpointerdown: foreign || b.worked || b.missed ? null : (e) => startDrag(e, b, { hourFrom, y }),
         oncontextmenu: (e) => {
           e.preventDefault();
           if (!foreign) act.selectTask(t.id);
-          blockMenu(b, e.clientX, e.clientY);
+          blockMenu(missed && !b.missed ? { ...b, missed: true } : b, e.clientX, e.clientY);
         },
       },
         // Motion's card: a circle and the name, the icons that matter on the
@@ -814,7 +845,7 @@ export function renderCalendar(root) {
             class: `cal-ring${info.percent === 100 || b.worked ? ' is-done' : ''}`,
             title: b.worked ? 'Worked — logged time' : info.percent === 100 ? 'Completed — click to reopen' : 'Mark complete',
             onpointerdown: (e) => e.stopPropagation(),
-            onclick: (e) => { e.stopPropagation(); if (!b.worked) void completeBlock(b, info.percent !== 100); },
+            onclick: (e) => { e.stopPropagation(); if (missed) void resolveMissed(b); else if (!b.worked) void completeBlock(b, info.percent !== 100); },
           }, info.percent === 100 || b.worked ? '✓' : ''),
           el('span', { class: 'cal-block-name' }, t.name),
           el('span', { class: 'cal-block-icons' },
@@ -824,7 +855,13 @@ export function renderCalendar(root) {
               onpointerdown: (e) => e.stopPropagation(),
               onclick: (e) => { e.stopPropagation(); void import('./blockmenu.js').then((m) => m.stopNowDialog({ planId: b.planId, taskId: b.taskId })); } }, '■') : null,
             urgencyOf(t) === 'now' || urgencyOf(t) === 'high' ? el('span', { class: `urg-dot urg-${urgencyOf(t)}`, title: `${URGENCIES[urgencyOf(t)].label} priority` }) : null,
-            b.late || (t.deadline && toDay(t.deadline) < toDay(today()) && info.percent < 100) ? el('span', { class: 'cal-due-dot', title: t.deadline ? `Deadline ${formatDate(t.deadline, 'long')}` : 'Late' }) : null,
+            // Went by and not done: "!" — say what happened.
+            missed ? el('button', { class: 'cal-missed', title: 'This went by and the task is not done — click to resolve',
+              onpointerdown: (e) => e.stopPropagation(),
+              onclick: (e) => { e.stopPropagation(); void resolveMissed(b); } }, '!')
+            : lateLine || (t.deadline && toDay(t.deadline) < toDay(today()) && info.percent < 100) ? el('button', { class: 'cal-due-dot', title: `${t.deadline ? `Deadline ${formatDate(t.deadline, 'long')}` : 'Late'} — click to resolve`,
+              onpointerdown: (e) => e.stopPropagation(),
+              onclick: (e) => { e.stopPropagation(); void resolveLate({ planId: b.planId, taskId: b.taskId }); } }) : null,
             // Fixed at this time: a lock, and clicking it lets the calendar place the task again.
             b.pinned ? el('button', { class: 'cal-lock', title: 'This task is locked at this time — click to release it',
               onpointerdown: (e) => e.stopPropagation(),

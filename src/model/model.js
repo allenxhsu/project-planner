@@ -690,7 +690,7 @@ export const livePinIndex = (t) => pinsOf(t).findIndex((x) => x.live);
  * the running block goes, and what the task still needs is what the person
  * says it needs. Nothing more needed means it is finished.
  */
-export function stopWork(p, taskId, { worked, more }) {
+export function stopWork(p, taskId, { worked, more, end = null }) {
   const t = getTask(p, taskId);
   if (!t) throw new Error('No such task.');
   const i = livePinIndex(t);
@@ -700,7 +700,10 @@ export function stopWork(p, taskId, { worked, more }) {
   const w = Math.max(0, Math.round(+worked || 0));
   const m = Math.max(0, Math.round(+more || 0));
   if (w > 0) {
-    addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date: pin.day, start: pin.start, hours: w / 60, note: 'Worked' });
+    // The time worked ends when it was stopped (`end`, the minute on the pin's
+    // day): an hour said at 2:50 is 1:50 – 2:50, not an hour on from the Start.
+    const start = Number.isInteger(end) ? Math.max(0, end - w) : pin.start;
+    addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date: pin.day, start, hours: w / 60, note: 'Worked' });
   }
   logActivity(t, { kind: 'stopped', text: `worked ${hoursWords(w / 60)}${m > 0 ? `, ${hoursWords(m / 60)} more needed` : ', finished'}` });
   const spent = spentOn(p, taskId);
@@ -732,6 +735,32 @@ export function settleFinishedRunning(p) {
     const spent = spentOn(p, t.id);
     if (spent > 0) t.work = Math.round(spent * 100) / 100;
     fixed.push(t.name);
+  }
+  return fixed;
+}
+
+/**
+ * Time worked that runs on past the moment it was stopped: logged, before
+ * Stop ended the time at the stop, as starting at the Start — an hour said at
+ * 2:50 for a task started at 2:50 drew as 2:50 – 3:50, finished in the future.
+ * Each Stop in the task's activity says when it was; a line of that day that
+ * runs past it is moved to end there.
+ */
+export function settleStoppedWork(p) {
+  const fixed = [];
+  for (const t of p.tasks) {
+    for (const a of t.activity || []) {
+      if (a.kind !== 'stopped' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(a.at || '')) continue;
+      const day = a.at.slice(0, 10);
+      const stop = +a.at.slice(11, 13) * 60 + +a.at.slice(14, 16);
+      for (const x of p.timesheets || []) {
+        if (x.taskId !== t.id || x.date !== day || !Number.isInteger(x.start) || x.note !== 'Worked') continue;
+        const minutes = Math.round((+x.hours || 0) * 60);
+        if (x.start > stop || x.start + minutes <= stop + 1) continue;
+        x.start = Math.max(0, stop - minutes);
+        fixed.push(t.name);
+      }
+    }
   }
   return fixed;
 }

@@ -1420,3 +1420,37 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .rs-more { border: 0; background: none; color: var(--sc-text-3); cursor: pointer; padding: 0 4px; font: inherit; opacity: 0; }
 .rs-row:hover .rs-more { opacity: 1; }
 .rs-more:hover { color: var(--sc-text); }
+
+/* ---- Resolve (ui/resolve.js): late and missed tasks */
+.cal-due-dot { border: 0; padding: 0; cursor: pointer; }
+.cal-due-dot:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc-danger) 35%, transparent); }
+.cal-missed { border: 0; cursor: pointer; width: 15px; height: 15px; border-radius: 4px; padding: 0; font: 700 11px/15px var(--sc-font, inherit); color: #fff; background: var(--sc-danger); text-align: center; }
+.cal-block.is-missed { opacity: .8; border-left-style: dashed; background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--sc-danger) 10%, transparent) 6px 12px); }
+.cal-late-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cal-late-resolve { margin-left: auto; }
+.sheet-state { display: flex; align-items: center; gap: 8px; }
+.sheet-resolve { margin-left: auto; }
+.rv-head { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 6px; color: var(--sc-text); background: color-mix(in srgb, var(--sc-danger) 22%, transparent); border-left: 3px solid var(--sc-danger); }
+.rv-head strong { color: var(--sc-danger); }
+.rv-head span { font-size: 12px; color: var(--sc-text-2); }
+.rv-section { margin-top: 12px; }
+.rv-section-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.rv-choose { display: flex; align-items: center; gap: 6px; }
+.rv-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
+.rv-card { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 6px; cursor: pointer; color: var(--sc-text); background: color-mix(in srgb, var(--sc-line) 30%, transparent); border: 1px solid var(--sc-line); }
+.rv-card span { font-size: 12px; color: var(--sc-text-2); }
+.rv-card small { font-size: 11px; color: var(--sc-accent); }
+.rv-card.is-on { border-color: var(--sc-accent); background: color-mix(in srgb, var(--sc-accent) 18%, transparent); }
+.rv-apply { display: flex; justify-content: flex-end; margin-top: 8px; }
+.rv-rows { display: flex; flex-direction: column; margin-top: 10px; border-top: 1px solid var(--sc-line); padding-top: 6px; }
+.rv-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border: 0; border-radius: 5px; background: none; color: var(--sc-text); text-align: left; cursor: pointer; font: inherit; }
+.rv-row:hover, .rv-row:focus-visible { background: color-mix(in srgb, var(--sc-line) 40%, transparent); }
+.rv-glyph { width: 20px; height: 20px; border-radius: 5px; display: inline-grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; background: var(--sc-text-3); flex: none; }
+.rv-row.is-asap .rv-glyph, .rv-row.is-cancel .rv-glyph { background: var(--sc-danger); }
+.rv-row.is-done .rv-glyph { background: var(--sc-success); }
+.rv-row.is-part .rv-glyph, .rv-row.is-hard .rv-glyph { background: var(--sc-accent); }
+.rv-label { display: flex; flex-direction: column; flex: 1; }
+.rv-label small { font-size: 11px; color: var(--sc-text-3); }
+.rv-part { display: flex; align-items: center; gap: 4px; }
+.rv-minutes { width: 70px; }
+.rv-also { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--sc-danger); }

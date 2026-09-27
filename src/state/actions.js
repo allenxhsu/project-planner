@@ -489,7 +489,14 @@ export function commentOnTask(taskId, text) { return attempt('Comment', (p) => a
 
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
-  return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => { stopWork(p, taskId, { worked, more }); autoAdvance(p); });
+  const d = new Date();
+  return attempt(more > 0 ? 'Stop the task' : 'Stop and complete', (p) => {
+    // Stopped today: the time worked ends now. A run left going from another day keeps its start.
+    const live = pinsOf(getTask(p, taskId) || {}).find((x) => x.live);
+    const end = live?.day === localToday() ? d.getHours() * 60 + d.getMinutes() : null;
+    stopWork(p, taskId, { worked, more, end });
+    autoAdvance(p);
+  });
 }
 
 /**
@@ -551,15 +558,6 @@ export function createTask(spec) {
 }
 
 /**
- * A task that already happened: made on time that has gone, it is work done
- * then — logged at that hour, drawn there ticked, and complete as of its end.
- */
-/**
- * Done from its block on the calendar: the part of the block already behind
- * the clock is logged as worked there — so the finished work stays on the
- * calendar where it happened, as Motion keeps it — and the task is complete.
- */
-/**
  * A block's circle ticked: the task is done. Only time someone clocked —
  * Start task now, then Stop or Done — is kept on the calendar as a record; a
  * task simply ticked off leaves none. A running task's Done is its Stop:
@@ -584,6 +582,30 @@ export function completeFromBlock(taskId) {
   });
 }
 
+/**
+ * A block that went by, resolved as worked: its hours are logged where the
+ * block was — so it stays on the calendar as a record — and the task is
+ * complete, or (`complete` false) keeps what is left and is laid on from now.
+ */
+export function logBlockWorked(taskId, { date, start, minutes, complete }) {
+  return attempt(complete ? 'Done then' : 'Log the time', (p) => {
+    const t = getTask(p, taskId);
+    if (!t) throw new Error('That task is gone.');
+    const m = Math.max(1, Math.round(minutes));
+    addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date, start, hours: m / 60, note: 'Worked' });
+    if (complete) {
+      setTaskField(p, taskId, 'percent', 100);
+      const end = start + m;
+      t.doneAt = `${date}T${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+    }
+    autoAdvance(p);
+  });
+}
+
+/**
+ * A task that already happened: made on time that has gone, it is work done
+ * then — logged at that hour, drawn there ticked, and complete as of its end.
+ */
 export function newTaskDoneAt({ name, day, start, minutes, notes = '' }) {
   let made = null;
   const ok = attempt('Log a task that happened', (p) => {
