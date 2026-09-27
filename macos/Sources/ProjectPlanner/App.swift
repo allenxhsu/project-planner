@@ -136,9 +136,10 @@ enum PlannerApp {
         importedTypes: ["public.xml", "public.comma-separated-values-text", "org.projectplanner.mpp", "org.projectplanner.plan-import"],
         defaultPDFName: "gantt.pdf", repositoryRoot: repositoryRoot,
         minimumWindowSize: CGSize(width: 1100, height: 640), windowFrameAutosaveName: "ProjectEditor",
-        // Pairing with the toolkit Portal: the scheme is toolkit-app.json's
-        // connectScheme. No default origin — the person types the Portal's
-        // address in the sign-in sheet the first time, and it is remembered.
+        // Pairing with the toolkit Portal (Project Planner ▸ Sign in to the
+        // toolkit…): the scheme is toolkit-app.json's connectScheme, and the
+        // origin is the deployed Portal, so the sheet opens with it filled in.
+        portalOrigin: "https://sync-server-76qncr5ydq-uc.a.run.app",
         connectScheme: "project")
 }
 

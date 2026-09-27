@@ -10,7 +10,7 @@ enum MainMenu {
             appMenuExtras: [
                 ShellMenu.web("Appearance…", "view.appearance", ","),
                 ShellMenu.web("Sync…", "view.sync"),
-            ],
+            ] + ShellMenu.portalItems(),
             menus: [
                 ShellMenu.submenu("File", ShellMenu.documentItems() + [
                     ShellMenu.web("New Project…", "file.newProject", "n", [.command, .shift]),
