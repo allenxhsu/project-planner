@@ -97,7 +97,8 @@ deadlines, over-allocation, tasks with no predecessor or resource, late tasks
 
 ## Files
 
-- `plan.project.json` — the native format, plain JSON.
+- `plan.project.json` — the native format, plain JSON. Besides the plan it
+  carries `appliedOps`, the Flow operations it has taken (see [Flow](#flow)).
 - **Microsoft Project files** — `.mpp` and `.mpt` from every Project version
   open directly (`File ▸ Open`), as do `.mpx`, Primavera XER and PMXML, Asta,
   GanttProject, ProjectLibre and Planner files. The reading is done by
@@ -545,6 +546,37 @@ this grows to two people editing one plan at the same time, tasks, links,
 resources and assignments become per-row records under the plan id, while the
 calendar and any baselines stay document-level — they are properties of the
 plan as a whole, and splitting them would buy nothing.
+
+## Flow
+
+The [Flow](../flow) app reads plans from the same `project` workspace, and
+adds to them in two ways only — a task, and time logged by its timer. It never
+rewrites a plan: it writes an **operation**, a write-once record, and the plan
+takes it here.
+
+```json
+{ "id": "op_…", "type": "flow.op", "op": "addTask", "plan": "plan_…", "at": 1790564064142,
+  "origin": "…", "me": "Ana", "task": { "id": "t_flow_…", "name": "Write the launch post", "work": 3, "deadline": null } }
+{ "id": "op_…", "type": "flow.op", "op": "timesheet", "plan": "plan_…", "at": 1790564064142,
+  "origin": "…", "me": "Ana", "task": "t_flow_…", "date": "2026-09-28", "start": 555, "hours": 1.25, "note": "Flow timer" }
+```
+
+- **addTask** appends the task at the end of the plan, at outline level 1,
+  with Flow's own id (so it is the same task in both apps), open for as many
+  days as its hours need. **timesheet** is a timesheet line on that task.
+  Both go to the resource named `me` (case and spaces ignored) when the plan
+  has one, else to no one; no resource is ever added.
+- It is an ordinary edit. The open plan takes it as an undoable change on top
+  of whatever is on screen — nothing unsaved is replaced — and it is autosaved
+  and synced like any other; a plan on the shelf is read, changed and written
+  back. This happens when the app starts and after every sync that brings
+  something in.
+- **Once.** A plan records what it took in `appliedOps: [{ id, at }]`, kept
+  90 days, so a re-sync or another device never applies one twice (an
+  operation written more than 90 days ago is no longer applied). One for a
+  task that has since gone is skipped and still recorded; one for a plan this
+  device does not have yet waits for it; a kind of operation this version
+  does not know is left for one that does.
 
 ## Keys
 
