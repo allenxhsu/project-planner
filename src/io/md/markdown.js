@@ -410,19 +410,54 @@ function render(src, opts, blocks, base = 0) {
     let i = 0;
     // Tracks which list wrapper is currently open, so other block types can
     // close it correctly instead of leaking an unbalanced tag.
-    let listTag = null;
-    const closeList = () => {
-        if (listTag) {
-            out.push(`</${listTag}>`);
-            listTag = null;
+    // A stack, not a single tag: a list item indented past the one above it is
+    // inside it, and flattening that loses the only structure a checklist has.
+    // A nested list goes *inside* its parent `<li>`, which is why an item's
+    // `</li>` is not written when the item is — it is left open until the next
+    // item at the same depth arrives, or the list ends.
+    const stack = [];
+    let itemOpen = false;
+    const endItem = () => {
+        if (itemOpen) {
+            // Appended to the line just written rather than pushed as its own, so a
+            // flat list renders byte-for-byte as it did before items could nest.
+            out[out.length - 1] += '</li>';
+            itemOpen = false;
         }
     };
-    const openList = (tag, cls = '', start = 1) => {
-        if (listTag !== tag) {
-            closeList();
-            const attrs = (cls ? ` class="${cls}"` : '') + (start !== 1 ? ` start="${start}"` : '');
-            out.push(`<${tag}${attrs}>`);
-            listTag = tag;
+    /** Close every list deeper than `indent`, landing back inside its parent item. */
+    const closeDeeperThan = (indent) => {
+        while (stack.length > 0 && stack[stack.length - 1].indent > indent) {
+            endItem();
+            out.push(`</${stack.pop().tag}>`);
+            // Whatever we have come back out into is an item that is still open.
+            itemOpen = stack.length > 0;
+        }
+    };
+    const closeList = () => {
+        closeDeeperThan(-1);
+        endItem();
+    };
+    const openList = (tag, indent, cls = '', start = 1) => {
+        closeDeeperThan(indent);
+        const attrs = () => (cls ? ` class="${cls}"` : '') + (start !== 1 ? ` start="${start}"` : '');
+        const top = stack[stack.length - 1];
+        if (!top || top.indent < indent) {
+            // Deeper than anything open: a new list, nested in the current item.
+            out.push(`<${tag}${attrs()}>`);
+            stack.push({ tag, indent });
+            itemOpen = false;
+        }
+        else if (top.tag !== tag) {
+            // Same depth, different kind — bullets giving way to numbers.
+            endItem();
+            out.push(`</${stack.pop().tag}>`);
+            out.push(`<${tag}${attrs()}>`);
+            stack.push({ tag, indent });
+            itemOpen = false;
+        }
+        else {
+            endItem(); // A sibling of the item above it.
         }
     };
     // Indented lines after a list item continue that item, as in CommonMark.
@@ -575,27 +610,30 @@ function render(src, opts, blocks, base = 0) {
         // Checklists are matched before plain bullets, since `- [ ] x` is also a bullet.
         const task = parseTaskLine(line);
         if (task) {
-            openList('ul', 'task-list');
+            openList('ul', indentOf(line), 'task-list');
             const { checked } = task;
             i++;
             const box = opts.liveTasks ? `${checked ? ' checked' : ''} data-task-line="${base + start}"` : ` disabled${checked ? ' checked' : ''}`;
-            out.push(`<li class="task${checked ? ' done' : ''}"><input type="checkbox"${box} /><span>${itemText('task', start, task.text)}</span></li>`);
+            out.push(`<li class="task${checked ? ' done' : ''}"><input type="checkbox"${box} /><span>${itemText('task', start, task.text)}</span>`);
+            itemOpen = true;
             continue;
         }
         const bullet = line.match(BULLET_LINE);
         if (bullet) {
-            openList('ul');
+            openList('ul', indentOf(line));
             i++;
-            out.push(`<li>${itemText('bullet', start, bullet[1])}</li>`);
+            out.push(`<li>${itemText('bullet', start, bullet[1])}`);
+            itemOpen = true;
             continue;
         }
         const numbered = line.match(NUMBERED_LINE);
         if (numbered) {
             // The first number sets where the list starts, so "3." after an image
             // keeps counting instead of restarting at 1.
-            openList('ol', '', Number(numbered[1]));
+            openList('ol', indentOf(line), '', Number(numbered[1]));
             i++;
-            out.push(`<li>${itemText('numbered', start, numbered[2])}</li>`);
+            out.push(`<li>${itemText('numbered', start, numbered[2])}`);
+            itemOpen = true;
             continue;
         }
         // Paragraph: gather until a blank line or the start of another block.
