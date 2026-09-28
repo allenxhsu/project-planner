@@ -25,6 +25,7 @@ import { freshCopy } from '../model/setup.js';
 import { slotsOf } from '../model/model.js';
 import { parseTime } from '../model/agenda.js';
 import { readProfile } from '../io/profile.js';
+import { OP_TYPE, pendingOps, applyOps, applyToRecord } from '../model/flowops.js';
 
 export const WORKSPACE = 'project';
 /** This app's id on the Portal, which is the same word. */
@@ -323,6 +324,8 @@ export async function initSync({ preferStored = false } = {}) {
   await seedTimeBlocks();
   await ensureAnySchedule();
   await spreadTimeBlocks();
+  // What Flow wrote while this app was closed.
+  await applyFlowOps();
 }
 
 /** Point the document at the open plan, reading what the store already holds. */
@@ -461,7 +464,11 @@ export async function syncNow() {
   await commit();
   try {
     const result = await engine.sync();
-    if (result.applied.length) await adopt(result.applied);
+    if (result.applied.length) {
+      await adopt(result.applied);
+      // After adopt: the plan on screen is the newest one before anything is added to it.
+      await applyFlowOps();
+    }
     lastStatus = { ...engine.status };
     // The readout says how many records are here and how many are there; a
     // sync is exactly when that can have changed.
@@ -551,6 +558,67 @@ function load(remote) {
   } finally {
     adopting = false;
   }
+}
+
+// ------------------------------------------------------------ Flow's operations
+//
+// The Flow app never rewrites a plan: it writes `flow.op` records into this
+// workspace (a task to add, time to log), and each plan takes them here, once,
+// through the same edits a person makes (model/flowops.js). The open plan
+// takes them as an undoable edit of what is on screen, so nothing unsaved is
+// lost and the change is autosaved and synced like any other; a plan on the
+// shelf is read, changed and written back newer, as patchPlan does. An
+// operation for a plan this device does not have yet waits for it.
+
+let flowOpsRun = null;
+
+/** Apply what Flow wrote. Runs at startup and after every sync that brought something in. */
+export function applyFlowOps() {
+  // One pass at a time: a second caller waits for the one under way, then looks again.
+  const run = (flowOpsRun || Promise.resolve()).then(applyFlowOpsNow, applyFlowOpsNow);
+  flowOpsRun = run.finally(() => { if (flowOpsRun === run) flowOpsRun = null; });
+  return run;
+}
+
+async function applyFlowOpsNow() {
+  if (!recordStore) return 0;
+  const all = await recordStore.all();
+  const ops = all.filter((r) => r && r.type === OP_TYPE && !r.deletedAt);
+  if (!ops.length) return 0;
+  const now = Date.now();
+  let count = 0;
+
+  // The open plan, live. Whatever is unsaved stays: this is one more edit on top.
+  const open = pendingOps(ops, store.project, { now });
+  if (open.length) {
+    const applied = tryCommit('Changes from Flow', (p) => applyOps(p, open, { now }).applied);
+    if (applied?.length) { count += applied.length; await commit(); }
+  }
+
+  // Plans on the shelf. The open one is never written from here: its record
+  // follows what is on screen, and writing under it would lose unsaved work.
+  const plans = new Set(ops.map((o) => o.plan));
+  let shelf = 0;
+  for (const listed of all) {
+    if (!listed || listed.type !== 'document' || listed.deletedAt || !plans.has(listed.id) || listed.id === store.project.id) continue;
+    const record = await recordStore.get(listed.id);          // as it is now, not as it was listed
+    if (!record || record.deletedAt || typeof record.body !== 'string' || record.id === store.project.id) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    const pending = pendingOps(ops, project, { now });
+    if (!pending.length) continue;
+    const next = applyToRecord(record, pending, { now, origin: deviceId() });
+    if (!next) continue;
+    await recordStore.put([next]);
+    shelf += pending.length;
+  }
+  count += shelf;
+  if (shelf && syncConfigured()) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => { void syncNow(); }, AUTOSAVE_MS);
+  }
+  if (count) set({ hint: `Applied ${count} change${count === 1 ? '' : 's'} from Flow.` });
+  return count;
 }
 
 // ---------------------------------------------------------------- people
