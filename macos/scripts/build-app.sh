@@ -70,6 +70,11 @@ cp -R "$REPO/src" "$WEB/src"
 mkdir -p "$WEB/ui-kit"
 for part in css js fonts; do cp -R "$REPO/ui-kit/$part" "$WEB/ui-kit/$part"; done
 [ -d "$REPO/sync-kit/js" ] && mkdir -p "$WEB/sync-kit" && cp -R "$REPO/sync-kit/js" "$WEB/sync-kit/js"
+# Which commit this is, so the deploy check and the shell prompt can tell
+# whether the installed Mac app is behind the repository and the Portal.
+SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo)"
+DIRTY="$( [ -n "$(git -C "$REPO" status --porcelain --untracked-files=no 2>/dev/null)" ] && echo true || echo false)"
+printf '{"id":"project","sha":"%s","dirty":%s,"builtAt":"%s"}\n' "$SHA" "$DIRTY" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$WEB/build.json"
 
 # The Microsoft Project converter: MPXJ and its Java runtime (about 180 MB),
 # when tools/setup-converter.sh has fetched them. CONVERTER=0 leaves it out.
