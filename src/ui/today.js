@@ -71,6 +71,10 @@ export function renderToday(root) {
   const hiddenPlan = (planId) => visibilityOf((entries.find((x) => x.project.id === planId) || history.find((x) => x.project.id === planId))?.project.workspaceId) === 'hide';
   const shownEntries = entries.filter((e) => !hiddenPlan(e.project.id));
 
+  // Every block laid on this day, hidden plans included: the hour column on
+  // the right draws those as "Busy" rather than leaving a gap.
+  const onDay = all.blocks.filter((b) => b.day === day);
+
   // Today's tasks: what the calendar laid on this day, one row a task. The
   // selection is model/dayplan.js so that the record other apps read (Flow's
   // task list) is this list and not a second opinion about it.
