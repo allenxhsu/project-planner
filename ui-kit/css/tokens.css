@@ -53,8 +53,8 @@
   --sc-app-hypermail-rgb: 232 115 209;
   --sc-app-bom: #ced24b;
   --sc-app-bom-rgb: 206 210 75;
-  --sc-app-habit: #eb7aa0;
-  --sc-app-habit-rgb: 235 122 160;
+  --sc-app-flow: #e9677d;
+  --sc-app-flow-rgb: 233 103 125;
   --sc-app: var(--sc-accent);
   --sc-app-rgb: var(--sc-accent-rgb);
 }
@@ -285,7 +285,7 @@
   --sc-app-rgb: var(--sc-app-bom-rgb);
 }
 
-[data-app="habit"] {
-  --sc-app: var(--sc-app-habit);
-  --sc-app-rgb: var(--sc-app-habit-rgb);
+[data-app="flow"] {
+  --sc-app: var(--sc-app-flow);
+  --sc-app-rgb: var(--sc-app-flow-rgb);
 }

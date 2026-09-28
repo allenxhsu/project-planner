@@ -25,7 +25,7 @@ export const RACE_LABELS = { steel: 'Steel', crystal: 'Crystal', chitin: 'Chitin
 export const APPEARANCES = ['system', 'light', 'dark'];
 export const APPEARANCE_LABELS = { system: 'Auto', light: 'Light', dark: 'Dark' };
 /** Every app in the suite, i.e. the valid data-app values. Colours live in tokens/tokens.json. */
-export const APPS = ['heptabase', 'idef0', 'sysml', 'project', 'pyramid', 'profiler', 'hypermail', 'metropolis', 'habit', 'bom'];
+export const APPS = ['heptabase', 'idef0', 'sysml', 'project', 'pyramid', 'profiler', 'hypermail', 'metropolis', 'flow', 'bom'];
 
 /**
  * Values written by the first release of the kit. They are translated on read

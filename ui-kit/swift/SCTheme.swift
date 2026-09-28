@@ -152,7 +152,7 @@ public enum SCAppColor {
     public static let profiler = Color(red: 0.757, green: 0.451, blue: 0.871)
     public static let hypermail = Color(red: 0.910, green: 0.451, blue: 0.820)
     public static let bom = Color(red: 0.808, green: 0.824, blue: 0.294)
-    public static let habit = Color(red: 0.922, green: 0.478, blue: 0.627)
+    public static let flow = Color(red: 0.914, green: 0.404, blue: 0.490)
 }
 
 /// Each app as tokens.json lists it. The Launcher and any native app switcher read names,
@@ -175,7 +175,7 @@ public enum SCApps {
         SCAppInfo(id: "profiler", name: "Profiler", mark: "PR", color: SCAppColor.profiler),
         SCAppInfo(id: "hypermail", name: "Hypermail", mark: "HM", color: SCAppColor.hypermail),
         SCAppInfo(id: "bom", name: "BOM Manager", mark: "BM", color: SCAppColor.bom),
-        SCAppInfo(id: "habit", name: "Habit", mark: "HA", color: SCAppColor.habit),
+        SCAppInfo(id: "flow", name: "Flow", mark: "FL", color: SCAppColor.flow),
     ]
     public static func app(_ id: String) -> SCAppInfo? { all.first { $0.id == id } }
 }

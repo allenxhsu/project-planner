@@ -11,7 +11,7 @@ export type AppId =
   | 'profiler'
   | 'hypermail'
   | 'metropolis'
-  | 'habit'
+  | 'flow'
   | 'bom';
 
 export interface ThemeState {
