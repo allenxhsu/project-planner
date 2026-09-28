@@ -2,7 +2,7 @@
 // Flow reads. Pure, so it is tested directly rather than through a render.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayRows, agendaRecord, sameDay, caughtUp } from '../src/model/dayplan.js';
+import { dayRows, agendaRecord, sameDay, caughtUp, burstKeys } from '../src/model/dayplan.js';
 
 const DAY = 10;
 const blocks = [
@@ -81,4 +81,45 @@ test('a task with no deadline is never filed as catching up', () => {
   assert.equal(caughtUp(NaN, 1000), false);
   assert.equal(caughtUp(undefined, 1000), false);
   assert.equal(caughtUp(null, 1000), false);
+});
+
+test('a burst of ticks a few minutes apart is catching up, whatever the deadlines', () => {
+  // Nineteen tasks between 9:03 and 9:07 is somebody going down a list.
+  const at = (h, m) => h * 60 + m;
+  const batch = Array.from({ length: 19 }, (_, i) => ({ key: `t${i}`, at: at(9, 3) + Math.floor(i / 5) }));
+  const hit = burstKeys(batch);
+  assert.equal(hit.size, 19, 'every tick in the burst');
+});
+
+test('a real morning is not a burst', () => {
+  const at = (h, m) => h * 60 + m;
+  const spread = [
+    { key: 'a', at: at(9, 10) }, { key: 'b', at: at(10, 40) },
+    { key: 'c', at: at(12, 5) }, { key: 'd', at: at(15, 30) },
+  ];
+  assert.equal(burstKeys(spread).size, 0, 'four things finished across a day is a day of work');
+});
+
+test('the burst is the run, not the whole day', () => {
+  const at = (h, m) => h * 60 + m;
+  const mixed = [
+    ...Array.from({ length: 6 }, (_, i) => ({ key: `bulk${i}`, at: at(9, 3) + i })),
+    { key: 'real', at: at(14, 20) },
+  ];
+  const hit = burstKeys(mixed);
+  assert.equal(hit.size, 6);
+  assert.equal(hit.has('real'), false, 'the afternoon task stands on its own');
+});
+
+test('a completion with no time of day cannot be judged and is left alone', () => {
+  const none = Array.from({ length: 9 }, (_, i) => ({ key: `t${i}`, at: null }));
+  assert.equal(burstKeys(none).size, 0);
+});
+
+test('just under the threshold is still a day of work', () => {
+  const at = (h, m) => h * 60 + m;
+  const four = Array.from({ length: 4 }, (_, i) => ({ key: `t${i}`, at: at(9, 0) + i }));
+  assert.equal(burstKeys(four).size, 0, 'four in five minutes is not a burst');
+  const five = Array.from({ length: 5 }, (_, i) => ({ key: `t${i}`, at: at(9, 0) + i }));
+  assert.equal(burstKeys(five).size, 5, 'five is');
 });

@@ -16,7 +16,7 @@ import * as act from '../state/actions.js';
 import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
 import { formatClock, hoursLeft, parseTime } from '../model/agenda.js';
 import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
-import { dayRows, caughtUp } from '../model/dayplan.js';
+import { dayRows, caughtUp, burstKeys } from '../model/dayplan.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
 import { taskSheet, meetingSheet } from './blockmenu.js';
 
@@ -100,14 +100,25 @@ export function renderToday(root) {
   // the ones that were only being caught up on. Ticking off a year of old work
   // in one sitting is housekeeping, and a day that reads as nineteen
   // achievements when it held none is worse than a day that says nothing.
-  const finished = [];
-  const caught = [];
+  const doneToday = [];
   for (const e of shownEntries) {
     e.project.tasks.forEach((task, i) => {
       const info = e.schedule.tasks[task.id];
       if (!info || isSummary(e.project, i) || doneDay(task) !== iso || info.percent !== 100) return;
-      (caughtUp(task.deadline ? toDay(task.deadline) : NaN, day) ? caught : finished).push({ e, task, info });
+      doneToday.push({ e, task, info, key: `${e.project.id}|${task.id}` });
     });
+  }
+  // Two ways to be catching up: the work was long overdue, or it was one of a
+  // burst of ticks a few minutes apart. The second catches what the first
+  // misses — a recent deadline ticked off while going down a list.
+  const burst = burstKeys(doneToday.map((x) => ({
+    key: x.key, at: x.task.doneAt?.length > 10 ? parseTime(x.task.doneAt.slice(11)) : null,
+  })));
+  const finished = [];
+  const caught = [];
+  for (const x of doneToday) {
+    const stale = caughtUp(x.task.deadline ? toDay(x.task.deadline) : NaN, day);
+    (stale || burst.has(x.key) ? caught : finished).push(x);
   }
 
   const pane = el('div', { class: 'today-pane' });
@@ -146,7 +157,7 @@ export function renderToday(root) {
   // what the day was; the tasks are still in their plans, and still done.
   if (caught.length) {
     main.append(el('p', { class: 'today-caught sc-muted',
-      text: `Also caught up on ${caught.length} task${caught.length === 1 ? '' : 's'} whose deadline passed more than six months ago.` }));
+      text: `Also ticked off ${caught.length} task${caught.length === 1 ? '' : 's'} that were being caught up on, not done today.` }));
   }
 
   if (late.length) {

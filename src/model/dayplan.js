@@ -88,3 +88,35 @@ export function caughtUp(deadlineDay, day, { staleAfter = STALE_DONE_DAYS } = {}
   if (!Number.isFinite(deadlineDay) || !Number.isFinite(day)) return false;
   return day - deadlineDay > staleAfter;
 }
+
+/** A burst: this many completions inside this many minutes is catching up, not a morning's work. */
+export const BURST_COUNT = 5;
+export const BURST_MINUTES = 10;
+
+/**
+ * The completions that arrived in a burst.
+ *
+ * The deadline rule misses the other half of it. Nineteen tasks ticked
+ * between 9:03 and 9:07 is somebody going down a list, and the ones with
+ * recent deadlines are no more "done today" than the ones from last March —
+ * nothing was done, a box was checked. What gives it away is not the age of
+ * the work but the rate of the ticking, so that is what this reads.
+ *
+ * A window is any run of completions within `minutes` of its first; when a
+ * window holds `count` or more, every completion in it is catching up. Ticking
+ * off four things after a real morning is not a burst, and a task whose
+ * completion carries no time of day cannot be judged and is left alone.
+ *
+ * @param entries `{ key, at }` — `at` in minutes into the day, or null.
+ * @returns the keys that were part of a burst.
+ */
+export function burstKeys(entries, { count = BURST_COUNT, minutes = BURST_MINUTES } = {}) {
+  const timed = (entries || []).filter((e) => e && Number.isFinite(e.at)).sort((a, b) => a.at - b.at);
+  const hit = new Set();
+  for (let i = 0; i < timed.length; i++) {
+    let j = i;
+    while (j + 1 < timed.length && timed[j + 1].at - timed[i].at <= minutes) j++;
+    if (j - i + 1 >= count) for (let k = i; k <= j; k++) hit.add(timed[k].key);
+  }
+  return hit;
+}
