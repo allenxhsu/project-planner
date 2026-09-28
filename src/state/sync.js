@@ -20,6 +20,7 @@ import { uid } from '../util.js';
 import { hosted as hostedPage } from '../host.js';
 import { today } from '../model/calendar.js';
 import { serialize, parse } from '../io/json.js';
+import { agendaRecord, sameDay } from '../model/dayplan.js';
 import { computeSchedule } from '../model/schedule.js';
 import { freshCopy } from '../model/setup.js';
 import { slotsOf } from '../model/model.js';
@@ -1481,6 +1482,30 @@ export async function deletePlan(id) {
   const at = Math.max(Date.now(), record.updatedAt + 1);
   await recordStore.put([{ ...record, body: '', deletedAt: at, updatedAt: at, origin: deviceId() }]);
   if (syncConfigured()) void syncNow();
+}
+
+/**
+ * Publish one day's plan, so another app can show the same list.
+ *
+ * Flow's task list has to be this app's Today, in this app's order. A
+ * schedule is the output of the whole planner, so the only way another app
+ * can agree with it is to be told; reimplementing it there would disagree
+ * within a week. So the day goes out as an ordinary record, like a plan or a
+ * person, and Flow reads it.
+ *
+ * Written only when the day actually says something new: the layout is
+ * recomputed on every edit, and a record pushed several times a minute would
+ * wake every other device for nothing.
+ */
+export async function publishAgenda(day, rows, person = '') {
+  if (!recordStore || !day) return false;
+  const next = agendaRecord({ day, rows, person, at: Date.now(), origin: deviceId() });
+  const existing = await recordStore.get(next.id);
+  if (existing && !existing.deletedAt && sameDay(existing, next)) return false;
+  next.updatedAt = Math.max(next.updatedAt, (existing?.updatedAt ?? 0) + 1);
+  await recordStore.put([next]);
+  if (syncConfigured()) void syncNow();
+  return true;
 }
 
 /** A plan on the shelf, read without opening it. Null when it cannot be read. */

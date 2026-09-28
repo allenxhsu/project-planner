@@ -16,6 +16,7 @@ import * as act from '../state/actions.js';
 import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
 import { formatClock, hoursLeft, parseTime } from '../model/agenda.js';
 import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
+import { dayRows, caughtUp } from '../model/dayplan.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
 import { taskSheet, meetingSheet } from './blockmenu.js';
 
@@ -70,18 +71,17 @@ export function renderToday(root) {
   const hiddenPlan = (planId) => visibilityOf((entries.find((x) => x.project.id === planId) || history.find((x) => x.project.id === planId))?.project.workspaceId) === 'hide';
   const shownEntries = entries.filter((e) => !hiddenPlan(e.project.id));
 
-  // Today's tasks: what the calendar laid on this day, one row a task.
-  const onDay = all.blocks.filter((b) => b.day === day);
-  const byTask = new Map();
-  for (const b of onDay.filter((x) => !hiddenPlan(x.planId))) {
-    const key = `${b.planId}|${b.taskId}`;
-    const row = byTask.get(key) || { planId: b.planId, taskId: b.taskId, minutes: 0, first: b.start };
-    row.minutes += b.minutes;
-    row.first = Math.min(row.first, b.start);
-    byTask.set(key, row);
-  }
-  // A task finished today is listed under Completed today, not here as well.
-  const todays = [...byTask.values()].filter((r) => (find(r.planId, r.taskId)?.info?.percent ?? 0) < 100).sort((a, b) => a.first - b.first);
+  // Today's tasks: what the calendar laid on this day, one row a task. The
+  // selection is model/dayplan.js so that the record other apps read (Flow's
+  // task list) is this list and not a second opinion about it.
+  const rowsToday = dayRows(all.blocks, day, {
+    hidden: hiddenPlan,
+    percentOf: (planId, taskId) => find(planId, taskId)?.info?.percent ?? 0,
+  });
+  // Say what the day is, so Flow's task list can be this list rather than a
+  // second opinion about it. Only when it changed; see publishAgenda.
+  void import('../state/sync.js').then((m) => m.publishAgenda?.(iso, rowsToday)).catch(() => {});
+  const todays = rowsToday.map((r) => ({ planId: r.plan, taskId: r.task, minutes: r.minutes, first: r.start }));
 
   // Past deadline: not done, not archived, due before this day — anywhere.
   const past = [];
@@ -96,13 +96,17 @@ export function renderToday(root) {
   past.sort((a, b) => a.task.deadline.localeCompare(b.task.deadline));
   const late = (all.late || []).filter((l) => l.deadline >= day && !hiddenPlan(l.planId));
 
-  // Completed on this day: every task, anywhere, finished that day.
+  // Completed on this day: every task, anywhere, finished that day — except
+  // the ones that were only being caught up on. Ticking off a year of old work
+  // in one sitting is housekeeping, and a day that reads as nineteen
+  // achievements when it held none is worse than a day that says nothing.
   const finished = [];
+  const caught = [];
   for (const e of shownEntries) {
     e.project.tasks.forEach((task, i) => {
       const info = e.schedule.tasks[task.id];
       if (!info || isSummary(e.project, i) || doneDay(task) !== iso || info.percent !== 100) return;
-      finished.push({ e, task, info });
+      (caughtUp(task.deadline ? toDay(task.deadline) : NaN, day) ? caught : finished).push({ e, task, info });
     });
   }
 
@@ -137,6 +141,13 @@ export function renderToday(root) {
       extra: task.doneAt.length > 10 ? `done ${formatClock(parseTime(task.doneAt.slice(11)))}` : null,
     })),
     'Nothing finished yet. Tick a task and it lands here.');
+
+  // Said, not listed. Ticking off old work is worth acknowledging and is not
+  // what the day was; the tasks are still in their plans, and still done.
+  if (caught.length) {
+    main.append(el('p', { class: 'today-caught sc-muted',
+      text: `Also caught up on ${caught.length} task${caught.length === 1 ? '' : 's'} whose deadline passed more than six months ago.` }));
+  }
 
   if (late.length) {
     main.append(el('h2', { class: 'today-section is-warning', text: 'Will be late' }));
