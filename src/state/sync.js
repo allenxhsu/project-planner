@@ -380,9 +380,51 @@ export async function applySettings(next) {
     // nothing against another; a client that keeps them uploads nothing at all.
     for (const key of SYNC_CURSOR_KEYS) await recordStore.setMeta(key, 0);
   }
+  // Meeting a server for the first time: what is here now, so that what only
+  // the server had can be told apart once the first sync has brought it in.
+  const firstContact = urlChanged && settings.url && settings.enabled && recordStore;
+  const before = firstContact ? new Set((await recordStore.all()).filter((r) => !r.deletedAt).map((r) => r.id)) : null;
   rebuild();
-  if (syncConfigured()) await syncNow();
+  if (syncConfigured()) {
+    const result = await syncNow();
+    if (before && result) await reviewFirstContact(before);
+  }
   announce();
+}
+
+/**
+ * After the first sync with a server: what arrived that this device did not
+ * have. Two copies that were never synced — the Mac and the Portal, each with
+ * its own import — do not share ids, so merging them keeps both: every
+ * project twice. Say what came in, and let this device's copy be the one to
+ * keep. Removing is a tombstone like any delete, so the server's history
+ * (`cli.js restore`) can bring it back. Places and stats are per device and
+ * are left alone.
+ */
+const FIRST_CONTACT_TYPES = new Set(['document', 'workspace', 'timeblock', 'person']);
+export async function reviewFirstContact(before) {
+  const arrived = (await recordStore.all()).filter((r) => !r.deletedAt && !before.has(r.id) && FIRST_CONTACT_TYPES.has(r.type));
+  if (!arrived.length) { set({ hint: 'Synced: this device’s copy is on the server now.' }); return; }
+  const plans = arrived.filter((r) => r.type === 'document');
+  const others = arrived.length - plans.length;
+  const { open, foot, button } = await import('../ui/dialog.js');
+  const { el } = await import('../util.js');
+  const remove = await open('The server had its own copy', (close) => [
+    el('p', { text: `The first sync brought in ${plans.length} project${plans.length === 1 ? '' : 's'}${others ? ` and ${others} other record${others === 1 ? '' : 's'} (workspaces, schedules, people)` : ''} that this device did not have. If the server’s copy is an older one, they are duplicates or out of date.` }),
+    plans.length ? el('ul', { class: 'first-contact-list' }, ...plans.slice(0, 40).map((r) => el('li', { text: r.name || r.id })),
+      plans.length > 40 ? el('li', { class: 'sc-faint', text: `and ${plans.length - 40} more` }) : null) : null,
+    el('p', { class: 'sc-faint small', text: 'Remove them to keep only this device’s copy, everywhere. The server keeps its history, so a removal can be restored.' }),
+    foot(button('Keep both', () => close(false)), el('span', { class: 'sc-spacer' }),
+      button(`Remove what only the server had (${arrived.length})`, () => close(true), 'sc-button--danger')),
+  ]);
+  if (!remove) { set({ hint: `Kept both: ${arrived.length} record${arrived.length === 1 ? '' : 's'} from the server are here too.` }); return; }
+  const at = Date.now();
+  await recordStore.put(arrived.map((r) => ({ ...r, ...(r.type === 'document' ? { body: '' } : {}), deletedAt: Math.max(at, r.updatedAt + 1), updatedAt: Math.max(at, r.updatedAt + 1), origin: deviceId() })));
+  await syncNow();
+  set({ hint: `Removed ${arrived.length} record${arrived.length === 1 ? '' : 's'} only the server had. This device’s copy is the one everywhere now.` });
+  // What reads the shelf reads it again: the task list, the calendar's plans, People, the sidebar.
+  const [tasks, cal, people, side] = await Promise.all([import('../ui/alltasks.js'), import('../ui/calendar.js'), import('../ui/people.js'), import('../ui/sidebar.js')]);
+  void tasks.reloadAllTasks(); void cal.reloadCalendarPlans(); void people.reloadPeople(); void side.refreshSidebar?.();
 }
 
 function rebuild() {
