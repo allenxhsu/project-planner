@@ -14,7 +14,7 @@ import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
-import { formatClock, hoursLeft, parseTime } from '../model/agenda.js';
+import { formatClock, hoursLeft, parseTime, agendaOf } from '../model/agenda.js';
 import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
 import { dayRows, caughtUp, burstKeys } from '../model/dayplan.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
@@ -50,7 +50,7 @@ function taskRow({ planId, planName, task, info, extra, showPlan }) {
     el('span', { class: 'today-name' },
       urgencyOf(task) !== 'normal' ? el('span', { class: `urg-dot urg-${urgencyOf(task)}`, title: URGENCIES[urgencyOf(task)].label }) : null,
       task.name),
-    due ? el('span', { class: `today-due${overdue ? ' is-overdue' : ''}`, text: `${WEEKDAY_NAMES[weekday(toDay(due))].slice(0, 2)} ${formatDate(due, 'day')}` }) : null,
+    due ? el('span', { class: `today-due${overdue ? ' is-overdue' : ''}`, text: `${WEEKDAY_NAMES[weekday(toDay(due))].slice(0, 2)} ${formatDate(due, 'day')}${due.slice(0, 4) !== today().slice(0, 4) ? ` ${due.slice(0, 4)}` : ''}` }) : null,
     extra ? el('span', { class: 'sc-faint today-hours', text: extra }) : null,
     showPlan ? el('span', { class: 'sc-pill today-plan', text: planName }) : null);
 }
@@ -98,6 +98,14 @@ export function renderToday(root) {
     });
   }
   past.sort((a, b) => a.task.deadline.localeCompare(b.task.deadline));
+  // What is still being worked is listed; what is not is folded into a line.
+  // A task off the calendar (not auto-scheduled), or a month and more past
+  // its deadline, is old business — an imported course from two years ago
+  // — and fifty rows of it bury the two overdue things that matter today.
+  const STALE_DAYS = 30;
+  const isCurrent = ({ e, task }) => agendaOf(e.project, task).show && day - toDay(task.deadline) <= STALE_DAYS;
+  const pastNow = past.filter(isCurrent);
+  const pastOld = past.filter((x) => !isCurrent(x));
   const late = (all.late || []).filter((l) => l.deadline >= day && !hiddenPlan(l.planId));
 
   // Completed on this day: every task, anywhere, finished that day — except
@@ -173,10 +181,18 @@ export function renderToday(root) {
       onclick: (e) => { e.stopPropagation(); void import('./resolve.js').then((m) => m.resolveLate({ planId: l.planId, taskId: l.taskId })); } })))));
   }
 
-  section('Tasks past deadline', past.map(({ e, task, info }) => taskRow({
+  const pastRow = ({ e, task, info }) => taskRow({
     planId: e.project.id, planName: e.project.name, task, info,
     extra: `${Math.round(hoursLeft(e.project, info, task) * 10) / 10}h left`, showPlan: many,
-  })), 'Nothing is past its deadline.');
+  });
+  section('Tasks past deadline', pastNow.map(pastRow), pastOld.length ? 'Nothing on the calendar is past its deadline.' : 'Nothing is past its deadline.');
+  // The old ones: one line, which opens into the list for when they are wanted.
+  if (pastOld.length) {
+    const plans = new Set(pastOld.map((x) => x.e.project.id)).size;
+    main.append(el('details', { class: 'today-old' },
+      el('summary', { class: 'sc-muted', text: `And ${pastOld.length} older task${pastOld.length === 1 ? '' : 's'} past deadline in ${plans} project${plans === 1 ? '' : 's'} — off the calendar, or more than ${STALE_DAYS} days overdue.` }),
+      el('ul', { class: 'today-list' }, ...pastOld.map(pastRow))));
+  }
 
   // The day beside it: the hours, with the blocks and the meetings on them.
   const side = el('aside', { class: 'today-day' });

@@ -1465,3 +1465,8 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 
 /* First sync with a server (state/sync.js reviewFirstContact) */
 .first-contact-list { max-height: 260px; overflow: auto; margin: 8px 0; padding-left: 20px; font-size: 12px; border: 1px solid var(--sc-line); border-radius: 6px; padding-top: 6px; padding-bottom: 6px; }
+
+/* Agenda: old past-deadline tasks, folded into one line (ui/today.js) */
+.today-old { margin: 6px 0 12px; }
+.today-old > summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+.today-old > summary:hover { color: var(--sc-text); }
