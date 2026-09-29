@@ -790,6 +790,16 @@ export function spawnRoutines(p, todayIso = localToday()) {
       calendar: { ...(r.calendar || {}), show: true, timeBlockIds: [...(r.calendar?.timeBlockIds || [])], pins: [] },
     });
     delete t.calendar.pins;
+    // At a set time: fixed there on its day, for as long as the routine takes (an hour when it does not say).
+    // Fixed, not auto-scheduled: it holds its time and nothing else is laid for it.
+    const setTime = cleanRepeat(r.repeat).at;
+    if (setTime) {
+      t.calendar.show = false;
+      const [h, m] = setTime.split(':').map(Number);
+      const minutes = Math.max(5, Math.min(24 * 60 - (h * 60 + m), Math.round((Number.isFinite(+r.work) && +r.work > 0 ? +r.work : 1) * 60)));
+      setPin(p, t.id, { day: o.day, start: h * 60 + m, minutes });
+      t.activity = (t.activity || []).slice(0, 1);
+    }
     made.push(t);
     r.repeat = { ...cleanRepeat(r.repeat), made: !r.repeat.made || o.day > r.repeat.made ? o.day : r.repeat.made };
   }

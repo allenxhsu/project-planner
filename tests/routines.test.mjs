@@ -70,3 +70,30 @@ test('a routine and its occurrences survive a save', () => {
   assert.equal(o.occurrence, '2026-10-02');
   assert.equal(spawnRoutines(back, '2026-09-29').length, 0, 'read back, still not made twice');
 });
+
+test('at a set time: each occurrence is fixed there on its day, for as long as the routine takes', () => {
+  const p = createProject('Work', '2026-09-01');
+  const t = insertTask(p, 0, { name: 'Clear flags', duration: 1, level: 1 });
+  setTaskField(p, t.id, 'work', '0.5');
+  setTaskField(p, t.id, 'repeat', { freq: 'weekly', days: [1], from: '2026-09-28', at: '09:00' });
+  assert.equal(describeRepeat(t.repeat), 'Every week on Mon at 9:00 AM');
+  const made = spawnRoutines(p, '2026-09-28');
+  assert.deepEqual(made.map((x) => x.calendar.pins.map((pin) => [pin.day, pin.start, pin.minutes])),
+    [[['2026-09-28', 540, 30]], [['2026-10-05', 540, 30]], [['2026-10-12', 540, 30]]]);
+  assert.ok(made.every((x) => x.calendar.show === false), 'fixed instead of auto-scheduled');
+  const back = parse(serialize(p)).project;
+  assert.equal(back.tasks.find((x) => x.id === t.id).repeat.at, '09:00', 'the time is kept');
+});
+
+test('at a set time, an occurrence on a day already gone is not made', () => {
+  const p = createProject('Work', '2026-09-01');
+  const t = insertTask(p, 0, { name: 'Standup notes', duration: 1, level: 1 });
+  setTaskField(p, t.id, 'repeat', { freq: 'weekly', days: [1], from: '2026-09-21', at: '09:00' });
+  // Tuesday: Monday's has gone by at its time; the next Monday is the first.
+  assert.deepEqual(spawnRoutines(p, '2026-09-29').map((x) => x.occurrence), ['2026-10-05', '2026-10-12']);
+  // Without a time, this week's is still made, to be done by Sunday.
+  const q = createProject('Work', '2026-09-01');
+  const u = insertTask(q, 0, { name: 'Weekly review', duration: 1, level: 1 });
+  setTaskField(q, u.id, 'repeat', { freq: 'weekly', days: [1], from: '2026-09-21' });
+  assert.equal(spawnRoutines(q, '2026-09-29')[0].occurrence, '2026-09-28');
+});

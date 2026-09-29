@@ -37,6 +37,8 @@ export function cleanRepeat(raw) {
     const days = [...new Set((Array.isArray(raw.days) ? raw.days : []).map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
     out.days = days.length ? days : [weekday(toDay(raw.from))];
   }
+  // A set time ('HH:MM'): each occurrence is fixed there on its day, not placed by the calendar.
+  if (typeof raw.at === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.at)) out.at = raw.at;
   if (isoOk(raw.made)) out.made = raw.made;
   return out;
 }
@@ -49,10 +51,12 @@ export function describeRepeat(repeat) {
   const r = cleanRepeat(repeat);
   if (!r) return REPEATS.none;
   const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  if (r.days) return `${REPEATS[r.freq]} on ${r.days.map((d) => names[d]).join(', ')}`;
-  if (r.freq === 'monthly') return `Every month on the ${ordinal(+r.from.slice(8, 10))}`;
-  return REPEATS[r.freq];
+  const at = r.at ? ` at ${clock(r.at)}` : '';
+  if (r.days) return `${REPEATS[r.freq]} on ${r.days.map((d) => names[d]).join(', ')}${at}`;
+  if (r.freq === 'monthly') return `Every month on the ${ordinal(+r.from.slice(8, 10))}${at}`;
+  return `${REPEATS[r.freq]}${at}`;
 }
+const clock = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return `${(h % 12) || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 const ordinal = (n) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
 
 /** Whether day `d` is one the routine falls on. */
@@ -114,6 +118,8 @@ export function dueOccurrences(p, todayIso, { horizon = ROUTINE_HORIZON } = {}) 
     const made = r.made ? toDay(r.made) : -Infinity;
     for (const o of occurrences(r, today - 62, today + horizon)) {
       if (o.day <= made || o.due < today) continue;
+      // At a set time, a day already gone cannot be kept; without one, this period's is laid by its deadline.
+      if (r.at && o.day < today) continue;
       const id = occurrenceId(t.id, fromDay(o.day));
       if (p.tasks.some((x) => x.id === id)) continue;
       out.push({ routine: t, id, day: fromDay(o.day), due: fromDay(o.due) });

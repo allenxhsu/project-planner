@@ -1477,3 +1477,5 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .rp-day { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--sc-line); background: none; color: var(--sc-text-2); font-size: 11px; cursor: pointer; padding: 0; }
 .rp-day.is-on { background: var(--sc-accent); border-color: var(--sc-accent); color: #fff; }
 .fact-routine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.rp-at { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rp-time { width: 110px; }

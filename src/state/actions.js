@@ -514,11 +514,20 @@ export function addTimeToTask(taskId, minutes, currentHours) {
 export function setRepeat(taskId, repeat) {
   const today = localToday();
   return attempt(repeat && repeat.freq !== 'none' ? 'Repeat task' : 'Stop repeating', (p) => {
-    setTaskField(p, taskId, 'repeat', repeat);
-    if (repeat && repeat.freq !== 'none') { spawnRoutines(p, today); return; }
-    const untouched = p.tasks.filter((x) => x.repeatOf === taskId && x.occurrence > today && !(+x.percent)
-      && !(p.timesheets || []).some((s) => s.taskId === x.id) && !pinsOf(x).length).map((x) => x.id);
+    // The ones still ahead that nobody has touched (started, logged, ticked, or moved from the routine's own time).
+    const r0 = getTask(p, taskId)?.repeat;
+    const own = (x, pin) => r0?.at && pin.day === x.occurrence && `${String(Math.floor(pin.start / 60)).padStart(2, '0')}:${String(pin.start % 60).padStart(2, '0')}` === r0.at;
+    const untouched = p.tasks.filter((x) => x.repeatOf === taskId && x.occurrence >= today && !(+x.percent)
+      && !(p.timesheets || []).some((s) => s.taskId === x.id) && pinsOf(x).every((pin) => !pin.live && own(x, pin))).map((x) => x.id);
     if (untouched.length) removeTasks(p, untouched);
+    setTaskField(p, taskId, 'repeat', repeat);
+    if (!repeat || repeat.freq === 'none') return;
+    // Changed: remade from what is left, the new way — how often, which days, what time.
+    const t = getTask(p, taskId);
+    const kept = p.tasks.filter((x) => x.repeatOf === taskId).map((x) => x.occurrence).sort();
+    t.repeat = { ...t.repeat };
+    if (kept.length) t.repeat.made = kept.at(-1); else delete t.repeat.made;
+    spawnRoutines(p, today);
   });
 }
 
