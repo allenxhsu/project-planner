@@ -705,7 +705,7 @@ export function stopWork(p, taskId, { worked, more, end = null }) {
     const start = Number.isInteger(end) ? Math.max(0, end - w) : pin.start;
     addTimesheet(p, { taskId, resourceId: t.assignments[0]?.resourceId || null, date: pin.day, start, hours: w / 60, note: 'Worked' });
   }
-  logActivity(t, { kind: 'stopped', text: `worked ${hoursWords(w / 60)}${m > 0 ? `, ${hoursWords(m / 60)} more needed` : ', finished'}` });
+  logActivity(t, { kind: 'stopped', text: `${w > 0 ? `worked ${hoursWords(w / 60)}` : 'no time logged'}${m > 0 ? `, ${hoursWords(m / 60)} more needed` : ', finished'}` });
   const spent = spentOn(p, taskId);
   // Finished: what it took is what it was — the duration becomes the time spent.
   if (m === 0) { if (spent > 0) t.work = Math.round(spent * 100) / 100; setTaskField(p, taskId, 'percent', 100); return; }

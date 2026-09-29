@@ -131,9 +131,10 @@ export async function stopNowDialog({ planId = store.project.id, taskId }) {
   const elapsed = pin.day === todayIso ? Math.max(1, d.getHours() * 60 + d.getMinutes() - pin.start) : pin.minutes;
   const info = store.schedule.tasks[t.id];
   const leftBefore = info ? Math.round(hoursLeft(store.project, info, t) * 60) : 0;
-  const options = (list, pick) => [...new Set(list)].sort((a, b) => a - b).map((m) => el('option', { value: m, text: m === 0 ? 'Nothing — it is done' : hoursText(m), selected: m === pick }));
+  const options = (list, pick, zero = 'Nothing — it is done') => [...new Set(list)].sort((a, b) => a - b).map((m) => el('option', { value: m, text: m === 0 ? zero : hoursText(m), selected: m === pick }));
   const answer = await open('Stop task now', (close) => {
-    const worked = el('select', { class: 'sc-select', 'data-autofocus': '' }, ...options([elapsed, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240].filter((m) => m <= Math.max(elapsed, 240)), elapsed));
+    // 0: started by mistake, or never really got going — stop without logging anything.
+    const worked = el('select', { class: 'sc-select', 'data-autofocus': '' }, ...options([0, elapsed, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240].filter((m) => m <= Math.max(elapsed, 240)), elapsed, 'None — log no time'));
     let touched = false;
     const moreFor = (w) => Math.max(0, leftBefore - w);
     const more = el('select', { class: 'sc-select', onchange: () => { touched = true; } });
@@ -152,9 +153,11 @@ export async function stopNowDialog({ planId = store.project.id, taskId }) {
   });
   if (!answer) return;
   if (act.stopTask(t.id, answer)) {
-    act.hint(answer.more > 0
-      ? `Logged ${hoursText(answer.worked)} on “${t.name}”; ${hoursText(answer.more)} more is on the calendar.`
-      : `Logged ${hoursText(answer.worked)} on “${t.name}”, and marked it complete.`);
+    act.hint(answer.worked === 0
+      ? (answer.more > 0 ? `Stopped “${t.name}” with no time logged; ${hoursText(answer.more)} is on the calendar.` : `Stopped “${t.name}” with no time logged, and marked it complete.`)
+      : answer.more > 0
+        ? `Logged ${hoursText(answer.worked)} on “${t.name}”; ${hoursText(answer.more)} more is on the calendar.`
+        : `Logged ${hoursText(answer.worked)} on “${t.name}”, and marked it complete.`);
   }
 }
 

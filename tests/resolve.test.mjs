@@ -51,3 +51,16 @@ test('time logged running past its Stop is moved to end at the Stop', () => {
   assert.equal(p.timesheets[0].start, 13 * 60 + 52);
   assert.deepEqual(settleStoppedWork(p), [], 'once is enough');
 });
+
+test('Stop with no time worked logs nothing and leaves the task as it was', () => {
+  const p = createProject();
+  const t = insertTask(p, 0, { name: 'Started by mistake', duration: 1, level: 1 });
+  t.work = 1;
+  setPin(p, t.id, { day: '2026-09-29', start: 9 * 60, minutes: 60, live: true });
+  stopWork(p, t.id, { worked: 0, more: 60, end: 9 * 60 + 2 });
+  assert.equal((p.timesheets || []).length, 0, 'no line on the timesheet');
+  assert.equal(t.calendar.pins.length, 0, 'not running any more');
+  assert.equal(+t.work, 1, 'still an hour to do');
+  assert.notEqual(t.percent, 100);
+  assert.match(t.activity.at(-1).text, /no time logged/);
+});
