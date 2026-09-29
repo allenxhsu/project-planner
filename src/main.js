@@ -296,6 +296,12 @@ initSync({ preferStored: !hosted && startedOnFallback })
     // The task lists, the calendar and People read the shelf: now that it is open, read it.
     void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());
     void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans());
+    // Routines come round by themselves: now, and every hour after (a new day, a new week).
+    const routines = () => { void import('./state/sync.js').then((m) => m.spawnRoutinesEverywhere()).then((n) => {
+      if (n) { void import('./ui/alltasks.js').then((m) => m.reloadAllTasks()); void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans()); }
+    }).catch(() => {}); };
+    routines();
+    setInterval(routines, 60 * 60 * 1000);
     void import('./ui/people.js').then((m) => m.reloadPeople());
     return reloadPlans();
   })

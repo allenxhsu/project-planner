@@ -1470,3 +1470,10 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .today-old { margin: 6px 0 12px; }
 .today-old > summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
 .today-old > summary:hover { color: var(--sc-text); }
+
+/* Repeats (ui/repeatpick.js): how often, and on which days */
+.rp { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.rp-days { display: flex; gap: 3px; }
+.rp-day { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--sc-line); background: none; color: var(--sc-text-2); font-size: 11px; cursor: pointer; padding: 0; }
+.rp-day.is-on { background: var(--sc-accent); border-color: var(--sc-accent); color: #fff; }
+.fact-routine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }

@@ -1603,6 +1603,36 @@ export async function setPlanArchived(id, on) {
  * Change a plan wherever it is: the open one through the store so the screen
  * follows, any other through its record on the shelf.
  */
+/**
+ * Every routine's due occurrences, in every live plan on this device
+ * (model/routines.js): made as the day comes round, not by hand. After a sync,
+ * so a week another device already made arrives rather than being made again
+ * (and if both make it, it is the same task: its id is the routine's and the date).
+ */
+export async function spawnRoutinesEverywhere() {
+  if (!recordStore) return 0;
+  if (syncConfigured()) await syncNow();
+  const { spawnRoutines } = await import('../model/model.js');
+  const day = today();
+  let n = 0;
+  if (store.project.tasks.some((t) => t.repeat)) {
+    const probe = parse(serialize(store.project)).project;
+    if (spawnRoutines(probe, day).length) tryCommit('Routines come round', (p) => { n += spawnRoutines(p, day).length; });
+  }
+  for (const record of await planRecords()) {
+    if (record.id === store.project.id || !record.body.includes('"repeat"')) continue;
+    let project;
+    try { project = parse(record.body).project; } catch { continue; }
+    if (project.archived || project.template) continue;
+    const made = spawnRoutines(project, day);
+    if (!made.length) continue;
+    n += made.length;
+    await recordStore.put([{ ...record, body: serialize(project), updatedAt: Math.max(Date.now(), record.updatedAt + 1), origin: deviceId() }]);
+  }
+  if (n && syncConfigured()) void syncNow();
+  return n;
+}
+
 export async function patchPlan(id, change, label) {
   if (!recordStore) return false;
   if (id === store.project.id) {

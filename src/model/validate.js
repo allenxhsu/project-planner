@@ -39,11 +39,14 @@ export function validate(p, sched = computeSchedule(p)) {
   });
 
   for (const t of leaves) {
+    // A routine is a pattern, not work (model/routines.js): nothing about it is late or unlinked.
+    if (t.repeat) continue;
     const info = sched.tasks[t.id];
     const i = info.index - 1;
     const bound = t.predecessors.length || ancestorsHavePreds(p, i);
-    if (!bound && leaves.indexOf(t) > 0 && !info.milestone) add('no-predecessor', `${label(t)} has no predecessor.`, { taskId: t.id });
-    if (!hasSucc.has(t.id) && !info.milestone && info.finish < sched.finish && leaves.length > 1 && !ancestorsHaveSuccs(p, i, hasSucc)) add('no-successor', `${label(t)} has no successor.`, { taskId: t.id });
+    // An occurrence of a routine is placed by its date, not by links.
+    if (!bound && leaves.indexOf(t) > 0 && !info.milestone && !t.repeatOf) add('no-predecessor', `${label(t)} has no predecessor.`, { taskId: t.id });
+    if (!hasSucc.has(t.id) && !info.milestone && !t.repeatOf && info.finish < sched.finish && leaves.length > 1 && !ancestorsHaveSuccs(p, i, hasSucc)) add('no-successor', `${label(t)} has no successor.`, { taskId: t.id });
     if (!t.assignments.length && !info.milestone) add('unassigned', `${label(t)} has no resource.`, { taskId: t.id });
     if (info.percent < 100 && info.finish < status) add('late', `${label(t)} should have finished by ${formatDate(fromDay(status))} (${info.percent}% done).`, { taskId: t.id });
     else if (info.percent === 0 && info.start < status) add('late', `${label(t)} should have started by ${formatDate(fromDay(status))}.`, { taskId: t.id });

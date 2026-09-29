@@ -3,7 +3,7 @@
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
-import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment } from '../model/model.js';
+import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines } from '../model/model.js';
 import { workspaceNow } from './sync.js';
 import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
@@ -506,6 +506,22 @@ export function addTimeToTask(taskId, minutes, currentHours) {
   });
 }
 
+/**
+ * Make a task a routine, change how often, or stop it repeating. Its due
+ * occurrences are made at once; stopping it takes away the ones still ahead
+ * that nobody has touched (started, logged or ticked), and keeps the rest.
+ */
+export function setRepeat(taskId, repeat) {
+  const today = localToday();
+  return attempt(repeat && repeat.freq !== 'none' ? 'Repeat task' : 'Stop repeating', (p) => {
+    setTaskField(p, taskId, 'repeat', repeat);
+    if (repeat && repeat.freq !== 'none') { spawnRoutines(p, today); return; }
+    const untouched = p.tasks.filter((x) => x.repeatOf === taskId && x.occurrence > today && !(+x.percent)
+      && !(p.timesheets || []).some((s) => s.taskId === x.id) && !pinsOf(x).length).map((x) => x.id);
+    if (untouched.length) removeTasks(p, untouched);
+  });
+}
+
 /** Stop a started task: log what was worked, and say what it still needs. */
 export function stopTask(taskId, { worked, more }) {
   const d = new Date();
@@ -569,6 +585,8 @@ export function createTask(spec) {
     if (spec.whole) setTaskField(p, t.id, 'wholeBlock', true);
     for (const [fieldId, value] of Object.entries(spec.fields || {})) setFieldValue(p, t.id, fieldId, value);
     if (spec.fixed) setPin(p, t.id, spec.fixed);
+    // A routine: the task is the pattern, and its occurrences are made now.
+    if (spec.repeat) { setTaskField(p, t.id, 'repeat', spec.repeat); spawnRoutines(p, localToday()); }
     // Set up as it was made: its history starts at "created", not with each setting.
     t.activity = (t.activity || []).slice(0, 1);
     made = t;

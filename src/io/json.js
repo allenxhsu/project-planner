@@ -1,6 +1,7 @@
 // The native file: the plan as JSON. Loading repairs what it can and reports it.
 
 import { cleanDocs } from '../model/docs.js';
+import { cleanRepeat } from '../model/routines.js';
 import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES, settleFinishedRunning, settleStoppedWork } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
@@ -153,6 +154,9 @@ export function parse(text) {
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
       ...(t.energy === 'physical' || t.energy === 'mental' ? { energy: t.energy } : {}),
       ...(typeof t.skill === 'string' && t.skill.trim() ? { skill: t.skill.trim().slice(0, 40) } : {}),
+      // A routine's pattern, and an occurrence's routine and day (model/routines.js).
+      ...(cleanRepeat(t.repeat) ? { repeat: cleanRepeat(t.repeat) } : {}),
+      ...(typeof t.repeatOf === 'string' && t.repeatOf && isoValid(t.occurrence) ? { repeatOf: t.repeatOf, occurrence: t.occurrence } : {}),
       ...(t.attention === 'background' ? { attention: 'background', ...(CHECK_CHOICES.includes(+t.checkEvery) ? { checkEvery: +t.checkEvery } : {}) } : {}),
       // The task's history: kept as long as each line is a dated entry.
       ...(Array.isArray(t.activity) ? { activity: t.activity

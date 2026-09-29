@@ -23,6 +23,8 @@ import { showMenu, open, foot, button, confirmDialog, showText, promptText } fro
 import { defaultScheduleLabel } from './schedules.js';
 import { datePanel, quickDates } from './datepick.js';
 import { markdownNotes } from './mdnotes.js';
+import { repeatPicker } from './repeatpick.js';
+import { describeRepeat } from '../model/routines.js';
 
 /** Make `planId` the open plan if it is not, then hand back the task. */
 export async function withTask(planId, taskId) {
@@ -575,7 +577,11 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const notesBox = markdownNotes({ value: t.notes || '', placeholder: 'Description — markdown: # heading, - list, [] to-do, / for blocks', rows: 8 });
     const notes = notesBox.node;
     const custom = fieldsOf(project).map((f) => ({ field: f, ...fieldInput(project, f, t.fields?.[f.id] ?? null) }));
+    // A routine repeats; an occurrence says which routine it belongs to (model/routines.js).
+    const repeats = t.repeatOf ? null : repeatPicker(t.repeat, () => start.value || today());
+    const routine = t.repeatOf ? project.tasks.find((x) => x.id === t.repeatOf) : null;
     const save = () => close({
+      repeat: repeats && repeats.changed() ? { value: repeats.get() } : null,
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
       hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, energy: energy.value, skill: skill.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
@@ -714,6 +720,10 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Deadline', deadline),
           subFact('Hard deadline', el('label', { class: 'fact-switch', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, hard, el('span', { class: 'tp-switch' }))),
           fact('Schedule', schedule),
+          repeats ? fact('Repeats', repeats.node) : null,
+          routine ? fact('Repeats', el('span', { class: 'fact-routine' },
+            el('span', { text: `↻ ${describeRepeat(routine.repeat)}${t.occurrence ? ` · this one ${formatDate(t.occurrence, 'day')}` : ''}` }),
+            el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Open the routine', onclick: () => leave(() => taskSheet({ taskId: routine.id })) }))) : null,
           fact('Attention', attention),
           (checkRow.append(subFact('Check on it', checkEvery)), showCheck(), checkRow),
           fact('Energy', energy),
@@ -756,6 +766,10 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   else if (saved.chunk !== 'whole') {
     if (t.calendar?.whole) act.editTask(t.id, 'wholeBlock', false);
     if (+saved.chunk !== agendaOf(store.project, t).blockHours) act.editTask(t.id, 'blockHours', saved.chunk);
+  }
+  if (saved.repeat) {
+    const r = saved.repeat.value;
+    if (act.setRepeat(t.id, r)) act.hint(r ? `“${t.name}” repeats: ${describeRepeat(r).toLowerCase()}. Each one is put on the calendar by itself, a fortnight ahead.` : `“${t.name}” no longer repeats; the ones still ahead that were not started are gone.`);
   }
   if (saved.schedule !== '__keep') {
     const want = saved.schedule ? [saved.schedule] : [];

@@ -8,6 +8,7 @@
 import { uid } from '../util.js';
 import { DEFAULT_CALENDAR, parseDuration, isoValid, toDay, fromDay, makeCalendar, today as localToday } from './calendar.js';
 import { BLOCK_CHOICES, parseTime } from './agenda.js';
+import { cleanRepeat, dueOccurrences, describeRepeat } from './routines.js';
 
 export const FORMAT = 'project-planner';
 export const VERSION = 1;
@@ -765,6 +766,36 @@ export function settleStoppedWork(p) {
   return fixed;
 }
 
+/**
+ * Make each routine's occurrences that are due (model/routines.js): real
+ * tasks after the routine, set up as it is — who, how long, which hours, the
+ * energy and skill it takes — starting on their day and due by the end of
+ * their period, on the calendar. Returns the tasks made.
+ */
+export function spawnRoutines(p, todayIso = localToday()) {
+  const made = [];
+  for (const o of dueOccurrences(p, todayIso)) {
+    const r = o.routine;
+    const siblings = p.tasks.filter((x) => x.repeatOf === r.id);
+    const at = p.tasks.indexOf(siblings.at(-1) || r) + 1;
+    const t = insertTask(p, at, {
+      id: o.id, name: r.name, level: r.level, duration: 1, work: r.work, notes: r.notes || '', urgency: r.urgency || 'normal',
+      phaseId: r.phaseId || null, assignments: (r.assignments || []).map((a) => ({ ...a })),
+      deadline: o.due, constraint: { type: 'SNET', date: o.day },
+      repeatOf: r.id, occurrence: o.day,
+      ...(r.hardDeadline ? { hardDeadline: true } : {}),
+      ...(r.energy ? { energy: r.energy } : {}), ...(r.skill ? { skill: r.skill } : {}),
+      ...(r.attention === 'background' ? { attention: 'background', ...(r.checkEvery ? { checkEvery: r.checkEvery } : {}) } : {}),
+      ...(r.labels?.length ? { labels: [...r.labels] } : {}),
+      calendar: { ...(r.calendar || {}), show: true, timeBlockIds: [...(r.calendar?.timeBlockIds || [])], pins: [] },
+    });
+    delete t.calendar.pins;
+    made.push(t);
+    r.repeat = { ...cleanRepeat(r.repeat), made: !r.repeat.made || o.day > r.repeat.made ? o.day : r.repeat.made };
+  }
+  return made;
+}
+
 /** Pin a block, or move a pin that is already there when `index` names it. */
 export function setPin(p, taskId, pin, index = null) {
   const t = getTask(p, taskId);
@@ -1358,6 +1389,7 @@ function describeField(p, t, field) {
     case 'attention': return ['attention', attentionOf(t) === 'background' ? 'background' : 'focus'];
     case 'energy': return ['energy', t.energy || 'the project’s'];
     case 'skill': return ['skill', t.skill || 'the project’s'];
+    case 'repeat': return ['repeat', describeRepeat(t.repeat).toLowerCase()];
     case 'checkEvery': return ['check-ins', t.checkEvery ? `every ${t.checkEvery} min` : 'none'];
     case 'urgency': return ['priority', URGENCIES[t.urgency]?.label || 'Normal'];
     case 'notes': return ['description', null];
@@ -1453,6 +1485,14 @@ function applyTaskField(p, t, id, field, value) {
     case 'energy': if (value === 'physical' || value === 'mental') t.energy = value; else delete t.energy; break;
     // The skill it trains; blank is the project's.
     case 'skill': { const v = String(value || '').trim().slice(0, 40); if (v) t.skill = v; else delete t.skill; break; }
+    // A routine (model/routines.js): the pattern, so it is not on the calendar
+    // itself — its occurrences are. How far they have been made is kept.
+    case 'repeat': {
+      const r = value && value.freq !== 'none' ? cleanRepeat({ ...value, made: t.repeat?.made }) : null;
+      if (value && value.freq !== 'none' && !r) throw new Error('A routine needs how often, and the day it starts.');
+      if (r) { t.repeat = r; t.calendar = { ...(t.calendar || { timeBlockIds: [] }), show: false }; } else delete t.repeat;
+      break;
+    }
     case 'checkEvery': {
       const n = +value || 0;
       if (n && !CHECK_CHOICES.includes(n)) throw new Error(`Check on it every ${CHECK_CHOICES.join(', ')} minutes, or not at all.`);

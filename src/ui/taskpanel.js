@@ -8,13 +8,15 @@
 // hard that is, in which schedule, with which labels, and the project's own
 // custom fields. Opened from a spot on the calendar or from + New.
 
+import { repeatPicker } from './repeatpick.js';
+import { describeRepeat } from '../model/routines.js';
 import { visibilityOf } from '../state/mode.js';
 import { el, clear } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
 import { timeBlocks, stages, URGENCIES, fieldsOf, phases } from '../model/model.js';
 import { BLOCK_CHOICES, parseTime, formatClock } from '../model/agenda.js';
-import { formatDate } from '../model/calendar.js';
+import { formatDate, today } from '../model/calendar.js';
 import { open, foot, button } from './dialog.js';
 import { defaultScheduleLabel } from './schedules.js';
 import { fieldInput } from './blockmenu.js';
@@ -81,7 +83,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       el('span', { class: 'sc-faint', text: 'Hard deadline' }), hard, el('span', { class: 'tp-switch' }));
     const urgency = el('select', { class: 'sc-select' }, ...Object.entries(URGENCIES).map(([id, u]) => el('option', { value: id, text: u.label, selected: id === (defaults.urgency || 'normal') })));
     const labels = el('input', { class: 'sc-input', type: 'text', placeholder: 'None — comma-separated' });
-    let assignee, stage, schedule, custom = [];
+    let assignee, stage, schedule, repeats, custom = [];
     const rows = {};
     const fact = (key, label, value) => (rows[key] = el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), value));
 
@@ -99,6 +101,8 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
         ...phases(plan).map((ph) => el('option', { value: ph.id, text: ph.name, selected: ph.id === plan.currentPhaseId })));
       phase.disabled = !phases(plan).length;
       custom = fieldsOf(plan).map((f) => ({ field: f, ...fieldInput(plan, f, null) }));
+      // A routine comes round by itself (model/routines.js).
+      repeats = repeatPicker(null, () => startDate.value || today());
       clear(side);
       side.append(
         el('div', { class: 'tp-where' },
@@ -116,7 +120,8 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
           fact('chunk', 'Min chunk', chunk),
           fact('start', 'Start date', startDate),
           fact('deadline', 'Deadline', el('div', { class: 'tp-deadline' }, deadline, hardRow)),
-          fact('schedule', 'Schedule', schedule)),
+          fact('schedule', 'Schedule', schedule),
+          fact('repeat', 'Repeats', repeats.node)),
         el('div', { class: 'tp-group' },
           fact('labels', 'Labels', labels),
           ...custom.map((c) => fact(`f_${c.field.id}`, c.field.name, c.node)),
@@ -133,6 +138,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
       rows.chunk.hidden = !isAuto;
       rows.start.hidden = !isAuto;
       rows.schedule.hidden = !isAuto;
+      rows.repeat.hidden = !isAuto;
     };
     auto.addEventListener('change', showMode);
     fixedFrom.addEventListener('change', showMode);
@@ -153,6 +159,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
         startDay: isAuto ? (startDate.value || null) : fixedDay.value,
         deadline: deadline.value || null, hardDeadline: hard.checked && !!deadline.value,
         timeBlockId: isAuto ? (schedule.value || null) : null,
+        repeat: isAuto ? repeats.get() : null,
         labels: labels.value.split(',').map((x) => x.trim()).filter(Boolean),
         fixed: isAuto ? null : { day: fixedDay.value, start: from, minutes: Math.min(minutes, 24 * 60 - (from ?? 0)) },
         fields: Object.fromEntries(custom.map((c) => [c.field.id, c.get()]).filter(([, v]) => v !== null && v !== '' && !(Array.isArray(v) && !v.length))),
@@ -187,6 +194,7 @@ export async function newTaskPanel({ day = null, start = null, end = null, fixed
     : act.createTask(answer);
   if (!t) return null;
   act.hint(past ? `That time has passed, so “${t.name}” is logged as done then.`
+    : answer.repeat ? `“${t.name}” repeats — ${describeRepeat(answer.repeat).toLowerCase()}. Each one is put on the calendar by itself, a fortnight ahead.`
     : answer.fixed ? `“${t.name}” is fixed at ${formatClock(answer.fixed.start)} on ${formatDate(answer.fixed.day, 'day')}.`
       : `“${t.name}” is on the calendar, placed by it${answer.deadline ? ` to finish by ${formatDate(answer.deadline, 'day')}${answer.hardDeadline ? ' (hard)' : ''}` : ''}.`);
   set({});

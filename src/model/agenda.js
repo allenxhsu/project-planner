@@ -581,7 +581,8 @@ export function priorities(project, schedule, { now = null } = {}) {
   const out = [];
   project.tasks.forEach((t, i) => {
     const info = schedule.tasks[t.id];
-    if (!info || info.cyclic || t.archived || isSummary(project, i) || info.percent === 100) return;
+    // A routine is the pattern; its occurrences are the work (model/routines.js).
+    if (!info || info.cyclic || t.archived || t.repeat || isSummary(project, i) || info.percent === 100) return;
     const blockedBy = t.predecessors.filter((l) => !done.has(l.id) && schedule.tasks[l.id]).map((l) => l.id);
     const reasons = [];
     let score = 0;
