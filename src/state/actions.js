@@ -3,7 +3,7 @@
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
-import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines } from '../model/model.js';
+import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines, takeTasks, putTasks } from '../model/model.js';
 import { workspaceNow } from './sync.js';
 import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
@@ -529,6 +529,24 @@ export function setRepeat(taskId, repeat) {
     if (kept.length) t.repeat.made = kept.at(-1); else delete t.repeat.made;
     spawnRoutines(p, today);
   });
+}
+
+/**
+ * Move tasks from the open plan to another — entered in the wrong project.
+ * They are put there first (with their subtasks, logged time and people) and
+ * only then taken out of here, so a failure leaves them where they were.
+ * Returns how many tasks moved.
+ */
+export async function moveTasksToPlan(ids, targetId) {
+  const source = store.project;
+  if (!targetId || targetId === source.id) return 0;
+  const moved = takeTasks(source, ids);
+  if (!moved.tasks.length) return 0;
+  const { patchPlan } = await import('./sync.js');
+  const ok = await patchPlan(targetId, (q) => { putTasks(q, moved); }, 'Move tasks in');
+  if (!ok) { set({ hint: 'That project could not be opened; nothing was moved.' }); return 0; }
+  attempt('Move to another project', (p) => removeTasks(p, moved.ids));
+  return moved.tasks.length;
 }
 
 /** Stop a started task: log what was worked, and say what it still needs. */

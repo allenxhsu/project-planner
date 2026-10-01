@@ -1479,3 +1479,9 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .fact-routine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
 .rp-at { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .rp-time { width: 110px; }
+
+/* Move to project (ui/blockmenu.js moveToProjectDialog) */
+.mv-list { max-height: 340px; overflow: auto; margin-top: 8px; border: 1px solid var(--sc-line); border-radius: 6px; padding: 4px; }
+.mv-space { padding: 8px 6px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.mv-item { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 4px; background: none; color: var(--sc-text); text-align: left; cursor: pointer; font: inherit; }
+.mv-item:hover, .mv-item:focus-visible { background: color-mix(in srgb, var(--sc-accent) 16%, transparent); }

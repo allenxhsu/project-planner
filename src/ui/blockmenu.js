@@ -16,7 +16,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase, attentionOf, CHECK_CHOICES } from '../model/model.js';
+import { descendants as descendantsOf, timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase, attentionOf, CHECK_CHOICES } from '../model/model.js';
 import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
@@ -272,6 +272,7 @@ export function blockMenu(b, x, y) {
     { icon: '⧉', label: 'Copy link', run: () => copy(taskLink(b.planId, b.taskId)) },
     { icon: '↗', label: 'Open task', run: () => { void taskSheet({ planId: b.planId, taskId: b.taskId }); } },
     { icon: '▢', label: 'View project', run: run(b, (t) => { act.revealTask(t.id); act.selectTask(t.id); set({ view: 'gantt' }); }) },
+    { icon: '⇄', label: 'Move to project…', run: () => { void moveToProjectDialog(b.planId, [b.taskId]); } },
     '-',
     b.live
       ? { icon: '■', label: 'Stop task…', run: () => { void stopNowDialog({ planId: b.planId, taskId: b.taskId }); } }
@@ -324,6 +325,54 @@ export function blockMenu(b, x, y) {
       act.deleteSelection();
     }) },
   ]);
+}
+
+// ------------------------------------------------------------------ moving
+
+/**
+ * Move tasks to another project: pick it from the list (by workspace, with a
+ * search), and they go there with their subtasks, logged time and people.
+ */
+export async function moveToProjectDialog(planId, taskIds) {
+  const first = await withTask(planId, taskIds[0]);
+  if (!first) return;
+  const sync = await import('../state/sync.js');
+  const [plans, spaces] = await Promise.all([sync.listPlans(), sync.listWorkspaces().catch(() => [])]);
+  const here = store.project.id;
+  const choices = plans.filter((x) => x.ok && x.id !== here && !x.archived && !x.template);
+  if (!choices.length) { act.hint('There is no other project to move it to.'); return; }
+  const spaceName = (id) => spaces.find((w) => w.id === id)?.name || 'No workspace';
+  const subtasks = (() => { const i = store.project.tasks.findIndex((x) => x.id === first.id); return i < 0 ? 0 : descendantsOf(store.project, i).length; })();
+  const target = await open(taskIds.length > 1 ? `Move ${taskIds.length} tasks` : `Move “${first.name}”`, (close) => {
+    const search = el('input', { class: 'sc-input', type: 'search', placeholder: 'Find a project', 'data-autofocus': '', onkeydown: (e) => e.stopPropagation() });
+    const list = el('div', { class: 'mv-list' });
+    const draw = () => {
+      const q = search.value.trim().toLowerCase();
+      const hits = choices.filter((x) => !q || x.name.toLowerCase().includes(q) || spaceName(x.workspaceId).toLowerCase().includes(q));
+      const groups = new Map();
+      for (const x of hits.sort((a, b) => a.name.localeCompare(b.name))) {
+        const key = spaceName(x.workspaceId);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(x);
+      }
+      list.replaceChildren(...(hits.length ? [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).flatMap(([space, items]) => [
+        el('div', { class: 'mv-space sc-faint small', text: space }),
+        ...items.map((x) => el('button', { class: 'mv-item', onclick: () => close(x) }, el('span', { text: x.name }), el('span', { class: 'sc-faint small', text: `${x.tasks} task${x.tasks === 1 ? '' : 's'}` }))),
+      ]) : [el('p', { class: 'sc-faint small', text: 'No project matches.' })]));
+    };
+    search.addEventListener('input', draw);
+    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') list.querySelector('.mv-item')?.click(); });
+    draw();
+    return [
+      el('p', { class: 'sc-muted small', text: `From ${store.project.name}. ${subtasks ? `Its ${subtasks} subtask${subtasks === 1 ? '' : 's'}, ` : 'Its '}logged time and people go with it; links to tasks left here are dropped.` }),
+      search, list,
+      foot(el('span', { class: 'sc-spacer' }), button('Cancel', () => close(null))),
+    ];
+  });
+  if (!target) return;
+  const n = await act.moveTasksToPlan(taskIds, target.id);
+  // Undo here would bring it back without taking it out of there: moving it back is the way.
+  if (n) act.hint(`Moved “${first.name}”${n > 1 ? ` and ${n - 1} more` : ''} to ${target.name}. To undo, move it back from there.`);
 }
 
 // ------------------------------------------------------------------ sheets
@@ -662,6 +711,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     };
     const projectToggle = el('button', { class: 'sc-button sc-button--sm fact-project-open', text: 'Open', title: 'Show the project beside this task',
       onclick: () => { projectPanelOpen = !panel; if (panel) hidePanel(); else void showPanel(); } });
+    // Entered in the wrong project: move it (and what hangs off it) to the right one.
+    const moveButton = el('button', { class: 'sc-button sc-button--sm', text: 'Move…', title: 'Move this task to another project',
+      onclick: () => leave(() => moveToProjectDialog(project.id, [t.id])) });
     if (projectPanelOpen) setTimeout(() => { void showPanel(); }, 0);
     let sheetBody = null;
 
@@ -702,7 +754,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           whenLine ? el('div', { class: `sheet-sched${next?.pinned ? ' is-fixed' : ''}`, text: whenLine }) : null,
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
-          fact('Project', el('span', { class: 'fact-project' }, el('span', { class: 'fact-project-name', text: project.name }), projectToggle)),
+          fact('Project', el('span', { class: 'fact-project' }, el('span', { class: 'fact-project-name', text: project.name }), projectToggle, moveButton)),
           el('label', { class: 'fact fact-auto' }, el('span', { class: 'fact-label', text: 'Auto-schedule' }),
             el('span', { class: 'fact-switch' }, auto, el('span', { class: 'tp-switch' }),
               el('span', { class: 'sc-faint small', text: pins.length ? `${pins.length} fixed block${pins.length === 1 ? '' : 's'}` : '' }))),

@@ -806,6 +806,84 @@ export function spawnRoutines(p, todayIso = localToday()) {
   return made;
 }
 
+/**
+ * Tasks out of a plan, to be put into another (putTasks): each with its
+ * subtasks, a routine with its occurrences, and the time logged on them.
+ * Who is on them and what stage they are in go by name, since the other plan
+ * has its own resources and stages. Links to tasks left behind are dropped;
+ * the plan's stages (phases) are its own, so a moved task leaves its stage.
+ */
+export function takeTasks(p, ids) {
+  const take = new Set();
+  for (const id of ids) {
+    const i = taskIndex(p, id);
+    if (i < 0) continue;
+    take.add(id);
+    for (const j of descendants(p, i)) take.add(p.tasks[j].id);
+    for (const o of p.tasks) if (o.repeatOf === id) take.add(o.id);
+  }
+  const moving = p.tasks.filter((t) => take.has(t.id));
+  const top = Math.min(...moving.map((t) => t.level || 1));
+  const resources = {};
+  const tasks = moving.map((t) => {
+    for (const a of t.assignments || []) {
+      const r = getResource(p, a.resourceId);
+      if (r) resources[r.id] = { name: r.name, personId: r.personId || null };
+    }
+    const copy = JSON.parse(JSON.stringify(t));
+    copy.level = Math.max(1, (t.level || 1) - top + 1);
+    copy.predecessors = (t.predecessors || []).filter((l) => take.has(l.id));
+    copy.phaseId = null;
+    copy.stage = getStage(p, t.stageId) ? { name: getStage(p, t.stageId).name, done: !!getStage(p, t.stageId).done, cancelled: !!getStage(p, t.stageId).cancelled } : null;
+    return copy;
+  });
+  const timesheets = (p.timesheets || []).filter((x) => take.has(x.taskId)).map((x) => {
+    const r = x.resourceId && getResource(p, x.resourceId);
+    if (r) resources[r.id] = { name: r.name, personId: r.personId || null };
+    return { ...x };
+  });
+  return { ids: [...take], tasks, timesheets, resources, from: p.name };
+}
+
+/**
+ * Put tasks taken from another plan (takeTasks) at the end of this one: the
+ * same people (found by who they are, or added), the nearest stage (same name,
+ * else done/cancelled/open as they were), the schedules and custom fields this
+ * plan also has. Returns the tasks as they landed.
+ */
+export function putTasks(q, moved) {
+  const idMap = new Map();
+  for (const t of moved.tasks) idMap.set(t.id, q.tasks.some((x) => x.id === t.id) ? uid('t') : t.id);
+  const who = (id) => {
+    const r = moved.resources[id];
+    return r ? personResource(q, r).id : null;
+  };
+  const blocks = new Set(timeBlocks(q).map((b) => b.id));
+  const fields = new Set(fieldsOf(q).map((f) => f.id));
+  const stageFor = (st) => {
+    if (!st) return null;
+    const all = stages(q);
+    return (all.find((x) => x.name.trim().toLowerCase() === st.name.trim().toLowerCase())
+      || (st.cancelled ? all.find((x) => x.cancelled) : st.done ? all.find((x) => x.done) : openStage(q)) || null)?.id || null;
+  };
+  const landed = [];
+  for (const raw of moved.tasks) {
+    const { stage, ...t } = raw;
+    t.id = idMap.get(raw.id);
+    t.predecessors = (t.predecessors || []).map((l) => ({ ...l, id: idMap.get(l.id) })).filter((l) => l.id);
+    if (t.repeatOf) t.repeatOf = idMap.get(t.repeatOf) || t.repeatOf;
+    t.assignments = (t.assignments || []).map((a) => ({ ...a, resourceId: who(a.resourceId) })).filter((a) => a.resourceId);
+    t.stageId = stageFor(stage);
+    if (t.calendar?.timeBlockIds) t.calendar = { ...t.calendar, timeBlockIds: t.calendar.timeBlockIds.filter((id) => blocks.has(id)) };
+    if (t.fields) { t.fields = Object.fromEntries(Object.entries(t.fields).filter(([k]) => fields.has(k))); if (!Object.keys(t.fields).length) delete t.fields; }
+    if (!raw.repeatOf || !moved.tasks.some((x) => x.id === raw.repeatOf)) logActivity(t, { kind: 'moved', text: `moved here from ${moved.from}` });
+    q.tasks.push(t);
+    landed.push(t);
+  }
+  q.timesheets = [...(q.timesheets || []), ...moved.timesheets.map((x) => ({ ...x, taskId: idMap.get(x.taskId), resourceId: x.resourceId ? who(x.resourceId) : null }))];
+  return landed;
+}
+
 /** Pin a block, or move a pin that is already there when `index` names it. */
 export function setPin(p, taskId, pin, index = null) {
   const t = getTask(p, taskId);
