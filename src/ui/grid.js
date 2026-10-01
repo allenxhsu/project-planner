@@ -63,6 +63,9 @@ export function renderGrid(root, spec) {
   root.append(table);
 }
 
+/** Names a new row is given until it is named: the editor selects them, so typing replaces them. */
+const PLACEHOLDER_NAMES = new Set(['New task', 'New milestone', 'New resource', 'New stage', 'New summary task']);
+
 function editor(c, row, spec) {
   const value = spec.editing.seed !== undefined ? spec.editing.seed : (row.raw?.[c.key] ?? (typeof row.cells[c.key] === 'string' ? row.cells[c.key] : ''));
   let input;
@@ -84,7 +87,9 @@ function editor(c, row, spec) {
   input.addEventListener('blur', () => { if (input.isConnected && spec.editing) done(null); });
   setTimeout(() => {
     input.focus();
-    if (input.type === 'text') input.setSelectionRange(input.value.length, input.value.length);
+    // A placeholder name ("New task") is selected, so typing replaces it rather than adding to it.
+    if (input.type === 'text' && PLACEHOLDER_NAMES.has(input.value.trim())) input.select();
+    else if (input.type === 'text') input.setSelectionRange(input.value.length, input.value.length);
   }, 0);
   return input;
 }
