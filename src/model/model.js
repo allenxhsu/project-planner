@@ -9,6 +9,7 @@ import { uid } from '../util.js';
 import { DEFAULT_CALENDAR, parseDuration, isoValid, toDay, fromDay, makeCalendar, today as localToday } from './calendar.js';
 import { BLOCK_CHOICES, parseTime } from './agenda.js';
 import { cleanRepeat, dueOccurrences, describeRepeat } from './routines.js';
+import { stageKeyOf, cleanModule, moduleTag } from './processes.js';
 
 export const FORMAT = 'project-planner';
 export const VERSION = 1;
@@ -884,6 +885,90 @@ export function putTasks(q, moved) {
   return landed;
 }
 
+/**
+ * A summary and what is under it, as a process module (model/processes.js):
+ * each task's name, work, skill, the standard stage it is in, and which of
+ * the others it waits for. Its subtasks only; the summary names the module.
+ */
+export function moduleFromSummary(p, summaryId, stageSet) {
+  const i = taskIndex(p, summaryId);
+  if (i < 0) throw new Error('No such task.');
+  const head = p.tasks[i];
+  const under = descendants(p, i).map((j) => p.tasks[j]);
+  if (!under.length) throw new Error('A process is a group of tasks: this one has none under it.');
+  const keyFor = new Map(under.map((t, n) => [t.id, `t${n + 1}`]));
+  return cleanModule({
+    name: head.name, description: head.notes || '',
+    source: { kind: 'project', plan: p.name },
+    tasks: under.map((t) => ({
+      key: keyFor.get(t.id), name: t.name, level: t.level - head.level,
+      work: Number.isFinite(+t.work) && t.work !== null ? +t.work : null,
+      stage: stageKeyOf(stageSet, getPhase(p, phaseOf(p, t.id))),
+      skill: t.skill || null,
+      after: (t.predecessors || []).map((l) => keyFor.get(l.id)).filter(Boolean),
+    })),
+  });
+}
+
+/**
+ * Add module tasks to a plan, into a stage: under the stage's summary when it
+ * has one, else at the end in that stage. Each knows the module and task it
+ * came from, waits for the module tasks it waits for that the plan has, and
+ * is on the calendar. `picks` is [{ module, task }]. Returns the tasks made.
+ */
+export function addModuleTasks(p, picks, { phaseId = null } = {}) {
+  const ph = phaseId ? getPhase(p, phaseId) : null;
+  const head = ph?.summaryId ? getTask(p, ph.summaryId) : null;
+  const made = [];
+  for (const { module: m, task: mt } of picks) {
+    let at = p.tasks.length;
+    let level = mt.level || 1;
+    if (head) {
+      const hi = taskIndex(p, head.id);
+      at = hi + 1 + descendants(p, hi).length;
+      level = head.level + (mt.level || 1);
+    }
+    const t = insertTask(p, at, { name: mt.name, level, fromModule: moduleTag(m, mt.key) });
+    if (mt.work) t.work = mt.work;
+    if (mt.skill) t.skill = mt.skill;
+    if (!head && ph) t.phaseId = ph.id;
+    made.push({ t, m, mt });
+  }
+  // Links: to the module tasks it waits for, wherever they are in the plan.
+  for (const { t, m, mt } of made) {
+    for (const key of mt.after) {
+      const before = p.tasks.find((x) => x.fromModule?.id === m.id && x.fromModule.key === key);
+      if (before && !linkError(p, before.id, t.id)) link(p, before.id, t.id);
+    }
+  }
+  return made.map((x) => x.t);
+}
+
+/**
+ * A summary as one of the project's stages: a stage of that name, standing
+ * for a standard stage, whose work is the summary's subtasks — so moving the
+ * project to it releases them. Stages keep the outline's order. `stage` null
+ * makes it an ordinary summary again.
+ */
+export function setSummaryStage(p, summaryId, stage) {
+  const head = getTask(p, summaryId);
+  if (!head) throw new Error('No such task.');
+  const mine = phases(p).find((ph) => ph.summaryId === summaryId);
+  if (!stage) {
+    if (mine) removePhase(p, mine.id);
+    return null;
+  }
+  const ph = mine || addPhase(p, { name: head.name, summaryId });
+  ph.name = head.name;
+  ph.stageKey = stage.key;
+  head.phaseId = ph.id;
+  // Summaries that are stages, in outline order, come first, in that order.
+  const order = new Map(p.tasks.map((t, i) => [t.id, i]));
+  const linked = phases(p).filter((x) => x.summaryId && order.has(x.summaryId)).sort((a, b) => order.get(a.summaryId) - order.get(b.summaryId));
+  p.phases = [...linked, ...phases(p).filter((x) => !linked.includes(x))];
+  return ph;
+}
+
 /** Pin a block, or move a pin that is already there when `index` names it. */
 export function setPin(p, taskId, pin, index = null) {
   const t = getTask(p, taskId);
@@ -1523,7 +1608,12 @@ export function setTaskField(p, id, field, value) {
 
 function applyTaskField(p, t, id, field, value) {
   switch (field) {
-    case 'name': t.name = String(value).trim() || 'Untitled task'; break;
+    case 'name': {
+      t.name = String(value).trim() || 'Untitled task';
+      // A summary that is a stage gives the stage its name.
+      for (const ph of phases(p)) if (ph.summaryId === t.id) ph.name = t.name;
+      break;
+    }
     case 'duration': {
       const d = typeof value === 'number' ? value : parseDuration(value, p.calendar.hoursPerDay);
       t.duration = d;

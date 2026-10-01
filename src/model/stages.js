@@ -54,6 +54,8 @@ export function setProjectField(p, field, value) {
     case 'autoAdvance': p.autoAdvance = !!value; break;
     case 'energy': if (value === 'physical' || value === 'mental') p.energy = value; else delete p.energy; break;
     case 'skill': { const v = String(value || '').trim().slice(0, 40); if (v) p.skill = v; else delete p.skill; break; }
+    // The process modules the project covers (model/processes.js): what quick add offers.
+    case 'processes': { const ids = [...new Set((Array.isArray(value) ? value : []).map(String).filter(Boolean))]; if (ids.length) p.processes = ids; else delete p.processes; break; }
     default: throw new Error(`“${field}” is not part of a project.`);
   }
 }

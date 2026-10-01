@@ -1485,3 +1485,24 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .mv-space { padding: 8px 6px 2px; text-transform: uppercase; letter-spacing: .04em; }
 .mv-item { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 4px; background: none; color: var(--sc-text); text-align: left; cursor: pointer; font: inherit; }
 .mv-item:hover, .mv-item:focus-visible { background: color-mix(in srgb, var(--sc-accent) 16%, transparent); }
+
+/* Quick add (ui/quickadd.js) */
+.qa-stage, .qa-processes, .qa-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.qa-stage .sc-select { min-width: 260px; }
+.qa-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--sc-accent) 18%, transparent); }
+.qa-chip-x { border: 0; background: none; color: var(--sc-text-2); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 3px; }
+.qa-add-process { width: auto; }
+.qa-list { max-height: 360px; overflow: auto; border: 1px solid var(--sc-line); border-radius: 6px; padding: 4px 8px 8px; margin-bottom: 10px; }
+.qa-group { padding: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+.qa-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; cursor: pointer; font-size: 13px; }
+.qa-row .qa-name { flex: 1; }
+.qa-row.is-added { opacity: .5; cursor: default; }
+.qa-line .sc-input { flex: 1; min-width: 200px; }
+.qa-minutes { width: auto; }
+
+/* Settings ▸ Stages & processes */
+.pr-stages, .pr-modules { display: flex; flex-direction: column; gap: 6px; }
+.pr-stage { display: flex; align-items: center; gap: 6px; }
+.pr-stage .sc-input { max-width: 260px; }
+.pr-module { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--sc-line); }
+.pr-module-name { max-width: 260px; }

@@ -901,6 +901,60 @@ export async function setStatDays(values) {
 // internet addresses and points on the map. Synced like the rest, so a
 // network taught to the Mac is known to the browser too. One record each.
 
+// ---------------------------------------------------------------- stages and processes
+// The standard stages every project goes through, and the process modules
+// (model/processes.js): shared records, like the schedules, so every device
+// and every project sees the same ones.
+const STAGESET_ID = 'stageset';
+const MODULE_TYPE = 'module';
+
+export async function getStageSet() {
+  const { cleanStageSet } = await import('../model/processes.js');
+  const record = recordStore ? await recordStore.get(STAGESET_ID) : null;
+  return cleanStageSet(record && !record.deletedAt ? record.stages : null);
+}
+
+export async function saveStageSet(list) {
+  if (!recordStore) return null;
+  const { cleanStageSet } = await import('../model/processes.js');
+  const existing = await recordStore.get(STAGESET_ID);
+  const stages = cleanStageSet(list);
+  await recordStore.put([{ id: STAGESET_ID, type: 'stageset', name: 'Stages', stages,
+    updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return stages;
+}
+
+export async function listModules() {
+  if (!recordStore) return [];
+  const { cleanModule } = await import('../model/processes.js');
+  return (await recordStore.all()).filter((r) => r && r.type === MODULE_TYPE && !r.deletedAt)
+    .map((r) => cleanModule(r.module ? { ...r.module, id: r.id } : null)).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function saveModule(module) {
+  if (!recordStore) return null;
+  const { cleanModule } = await import('../model/processes.js');
+  const m = cleanModule(module);
+  if (!m) return null;
+  const existing = await recordStore.get(m.id);
+  await recordStore.put([{ id: m.id, type: MODULE_TYPE, name: m.name, module: m,
+    updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1), deletedAt: null, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return m;
+}
+
+export async function deleteModule(id) {
+  if (!recordStore) return false;
+  const record = await recordStore.get(id);
+  if (!record || record.type !== MODULE_TYPE) return false;
+  const at = Math.max(Date.now(), record.updatedAt + 1);
+  await recordStore.put([{ ...record, deletedAt: at, updatedAt: at, origin: deviceId() }]);
+  if (syncConfigured()) void syncNow();
+  return true;
+}
+
 export async function listPlaces() {
   if (!recordStore) return [];
   return (await recordStore.all()).filter((r) => r && r.type === PLACE_TYPE && !r.deletedAt && (r.kind === 'home' || r.kind === 'work'));

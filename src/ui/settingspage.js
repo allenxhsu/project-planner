@@ -29,6 +29,7 @@ export const SETTINGS_PAGES = [
   ['theme', 'Theme', 'star', 'General'],
   ['timezone', 'Timezone', 'clock', 'General'],
   ['schedules', 'Schedules', 'timeline', 'General'],
+  ['processes', 'Stages & processes', 'project', 'General'],
   ['fields', 'Custom fields', 'sheet', 'General'],
   ['desktop', 'Desktop app', 'resources', 'General'],
   ['integrations', 'Integrations', 'network', 'General'],
@@ -73,6 +74,47 @@ function peopleSelect(d) {
 }
 
 const PAGES = {
+  // The standard stages, and the process modules (model/processes.js).
+  processes() {
+    const stagesHost = el('div', { class: 'pr-stages' });
+    const modulesHost = el('div', { class: 'pr-modules' });
+    void (async () => {
+      const sync = await import('../state/sync.js');
+      let list = await sync.getStageSet();
+      const save = async () => { list = await sync.saveStageSet(list); drawStages(); act.hint('Saved: every project’s stages follow this list.'); };
+      const drawStages = () => {
+        stagesHost.replaceChildren(...list.map((st, i) => el('div', { class: 'pr-stage' },
+          el('span', { class: 'sc-faint small sc-mono', text: String(i + 1) }),
+          el('input', { class: 'sc-input', type: 'text', value: st.name, onkeydown: (e) => e.stopPropagation(), onchange: (e) => { if (e.target.value.trim()) { list[i] = { ...st, name: e.target.value.trim() }; void save(); } } }),
+          el('button', { class: 'ord-btn', text: '↑', title: 'Earlier', disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; void save(); } }),
+          el('button', { class: 'ord-btn', text: '↓', title: 'Later', disabled: i === list.length - 1, onclick: () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; void save(); } }),
+          el('button', { class: 'ord-btn', text: '×', title: 'Remove this stage', disabled: list.length < 2, onclick: () => { list = list.filter((_, j) => j !== i); void save(); } }))),
+        el('button', { class: 'sc-button sc-button--sm', text: '＋ Add a stage', onclick: () => { list = [...list, { name: `Stage ${list.length + 1}` }]; void save(); } }));
+      };
+      drawStages();
+      const drawModules = async () => {
+        const modules = await sync.listModules();
+        modulesHost.replaceChildren(...(modules.length ? modules.map((m) => {
+          const byStage = new Map();
+          for (const t of m.tasks) byStage.set(t.stage, (byStage.get(t.stage) || 0) + 1);
+          const stageText = [...byStage.entries()].map(([k, n]) => `${list.find((x) => x.key === k)?.name || 'Any stage'} ${n}`).join(' · ');
+          return el('div', { class: 'pr-module' },
+            el('input', { class: 'sc-input pr-module-name', type: 'text', value: m.name, onkeydown: (e) => e.stopPropagation(), onchange: async (e) => { if (e.target.value.trim()) { await sync.saveModule({ ...m, name: e.target.value.trim() }); act.hint('Renamed.'); } } }),
+            el('span', { class: 'sc-faint small', text: `${m.tasks.length} task${m.tasks.length === 1 ? '' : 's'} — ${stageText}${m.source?.plan ? ` · from ${m.source.plan}` : ''}` }),
+            el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Delete', onclick: async () => {
+              if (!(await confirmDialog(`Delete “${m.name}”?`, 'Projects keep the tasks already added from it; quick add stops offering it.'))) return;
+              await sync.deleteModule(m.id); void drawModules();
+            } }));
+        }) : [note('No processes yet. Open a summary task (a group of tasks) and choose Save as process….')]));
+      };
+      void drawModules();
+    })();
+    return page('Stages & processes',
+      note('Every project goes through these stages, in this order (a project may skip some). Mark a summary task as one of them, and its tasks are released to the calendar when the project reaches that stage.'),
+      section('Stages', stagesHost),
+      note('A process is a group of tasks a project can cover — CE certification, NFPA certification, a design review — with each task’s work, skill, stage and links. Quick add offers a project the tasks of its processes for the stage it is in.'),
+      section('Processes', modulesHost));
+  },
   calendars() {
     const host = el('div');
     void import('./inspector.js').then((m) => m.renderProjectSettings(host, 'calendars'));

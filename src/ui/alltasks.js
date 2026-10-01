@@ -803,7 +803,11 @@ function controls(count) {
     dirty ? el('span', { class: 'tl-dirty' },
       el('button', { class: 'sc-button sc-button--primary sc-button--sm', text: 'Save view', onclick: () => { void saveView(); } }),
       el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Discard', onclick: discardView })) : null,
-    el('span', { class: 'sc-spacer' }), search);
+    el('span', { class: 'sc-spacer' }),
+    // Add this stage's work from the project's processes (ui/quickadd.js).
+    scope === 'project' ? el('button', { class: 'sc-button sc-button--primary sc-button--sm tl-quickadd', text: '＋ Quick add', title: 'Add tasks from this project’s processes, for its stage',
+      onclick: () => { void import('./quickadd.js').then((m) => m.quickAddDialog()); } }) : null,
+    search);
 
   if (navOn()) return el('div', { class: 'tl-controls-wrap' }, tabs);
   const layoutSeg = el('span', { class: 'tl-seg' }, ...switchable().map(([k, [, label]]) => el('button', {

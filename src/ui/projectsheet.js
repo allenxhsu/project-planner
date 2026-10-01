@@ -209,7 +209,8 @@ function middleColumn(close, spaces) {
         el('span', { text: 'Auto-advance stages' }), auto, el('span', { class: 'tp-switch' }))),
     el('div', { class: 'ps-group ps-links' },
       el('button', { class: 'sc-button sc-button--sm', text: 'Open the Gantt', onclick: () => { close(null); set({ view: 'gantt' }); } }),
-      el('button', { class: 'sc-button sc-button--sm', text: 'Open the Kanban', onclick: () => { close(null); set({ view: 'kanban' }); } })));
+      el('button', { class: 'sc-button sc-button--sm', text: 'Open the Kanban', onclick: () => { close(null); set({ view: 'kanban' }); } }),
+      el('button', { class: 'sc-button sc-button--sm', text: '＋ Quick add…', title: 'Add tasks from this project’s processes, for its stage', onclick: () => { close(null); void import('./quickadd.js').then((m) => m.quickAddDialog()); } })));
 }
 
 // ---------------------------------------------------------------- create a stage

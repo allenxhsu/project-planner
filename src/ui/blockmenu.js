@@ -481,7 +481,18 @@ export async function summarySheet(taskId) {
   const kids = under(project, i).map((j) => project.tasks[j]).filter((k) => k.level === t.level + 1);
   const all = under(project, i).map((j) => project.tasks[j]);
   const hours = (h) => (h ? `${Math.round(h * 10) / 10}h` : '0h');
+  // A summary can be a stage of the project (model/processes.js): one of the standard stages.
+  const sync = await import('../state/sync.js');
+  const stageSet = await sync.getStageSet();
+  const asStage = phases(project).find((ph) => ph.summaryId === t.id) || null;
   await open(`Summary — ${t.name}`, (close) => {
+    const stagePick = el('select', { class: 'sc-select', onchange: (e) => {
+      const st = stageSet.find((x) => x.key === e.target.value) || null;
+      act.makeSummaryStage(t.id, st);
+      act.hint(st ? `“${t.name}” is the project’s ${st.name} stage: its tasks are released when the project gets there.` : `“${t.name}” is no longer a stage.`);
+    } },
+    el('option', { value: '', text: 'Not a stage — just a group', selected: !asStage }),
+    ...stageSet.map((st) => el('option', { value: st.key, text: `Stage: ${st.name}`, selected: asStage?.stageKey === st.key })));
     const name = el('input', { class: 'sc-input', type: 'text', value: t.name,
       onchange: (e) => { if (e.target.value.trim()) act.editTask(t.id, 'name', e.target.value.trim()); } });
     const row = (label, value) => el('div', { class: 'fact' }, el('span', { class: 'fact-label', text: label }), el('span', { class: 'sc-mono', text: value }));
@@ -494,12 +505,20 @@ export async function summarySheet(taskId) {
         row('Duration', `${info.duration ?? 0} day${info.duration === 1 ? '' : 's'}`),
         row('Work', hours(info.work)),
         row('Complete', `${info.percent ?? 0}%`),
-        row('Tasks', `${all.length}`)),
+        row('Tasks', `${all.length}`),
+        el('div', { class: 'fact', title: 'A stage’s tasks are released to the calendar when the project reaches it' }, el('span', { class: 'fact-label', text: 'Stage' }), stagePick)),
       el('div', { class: 'sc-section-title', text: 'Its tasks' }),
       el('div', { class: 'sum-list' }, ...kids.map((k) => el('button', { class: 'sum-item', onclick: () => { close(null); void taskSheet({ taskId: k.id }); } },
         el('span', { class: `tl-ring${(store.schedule.tasks[k.id]?.percent ?? 0) === 100 ? ' is-done' : ''}` }), el('span', { text: k.name }),
         el('span', { class: 'sc-faint small', text: `${store.schedule.tasks[k.id]?.percent ?? 0}%` })))),
-      foot(button('Add a task', () => { close(null); act.newSubtask(t.id); }), el('span', { class: 'sc-spacer' }), button('Close', () => close(null), 'sc-button--primary')),
+      foot(button('Add a task', () => { close(null); act.newSubtask(t.id); }),
+        button('Save as process…', async () => {
+          const name = await promptText('Save as a process', 'Its tasks — with their work, skill, stage and links — become a process other projects can add. Name it:', t.name);
+          if (!name) return;
+          const m = await act.saveAsModule(t.id, name);
+          if (m) act.hint(`“${m.name}” is a process: ${m.tasks.length} task${m.tasks.length === 1 ? '' : 's'}. Quick add offers it in any project that covers it.`);
+        }),
+        el('span', { class: 'sc-spacer' }), button('Close', () => close(null), 'sc-button--primary')),
     ];
   });
 }

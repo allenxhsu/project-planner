@@ -97,6 +97,7 @@ export function parse(text) {
   if (raw.autoAdvance === false) p.autoAdvance = false;
   if (raw.energy === 'physical' || raw.energy === 'mental') p.energy = raw.energy;
   if (typeof raw.skill === 'string' && raw.skill.trim()) p.skill = raw.skill.trim().slice(0, 40);
+  if (Array.isArray(raw.processes) && raw.processes.length) p.processes = [...new Set(raw.processes.map(String).filter(Boolean))];
   // The Flow operations this plan has taken (model/flowops.js), so none is taken twice.
   if (Array.isArray(raw.appliedOps)) {
     const ops = raw.appliedOps.filter((a) => a && typeof a === 'object' && typeof a.id === 'string' && a.id && Number.isFinite(a.at))
@@ -154,6 +155,9 @@ export function parse(text) {
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
       ...(t.energy === 'physical' || t.energy === 'mental' ? { energy: t.energy } : {}),
       ...(typeof t.skill === 'string' && t.skill.trim() ? { skill: t.skill.trim().slice(0, 40) } : {}),
+      // Which process module, and which of its tasks, this came from (model/processes.js).
+      ...(t.fromModule && typeof t.fromModule === 'object' && typeof t.fromModule.id === 'string' && typeof t.fromModule.key === 'string'
+        ? { fromModule: { id: t.fromModule.id, key: t.fromModule.key, ...(typeof t.fromModule.name === 'string' ? { name: t.fromModule.name.slice(0, 80) } : {}) } } : {}),
       // A routine's pattern, and an occurrence's routine and day (model/routines.js).
       ...(cleanRepeat(t.repeat) ? { repeat: cleanRepeat(t.repeat) } : {}),
       ...(typeof t.repeatOf === 'string' && t.repeatOf && isoValid(t.occurrence) ? { repeatOf: t.repeatOf, occurrence: t.occurrence } : {}),
@@ -246,6 +250,9 @@ export function parse(text) {
       id: typeof ph.id === 'string' && ph.id ? ph.id : uid('ph'), name: String(ph.name).trim(), deadline: isoValid(ph.deadline) ? ph.deadline : null,
       ...(ph.status === 'done' || ph.status === 'cancelled' ? { status: ph.status } : {}),
       ...(typeof ph.colour === 'string' && /^#[0-9a-f]{6}$/i.test(ph.colour) ? { colour: ph.colour } : {}),
+      // The standard stage it stands for, and the summary task that is it (model/processes.js).
+      ...(typeof ph.stageKey === 'string' && ph.stageKey ? { stageKey: ph.stageKey.slice(0, 40) } : {}),
+      ...(typeof ph.summaryId === 'string' && ph.summaryId ? { summaryId: ph.summaryId } : {}),
     }));
   const phaseIds = new Set(p.phases.map((ph) => ph.id));
   for (const t of p.tasks) if (t.phaseId && !phaseIds.has(t.phaseId)) t.phaseId = null;

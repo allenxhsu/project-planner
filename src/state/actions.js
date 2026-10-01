@@ -3,7 +3,7 @@
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
 import { hosted } from '../host.js';
-import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines, takeTasks, putTasks } from '../model/model.js';
+import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines, takeTasks, putTasks, moduleFromSummary, addModuleTasks, setSummaryStage } from '../model/model.js';
 import { workspaceNow } from './sync.js';
 import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
@@ -547,6 +547,47 @@ export async function moveTasksToPlan(ids, targetId) {
   if (!ok) { set({ hint: 'That project could not be opened; nothing was moved.' }); return 0; }
   attempt('Move to another project', (p) => removeTasks(p, moved.ids));
   return moved.tasks.length;
+}
+
+// ---------------------------------------------------------------- processes
+
+/** A summary as one of the project's stages (a standard stage), or not (null). */
+export function makeSummaryStage(summaryId, stage) {
+  return attempt(stage ? `Stage: ${stage.name}` : 'Not a stage', (p) => { setSummaryStage(p, summaryId, stage); });
+}
+
+/** A summary and its subtasks, kept as a process module for other projects. */
+export async function saveAsModule(summaryId, name = null) {
+  const { getStageSet, saveModule } = await import('./sync.js');
+  let m;
+  try { m = moduleFromSummary(store.project, summaryId, await getStageSet()); } catch (err) { set({ hint: err.message }); return null; }
+  if (name && String(name).trim()) m.name = String(name).trim();
+  const saved = await saveModule(m);
+  // This project covers the process it was made from.
+  if (saved) attempt('Covers a process', (p) => setProjectField(p, 'processes', [...(p.processes || []), saved.id]));
+  return saved;
+}
+
+/** The processes the open project covers. */
+export function setProcesses(ids) { return attempt('Processes', (p) => setProjectField(p, 'processes', ids)); }
+
+/** Add picked module tasks into a stage of the open project. Returns how many. */
+export function addFromModules(picks, phaseId) {
+  let made = [];
+  attempt('Quick add', (p) => { made = addModuleTasks(p, picks, { phaseId }); });
+  return made.length;
+}
+
+/** One task typed into quick add, into a stage (under its summary when it has one). */
+export function quickAddTask(name, minutes, phaseId) {
+  const clean = String(name || '').trim();
+  if (!clean) return null;
+  let made = null;
+  attempt('Quick add', (p) => {
+    [made] = addModuleTasks(p, [{ module: { id: '_', name: '' }, task: { key: '_', name: clean, work: minutes ? minutes / 60 : null, after: [], level: 1 } }], { phaseId });
+    delete made.fromModule;
+  });
+  return made;
 }
 
 /** Stop a started task: log what was worked, and say what it still needs. */
