@@ -997,6 +997,73 @@ sc-sync-status[data-phase="error"] .sc-sync-detail {
   color: var(--sc-text);
 }
 
+/* <sc-connections>: the Connections panel in an app's Settings. */
+sc-connections {
+  display: block;
+}
+.sc-connections-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-3);
+}
+.sc-connections-provider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  background: var(--sc-panel-2);
+  border: 1px solid var(--sc-line);
+}
+.sc-connections-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-2) var(--sc-space-3);
+}
+.sc-connections-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-2) 0;
+  border-top: 1px solid var(--sc-line);
+}
+.sc-connections-who {
+  flex: 1 1 14em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-connections-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sc-connections-chip {
+  padding: 1px 7px;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+  letter-spacing: 0.04em;
+  color: var(--sc-accent);
+  border: 1px solid rgb(var(--sc-accent-rgb) / 0.4);
+  background: rgb(var(--sc-accent-rgb) / 0.08);
+}
+.sc-connections-actions,
+.sc-connections-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+.sc-connections-empty,
+.sc-connections-note {
+  margin: 0;
+}
+.sc-connections-provider > .sc-alert {
+  margin: 0;
+}
+
 /* <sc-portal-bar>: the Portal's slim bar above an app shell. */
 sc-portal-bar {
   box-sizing: border-box;

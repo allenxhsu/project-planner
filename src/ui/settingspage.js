@@ -17,6 +17,7 @@ import { URGENCIES } from '../model/model.js';
 import { BLOCK_CHOICES } from '../model/agenda.js';
 import { taskDefaults, setTaskDefaults, DEADLINE_RULES } from './taskdefaults.js';
 import { icon } from './icons.js';
+import { hosted, post } from '../host.js';
 import { promptText, confirmDialog, typedConfirm } from './dialog.js';
 import { modeChoice, currentMode, modeReason, setModeChoice, workspaceKind, teach, lastSignals, detectMode } from '../state/mode.js';
 
@@ -32,6 +33,7 @@ export const SETTINGS_PAGES = [
   ['processes', 'Stages & processes', 'project', 'General'],
   ['fields', 'Custom fields', 'sheet', 'General'],
   ['desktop', 'Desktop app', 'resources', 'General'],
+  ['connections', 'Connections', 'network', 'General'],
   ['integrations', 'Integrations', 'network', 'General'],
   ['sync', 'Sync', 'usage', 'General'],
   ['data', 'Data', 'folder', 'General'],
@@ -213,12 +215,33 @@ const PAGES = {
       note('Project Planner for the Mac is the same planner in its own window, with a menu bar, files you can open and save, and the same sync.'),
       section('Keyboard shortcuts', el('div', { class: 'st-keys' }, ...keys.flatMap(([what, k]) => [el('span', { text: what }), el('kbd', { class: 'sc-mono', text: k })]))));
   },
+  // Strava and Google, connected once on the sync server for every app; and
+  // the files that stand in for an API, brought in here.
+  connections() {
+    const panel = el('sc-connections', { features: 'calendar,drive,sheets' });
+    void import('../state/sync.js').then((sync) => {
+      panel.origin = sync.serverOrigin() || '';
+      panel.request = (path, init) => sync.serverFetch(path, init);
+      panel.open = (url) => {
+        if (hosted) { post({ type: 'openURL', url }); return true; }
+        return !!window.open(url, 'sc-connect', 'width=560,height=760');
+      };
+      void panel.refresh?.();
+    });
+    const strongLifts = card('StrongLifts', 'No API: export the CSV from the app (Settings ▸ Export) and bring it in. Each training day becomes a task in that year’s Lifting plan; a day already there is left alone.',
+      button('Import StrongLifts CSV…', () => { void import('./strongliftsimport.js').then((m) => m.importStrongLifts()); }));
+    return page('Connections',
+      note('A connection is made once, on your sync server, and shared by every app: the Planner, Flow and Skills read the same accounts. Google calendars ticked for a project are chosen under Calendars.'),
+      section(null, panel),
+      section('Files instead of an API', el('div', { class: 'st-cards' }, strongLifts)));
+  },
   integrations() {
     return page('Integrations', el('div', { class: 'st-cards' },
       card('Motion', 'Bring in your Motion projects and tasks from its export ZIP (Settings ▸ Export data).', button('Import from Motion…', () => { void import('./motionimport.js').then((m) => m.importMotion()); })),
       card('Microsoft Project', 'Open a Microsoft Project XML or MPX file, or save the open plan as one.', button('Open…', () => { void command('file.open'); }), button('Export XML…', () => { void command('file.exportXml'); })),
       card('Calendar (.ics)', 'Send this week’s blocks to any calendar app as an .ics file.', button('Export this week…', () => { void command('file.exportIcs'); })),
-      card('Connected calendars', 'Google or Outlook meetings as busy time.', button('Calendars', () => openSettings('calendars')))));
+      card('Connected calendars', 'Google or Outlook meetings as busy time.', button('Calendars', () => openSettings('calendars'))),
+      card('Connections', 'Strava and Google accounts, connected once for every app; StrongLifts by file.', button('Connections', () => openSettings('connections')))));
   },
   sync() {
     return page('Sync',
