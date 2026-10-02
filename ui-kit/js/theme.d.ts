@@ -12,7 +12,9 @@ export type AppId =
   | 'hypermail'
   | 'metropolis'
   | 'flow'
-  | 'bom';
+  | 'bom'
+  | 'skills'
+  | 'reading';
 
 export interface ThemeState {
   skin: Skin;
