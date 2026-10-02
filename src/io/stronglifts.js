@@ -2,11 +2,11 @@
 // This turns that file into lifting plans the way the shelf already holds
 // them: one plan per era ("Lifting 2019–20 (StrongLifts 5×5)"), one task per
 // training day, a timesheet line per workout, every task labelled with the
-// Lifting skill so the Skills app can read it.
+// Strength skill so the Skills app can read it.
 
 import { newTask, newResource, newTimesheet } from '../model/model.js';
 
-export const SKILL = 'Lifting';
+export const SKILL = 'Strength';
 const PLAN_RE = /^Lifting (\d{4})(?:[–-](\d{2,4}))? \(StrongLifts 5×5\)$/;
 
 /** A CSV with quoted fields, as the app writes it. */

@@ -63,7 +63,7 @@ test('merging adds the days a plan lacks and never a day it has', () => {
   assert.equal(p.tasks.length, 2);
   assert.equal(p.timesheets.length, 3);
   assert.equal(p.resources.length, 1);
-  assert.equal(p.tasks[0].skill, 'Lifting');
+  assert.equal(p.tasks[0].skill, 'Strength');
   assert.equal(p.tasks[0].energy, 'physical');
   assert.equal(p.tasks[0].percent, 100);
   assert.equal(p.timesheets[0].resourceId, p.resources[0].id);

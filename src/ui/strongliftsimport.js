@@ -31,7 +31,7 @@ export async function importStrongLifts() {
   const wsSel = el('select', { class: 'sc-select' }, ...workspaces.map((w) => el('option', { value: w.id, text: w.name, selected: /personal/i.test(w.name) })));
   const whoSel = el('select', { class: 'sc-select' }, el('option', { value: '', text: 'Me (first person in People)' }), ...people.map((p) => el('option', { value: p.id, text: p.name })));
   const go = await open('Import StrongLifts', (close) => [
-    el('p', { class: 'sc-muted', text: `${sessions.length} workouts on ${tasks.length} days, ${years[0]}–${years[years.length - 1]}. One task per day, a timesheet line per workout, skill “Lifting”.` }),
+    el('p', { class: 'sc-muted', text: `${sessions.length} workouts on ${tasks.length} days, ${years[0]}–${years[years.length - 1]}. One task per day, a timesheet line per workout, skill “Strength”.` }),
     el('label', { class: 'sc-field' }, el('span', { text: 'Workspace' }), wsSel),
     el('label', { class: 'sc-field' }, el('span', { text: 'Whose hours' }), whoSel),
     foot(button('Cancel', () => close(null)), button('Import', () => close('go'), 'sc-button--primary')),
