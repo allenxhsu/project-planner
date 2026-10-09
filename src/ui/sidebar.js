@@ -295,6 +295,13 @@ export function planMenu(p, siblings = []) {
         { icon: '⊘', label: 'Cancel project', run: () => { void status('Cancelled'); } }]),
       { icon: '⧉', label: 'Copy link', run: () => { const url = `${location.origin}${location.pathname}#plan=${encodeURIComponent(p.id)}`; navigator.clipboard?.writeText(url).then(() => act.hint('Link copied.'), () => act.hint(url)); } },
       { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Remove from Favorites' : 'Add to Favorites', run: async () => { await sync.setPlanPinned(p.id, !p.pinned); await refreshSidebar(); } },
+      { icon: '✧', label: 'Create a template…', run: async () => {
+        // The wizard works on the open project: pick the stages and tasks, tune them, save.
+        if (p.id !== store.project.id && !(await sync.openPlan(p.id))) return;
+        const m = await import('./stagetemplates.js');
+        await m.templateWizard();
+        await refreshSidebar();
+      } },
       { icon: '✦', label: 'Save as template', run: async () => {
         const back = store.project.id;
         const copy = await sync.duplicatePlan(p.id, { asTemplate: true, name: `${p.name} (template)` });

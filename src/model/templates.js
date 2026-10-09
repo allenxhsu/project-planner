@@ -88,15 +88,42 @@ function place(q, head, props, phaseId = null) {
   return t;
 }
 
-/** Links between tasks that both came across. `map` is source task id → the task it became. */
-function relink(q, source, map) {
+/**
+ * Links into the tasks that came across, from tasks that came across or were
+ * already there. `map` is source task id → the task it is here; only the ones
+ * in `added` are given links — a task the plan already had keeps its own.
+ */
+function relink(q, source, map, added = null) {
   for (const [id, t] of map) {
+    if (added && !added.has(t.id)) continue;
     for (const l of getTask(source, id)?.predecessors || []) {
       const before = map.get(l.id);
       if (before && before.id !== t.id && !linkError(q, before.id, t.id)) link(q, before.id, t.id, l.type, l.lag);
     }
   }
 }
+
+const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+/**
+ * Where a part of a template lands in a plan that may already have it: a
+ * stage by its standard stage, else by name; a group by its name.
+ * { exists, head, phaseId, have } — the heading and stage it goes under, and
+ * the tasks already there (a task of the same name is not added again).
+ */
+export function matchIn(target, g, stageSet) {
+  if (g.kind === 'stage') {
+    const mine = phases(target).find((ph) => (g.stageKey && stageKeyOf(stageSet, ph) === g.stageKey) || same(ph.name, g.name));
+    if (mine) return { exists: true, phaseId: mine.id, head: mine.summaryId ? getTask(target, mine.summaryId) : null, have: stageTasks(target, mine.id, { archived: true }) };
+  } else if (g.kind === 'group') {
+    const hi = target.tasks.findIndex((t, i) => t.level === 1 && isSummary(target, i) && same(t.name, g.name) && !phases(target).some((ph) => ph.summaryId === t.id));
+    if (hi >= 0) return { exists: true, phaseId: null, head: target.tasks[hi], have: descendants(target, hi).map((j) => target.tasks[j]) };
+  }
+  return { exists: false, phaseId: null, head: null, have: [] };
+}
+
+/** Whether a plan already has this task of a template's part (by name). */
+export const hasTask = (match, name) => match.have.some((t) => same(t.name, name));
 
 /**
  * Copy picked stages from a template into a plan. `picks` is
@@ -108,7 +135,7 @@ export function addStagesFrom(target, template, picks, stageSet) {
   const groups = stageGroups(template, stageSet);
   const result = { stages: 0, merged: 0, tasks: 0, skipped: 0 };
   const map = new Map();
-  const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  const added = new Set();
   for (const pick of picks || []) {
     const g = groups.find((x) => x.id === pick.id);
     if (!g) continue;
@@ -116,40 +143,28 @@ export function addStagesFrom(target, template, picks, stageSet) {
     const sources = g.taskIds.filter((id) => want.has(id)).map((id) => getTask(template, id));
     if (!sources.length) continue;
 
-    let head = null;
-    let phaseId = null;
-    let have = [];
-    if (g.kind === 'stage') {
-      const mine = phases(target).find((ph) => (g.stageKey && stageKeyOf(stageSet, ph) === g.stageKey) || same(ph.name, g.name));
-      if (mine) {
-        result.merged++;
-        phaseId = mine.id;
-        head = mine.summaryId ? getTask(target, mine.summaryId) : null;
-        have = stageTasks(target, mine.id, { archived: true });
-      } else {
-        head = insertTask(target, target.tasks.length, { name: g.name, level: 1 });
-        phaseId = setSummaryStage(target, head.id, { key: g.stageKey, name: g.name }).id;
-        result.stages++;
-      }
-    } else if (g.kind === 'group') {
-      const hi = target.tasks.findIndex((t, i) => t.level === 1 && isSummary(target, i) && same(t.name, g.name) && !phases(target).some((ph) => ph.summaryId === t.id));
-      if (hi >= 0) {
-        head = target.tasks[hi];
-        have = descendants(target, hi).map((j) => target.tasks[j]);
-        result.merged++;
-      } else {
-        head = insertTask(target, target.tasks.length, { name: g.name, level: 1 });
-        result.stages++;
-      }
+    let { head, phaseId, have, exists } = matchIn(target, g, stageSet);
+    if (exists) result.merged++;
+    else if (g.kind !== 'loose') {
+      head = insertTask(target, target.tasks.length, { name: g.name, level: 1 });
+      if (g.kind === 'stage') phaseId = setSummaryStage(target, head.id, { key: g.stageKey, name: g.name }).id;
+      result.stages++;
+    }
+    // What the plan already has of this part stands in for the template's task, so new tasks can wait for it.
+    for (const id of g.taskIds) {
+      const s = getTask(template, id);
+      const already = have.find((t) => same(t.name, s.name));
+      if (already) map.set(id, already);
     }
     for (const s of sources) {
-      const already = have.find((t) => same(t.name, s.name));
-      if (already) { map.set(s.id, already); result.skipped++; continue; }
-      map.set(s.id, place(target, head, pattern(template, s, { show: true }), phaseId));
+      if (map.has(s.id)) { result.skipped++; continue; }
+      const t = place(target, head, pattern(template, s, { show: true }), phaseId);
+      map.set(s.id, t);
+      added.add(t.id);
       result.tasks++;
     }
   }
-  relink(target, template, map);
+  relink(target, template, map, added);
   return result;
 }
 

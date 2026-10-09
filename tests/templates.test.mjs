@@ -153,3 +153,18 @@ test('a template from a project: tuned stages and tasks, skills instead of peopl
   assert.equal(getPhase(back, back.phases[0].id).stageKey, 'build');
   void d; void b; void visit; void travel; void loose;
 });
+
+test('a new task waits for a task the project already has, as the template says — and that task is left as it was', () => {
+  const { p: template, layout, drawings } = chiller();
+  const g = stageGroups(template, set);
+  const target = createProject('Chiller WO 502', '2026-10-01');
+  const mine = insertTask(target, 0, { name: 'Design', level: 1 });
+  const had = insertTask(target, 1, { name: 'Layout', level: 2 });
+  setSummaryStage(target, mine.id, std('design'));
+  // Only the missing task is picked: the one already here is not offered.
+  addStagesFrom(target, template, [{ id: g[0].id, taskIds: [drawings.id] }], set);
+  const added = target.tasks.find((t) => t.name === 'Electrical drawings');
+  assert.deepEqual(added.predecessors.map((l) => l.id), [had.id], 'linked to the Layout that was already here');
+  assert.deepEqual(had.predecessors, [], 'which gains no links of its own');
+  void layout;
+});

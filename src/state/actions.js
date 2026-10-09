@@ -8,6 +8,7 @@ import { workspaceNow } from './sync.js';
 import * as docsModel from '../model/docs.js';
 import { today as localToday } from '../model/calendar.js';
 import { taskDefaults } from '../ui/taskdefaults.js';
+import { addStagesFrom } from '../model/templates.js';
 import { setProjectField, commentOnProject, extendStage, fixTaskToStage, completeStage, cancelStage, reopenStage, setCurrentStage, autoAdvance, insertStage } from '../model/stages.js';
 
 export const hint = (text) => set({ hint: text });
@@ -588,6 +589,13 @@ export function quickAddTask(name, minutes, phaseId) {
     delete made.fromModule;
   });
   return made;
+}
+
+/** Picked stages of a template, with their picked tasks, into the open project (model/templates.js). */
+export function addStages(template, picks, stageSet) {
+  let result = null;
+  const ok = attempt('Add stages from a template', (p) => { result = addStagesFrom(p, template, picks, stageSet); });
+  return ok ? result : null;
 }
 
 /** Stop a started task: log what was worked, and say what it still needs. */

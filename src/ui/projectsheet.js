@@ -432,6 +432,8 @@ function rightColumn(ui, draw) {
       ...(collapsed ? [el('div', { class: 'sc-faint small ps-stage-sum', text: `${tasks.length} task${tasks.length === 1 ? '' : 's'}${h.done ? ` · ${h.done} done` : ''}` })] : [...tasks.map(taskRow), st === 'open' ? addTaskRow(ph.id) : null])));
   }
   groups.append(el('button', { class: 'ps-add ps-add-stage', text: '＋ Add stage', onclick: () => { void createStageDialog(); } }));
+  // Stages (and their tasks) copied from a template, instead of entered by hand.
+  groups.append(el('button', { class: 'ps-add ps-add-stage', text: '＋ From a template…', title: 'Add stages, with their tasks, from a template', onclick: () => { void import('./stagetemplates.js').then((m) => m.addStagesDialog()); } }));
 
   return el('div', { class: 'ps-col ps-right' },
     el('div', { class: 'ps-tasks-head' },

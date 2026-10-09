@@ -97,7 +97,7 @@ export async function quickAddDialog() {
       processRow,
       list,
       el('div', { class: 'qa-line' }, line, minutes),
-      foot(el('span', { class: 'sc-faint small', text: 'Tasks go under the stage’s summary, with their links, and are released when the project is in that stage.' }),
+      foot(el('button', { class: 'link', text: 'Add stages from a template…', onclick: () => { close(null); void import('./stagetemplates.js').then((m) => m.addStagesDialog()); } }),
         el('span', { class: 'sc-spacer' }), button('Done', () => close(null)), addBtn),
     ];
   }, { wide: true });

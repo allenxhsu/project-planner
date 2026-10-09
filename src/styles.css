@@ -1506,3 +1506,28 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .pr-stage .sc-input { max-width: 260px; }
 .pr-module { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--sc-line); }
 .pr-module-name { max-width: 260px; }
+
+/* Templates by the stage (ui/stagetemplates.js) */
+.stt-pick, .tw-pick { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.stt-pick .sc-select, .tw-pick .sc-select { min-width: 280px; }
+.stt-list { max-height: 420px; overflow: auto; border: 1px solid var(--sc-line); border-radius: 6px; padding: 4px 8px; margin-bottom: 10px; }
+.stt-group { padding: 4px 0; border-bottom: 1px solid var(--sc-line); }
+.stt-group:last-child { border-bottom: 0; }
+.stt-group > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0; }
+.stt-task { display: flex; align-items: center; gap: 8px; padding: 3px 0 3px 26px; font-size: 13px; cursor: pointer; }
+.stt-task .stt-name { flex: 1; }
+.stt-task.is-here { opacity: .5; cursor: default; }
+.tw-steps { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: var(--sc-text-3); }
+.tw-step.is-on { color: var(--sc-accent); font-weight: 600; }
+.tw-step.is-done { color: var(--sc-text-2); }
+.tw-body { min-height: 260px; }
+.tw-list { max-height: 380px; overflow: auto; border: 1px solid var(--sc-line); border-radius: 6px; padding: 4px 8px; margin: 8px 0; }
+.tw-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.tw-row.is-off { opacity: .45; }
+.tw-row .tw-name { flex: 1; min-width: 160px; }
+.tw-row .tw-stage { width: 130px; }
+.tw-row .tw-count { width: 64px; text-align: right; }
+.tw-row .tw-hours { width: 74px; }
+.tw-row .tw-skill { width: 120px; }
+.tw-bulk { display: flex; gap: 14px; font-size: 12px; }
+.tw-error { color: var(--sc-danger); }

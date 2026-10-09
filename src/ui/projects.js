@@ -56,6 +56,13 @@ function cardMenu(p, x, y) {
         if (!name) return;
         if (await duplicatePlan(p.id, { name })) { set({ view: 'gantt' }); void reloadPlans(); }
       } },
+      { label: 'Create a template…', run: async () => {
+        const { openPlan } = await import('../state/sync.js');
+        if (p.id !== store.project.id && !(await openPlan(p.id))) return;
+        const m = await import('./stagetemplates.js');
+        await m.templateWizard();
+        void reloadPlans();
+      } },
       { label: 'New plan from this as a template', run: async () => {
         const name = await promptText('Use this plan as a template',
           'The copy keeps the tasks, links, resources, stages and statuses, and starts clean: no progress, no logged hours, no pinned dates or deadlines.',
