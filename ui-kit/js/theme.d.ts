@@ -14,7 +14,8 @@ export type AppId =
   | 'flow'
   | 'bom'
   | 'skills'
-  | 'reading';
+  | 'reading'
+  | 'pipeline';
 
 export interface ThemeState {
   skin: Skin;

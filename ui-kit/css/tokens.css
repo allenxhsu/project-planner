@@ -59,6 +59,8 @@
   --sc-app-skills-rgb: 111 211 199;
   --sc-app-reading: #e8bd4f;
   --sc-app-reading-rgb: 232 189 79;
+  --sc-app-pipeline: #7a8cf0;
+  --sc-app-pipeline-rgb: 122 140 240;
   --sc-app: var(--sc-accent);
   --sc-app-rgb: var(--sc-accent-rgb);
 }
@@ -302,4 +304,9 @@
 [data-app="reading"] {
   --sc-app: var(--sc-app-reading);
   --sc-app-rgb: var(--sc-app-reading-rgb);
+}
+
+[data-app="pipeline"] {
+  --sc-app: var(--sc-app-pipeline);
+  --sc-app-rgb: var(--sc-app-pipeline-rgb);
 }
