@@ -86,6 +86,7 @@ the duration.
 | Projects | every plan in hand as a card, with finished ones folded into the archive: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
 | Calendar | a day, the working week, the whole week including the weekend, or a month. Each task's hours are laid into blocks: a task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
+| Agenda | the day, first thing: the tasks the calendar laid on it — at most the day's six, labelled **Essential priority**, **Essential and urgent** or **Maintenance**, in that order — with what the daily focus held back to later days under them; then what was finished, what will be late and what is past its deadline, beside the day's hours |
 | Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
 | All Tasks | every task in every plan, grouped by project and then phase — the active phase marked, each group with its task count, hours left, deadline range and progress, and + Task to add one there — or by project alone, or flat; filtered by late / unfinished / critical / unassigned, searchable, and a row opens its task sheet |
 
@@ -149,6 +150,25 @@ calendar says *when*: which hours, on which days.
 - **A gap, if you want one.** Project ▸ details sets the breathing room after
   every block — none, 5, 10, 15 or 30 minutes — so the day is not back to back.
   It costs a block a day and the work moves on rather than vanishing.
+- **A day holds six tasks.** Laying every released task into every free hour
+  made a wall of a day. A day now holds at most six, in three buckets, in this
+  order: **one essential priority** — the one thing the day is for; **two
+  essential and urgent**; **three maintenance**. The rest wait for the next
+  working day with a free slot: nothing is dropped, and the calendar's footer
+  says how many were held back, with **Show what is held back** listing each
+  and the day it moved to. A task counts once however many blocks it is cut
+  into; a block fixed by hand is on its day whatever the count.
+
+  Which bucket is automatic, from what the plan already knows. The essential
+  work of a day is ranked by urgency **ASAP** first, then **High**, then the
+  earliest deadline, then the critical path, then the order the scheduler lays
+  work in; the first is the priority and the next two are urgent. Maintenance
+  is a routine's occurrence first, then **Low**-urgency work, then whatever
+  else there was room for. To promote a task, change its urgency; there is no
+  new field. The counts — 1 / 2 / 3 by default, 0 to 6 each, all three at
+  none to switch the limit off — are **Daily focus** in Project settings ▸
+  Working time, beside the gap and the daily limit, and the open plan's
+  setting rules the whole calendar, since one calendar holds every plan.
 - **One calendar, every plan.** The hours of a week are shared by everything a
   person is working on, so all the plans on the shelf are laid out together.
   Each block carries the person's initials in their own colour and the plan it
@@ -351,7 +371,9 @@ many released tasks are not due to start until later, and how many unfinished
 tasks are not on the calendar at all. An empty afternoon is then a fact with a
 reason rather than a thing to wonder about.
 
-Three things keep work off an afternoon. A task is not on the calendar until
+Four things keep work off an afternoon. The daily focus holds a day to six
+tasks, and says under the grid how many it moved to later days (see *A day
+holds six tasks* above). A task is not on the calendar until
 it asks to be. A task is never placed before the day its plan schedules it to
 start. And a task belongs to a time block, so one in **Deep focus,
 08:00–10:00** can only ever land in those two hours, however free the rest of
