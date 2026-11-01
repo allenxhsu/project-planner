@@ -16,7 +16,7 @@ import * as act from '../state/actions.js';
 import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../model/calendar.js';
 import { formatClock, hoursLeft, parseTime, agendaOf } from '../model/agenda.js';
 import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
-import { dayRows, caughtUp, burstKeys } from '../model/dayplan.js';
+import { dayRows, caughtUp, burstKeys, lateOn, heldBackFrom } from '../model/dayplan.js';
 import { FOCUS_LABELS } from '../model/focus.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
 import { taskSheet, meetingSheet } from './blockmenu.js';
@@ -93,7 +93,8 @@ export function renderToday(root) {
   if (focus) for (const k of ['priority', 'urgent', 'maintenance']) focus[k].forEach((c, i) => bucketOf.set(`${c.planId}|${c.taskId}`, { bucket: k, at: ['priority', 'urgent', 'maintenance'].indexOf(k) * 100 + i }));
   const todays = rowsToday.map((r) => ({ planId: r.plan, taskId: r.task, minutes: r.minutes, first: r.start, ...(bucketOf.get(`${r.plan}|${r.task}`) || { bucket: null, at: 999 }) }))
     .sort((a, b) => a.at - b.at || a.first - b.first);
-  const heldBack = (focus?.heldBack || []).filter((h) => !hiddenPlan(h.planId));
+  // What the focus moved off this day is another day's business (listed there); here it is a count.
+  const heldBack = heldBackFrom(focus?.heldBack, { hidden: hiddenPlan });
 
   // Past deadline: not done, not archived, due before this day — anywhere.
   const past = [];
@@ -114,7 +115,8 @@ export function renderToday(root) {
   const isCurrent = ({ e, task }) => agendaOf(e.project, task).show && day - toDay(task.deadline) <= STALE_DAYS;
   const pastNow = past.filter(isCurrent);
   const pastOld = past.filter((x) => !isCurrent(x));
-  const late = (all.late || []).filter((l) => l.deadline >= day && !hiddenPlan(l.planId));
+  // Due this day and not going to make it. A later deadline is another day's business; the Checks say so for every day at once.
+  const late = lateOn(all.late, day, { hidden: hiddenPlan });
 
   // Completed on this day: every task, anywhere, finished that day — except
   // the ones that were only being caught up on. Ticking off a year of old work
@@ -165,17 +167,22 @@ export function renderToday(root) {
     return taskRow({ planId: r.planId, planName: hit.e.project.name, task: hit.task, info: hit.info,
       extra: `${formatClock(r.first)} · ${hoursText(r.minutes)}`, showPlan: many, bucket: r.bucket });
   }).filter(Boolean), 'Nothing is laid on this day. Put tasks on the calendar and their hours land here.');
-  // What the daily focus moved off this day: one line, opening into the list.
+  // What the daily focus moved off this day is not this day's to do: it is
+  // listed on the day it went to. Here, one closed line with the count, which
+  // opens into the names and where each went.
   if (heldBack.length) {
-    const seen = new Set();
-    const rows = heldBack.filter((h) => !seen.has(`${h.planId}|${h.taskId}`) && seen.add(`${h.planId}|${h.taskId}`)).map((h) => {
+    const dayName = (d) => `${WEEKDAY_NAMES[weekday(d)].slice(0, 3)} ${formatDate(fromDay(d), 'day')}`;
+    const rows = heldBack.map((h) => {
       const hit = find(h.planId, h.taskId);
       if (!hit) return null;
-      return taskRow({ planId: h.planId, planName: hit.e.project.name, task: hit.task, info: hit.info, showPlan: many,
-        extra: h.to === null ? 'no day with room yet' : `moved to ${WEEKDAY_NAMES[weekday(h.to)].slice(0, 3)} ${formatDate(fromDay(h.to), 'day')}` });
+      return el('li', { class: 'today-held-row', onclick: () => { void taskSheet({ planId: h.planId, taskId: h.taskId }); } },
+        el('span', { class: 'today-name', text: hit.task.name }),
+        many ? el('span', { class: 'sc-pill today-plan', text: hit.e.project.name }) : null,
+        el('span', { class: 'sc-faint today-hours', text: h.to === null ? 'no day with room yet' : `→ ${dayName(h.to)}` }));
     }).filter(Boolean);
+    const limit = all.focus.counts.priority + all.focus.counts.urgent + all.focus.counts.maintenance;
     main.append(el('details', { class: 'today-old today-held' },
-      el('summary', { class: 'sc-muted', text: `${rows.length} more task${rows.length === 1 ? '' : 's'} held back to later days by the daily focus (at most ${all.focus.counts.priority + all.focus.counts.urgent + all.focus.counts.maintenance} a day).` }),
+      el('summary', { class: 'sc-muted', text: `${rows.length} task${rows.length === 1 ? '' : 's'} held back to later days (at most ${limit} a day).` }),
       el('ul', { class: 'today-list' }, ...rows)));
   }
 

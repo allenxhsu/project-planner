@@ -41,6 +41,33 @@ export function dayRows(blocks, day, { percentOf = () => 0, hidden = () => false
     .sort((a, b) => a.start - b.start || a.plan.localeCompare(b.plan) || a.task.localeCompare(b.task));
 }
 
+/**
+ * What "Will be late" under a day lists: the tasks due that day that will not
+ * make it. A deadline already gone is under "past deadline"; a later one is
+ * another day's business, and the Checks say so for every day at once.
+ */
+export function lateOn(late, day, { hidden = () => false } = {}) {
+  return (late || []).filter((l) => l && l.deadline === day && !hidden(l.planId));
+}
+
+/**
+ * What the daily focus (model/focus.js) moved off a day: each task once, with
+ * `to`, the day it went to (null while no day had room). The task itself is
+ * that day's business, listed there; here it is only a count to open.
+ */
+export function heldBackFrom(heldBack, { hidden = () => false } = {}) {
+  const seen = new Set();
+  const out = [];
+  for (const h of heldBack || []) {
+    if (!h || hidden(h.planId)) continue;
+    const key = `${h.planId}|${h.taskId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ planId: h.planId, taskId: h.taskId, to: h.to ?? null });
+  }
+  return out;
+}
+
 /** The record type other apps read the day from. */
 export const AGENDA_TYPE = 'agenda';
 
