@@ -2,6 +2,8 @@ export { SyncEngine, SYNC_CURSOR_KEYS } from './engine.js';
 export type { SyncResult, SyncStatus, SyncPhase, SyncEngineOptions } from './engine.js';
 export { HttpTransport, SyncUnauthorized } from './http.js';
 export type { HttpTransportOptions } from './http.js';
+export { watchChanges } from './watch.js';
+export type { WatchOptions, WatchHandle, ChangeEvent } from './watch.js';
 export { portalApp, portalSession, portalRemote, portalSignInPath } from './portal.js';
 export type { PortalSession, PortalApp, PortalRemote, PortalSessionOptions } from './portal.js';
 export { SYNC_ROUTES } from './protocol.js';

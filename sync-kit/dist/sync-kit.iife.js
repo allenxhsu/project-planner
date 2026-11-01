@@ -381,6 +381,7 @@ function onSyncNow(handler) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpTransport = exports.SyncUnauthorized = void 0;
 const protocol_js_1 = require("./protocol.js");
+const watch_js_1 = require("./watch.js");
 /**
  * A refusal that means "your credential, not your request".
  *
@@ -462,6 +463,25 @@ class HttpTransport {
     push(req) {
         return this.call(protocol_js_1.SYNC_ROUTES.push, req);
     }
+    /**
+     * Hears about pushes to this workspace as they are accepted; see
+     * `watchChanges`. The same URL and token as pull and push, and a refused
+     * credential reaches `onUnauthorized` the same way a refused pull does.
+     */
+    watch(onChange, extra = {}) {
+        const { onError, ...rest } = extra;
+        return (0, watch_js_1.watchChanges)({
+            baseUrl: this.opts.baseUrl,
+            ...(this.opts.token ? { token: this.opts.token } : {}),
+            ...rest,
+            onChange,
+            onError: (err) => {
+                if (err.code === 'unauthorized')
+                    this.opts.onUnauthorized?.();
+                onError?.(err);
+            },
+        });
+    }
 }
 exports.HttpTransport = HttpTransport;
 
@@ -469,13 +489,15 @@ exports.HttpTransport = HttpTransport;
 "index.js": function (exports, require, module) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
+exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.watchChanges = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
 var engine_js_1 = require("./engine.js");
 Object.defineProperty(exports, "SyncEngine", { enumerable: true, get: function () { return engine_js_1.SyncEngine; } });
 Object.defineProperty(exports, "SYNC_CURSOR_KEYS", { enumerable: true, get: function () { return engine_js_1.SYNC_CURSOR_KEYS; } });
 var http_js_1 = require("./http.js");
 Object.defineProperty(exports, "HttpTransport", { enumerable: true, get: function () { return http_js_1.HttpTransport; } });
 Object.defineProperty(exports, "SyncUnauthorized", { enumerable: true, get: function () { return http_js_1.SyncUnauthorized; } });
+var watch_js_1 = require("./watch.js");
+Object.defineProperty(exports, "watchChanges", { enumerable: true, get: function () { return watch_js_1.watchChanges; } });
 var portal_js_1 = require("./portal.js");
 Object.defineProperty(exports, "portalApp", { enumerable: true, get: function () { return portal_js_1.portalApp; } });
 Object.defineProperty(exports, "portalSession", { enumerable: true, get: function () { return portal_js_1.portalSession; } });
@@ -727,6 +749,8 @@ exports.SYNC_ROUTES = {
     pull: '/sync/pull',
     push: '/sync/push',
     health: '/sync/health',
+    /** `GET`: a server-sent event per accepted push. See `watch.ts`. */
+    events: '/sync/events',
 };
 
 },
@@ -1212,6 +1236,116 @@ class MemoryStore {
     }
 }
 exports.MemoryStore = MemoryStore;
+
+},
+"watch.js": function (exports, require, module) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.watchChanges = watchChanges;
+const http_js_1 = require("./http.js");
+const protocol_js_1 = require("./protocol.js");
+const MAX_RETRY_MS = 30_000;
+function watchChanges(opts) {
+    const doFetch = opts.fetch ?? ((input, init) => fetch(input, init));
+    const url = opts.baseUrl.replace(/\/$/, '') + protocol_js_1.SYNC_ROUTES.events;
+    const headers = { Accept: 'text/event-stream' };
+    if (opts.token)
+        headers.Authorization = `Bearer ${opts.token}`;
+    const firstRetry = opts.retryMs ?? 1000;
+    let stopped = false;
+    let controller = null;
+    let timer = null;
+    let wait = firstRetry;
+    const schedule = () => {
+        if (stopped)
+            return;
+        timer = setTimeout(() => {
+            timer = null;
+            void connect();
+        }, wait);
+        wait = Math.min(wait * 2, MAX_RETRY_MS);
+    };
+    const dispatch = (block) => {
+        let event = '';
+        const data = [];
+        for (const line of block.split('\n')) {
+            if (line.startsWith('event:'))
+                event = line.slice(6).trim();
+            else if (line.startsWith('data:'))
+                data.push(line.slice(5).trim());
+            // `retry:`, `id:` and comment lines carry nothing this client acts on.
+        }
+        if (event !== 'change')
+            return;
+        try {
+            const parsed = JSON.parse(data.join('\n'));
+            if (typeof parsed.cursor === 'number')
+                opts.onChange({ cursor: parsed.cursor });
+        }
+        catch {
+            // A malformed event is the server's bug, and dropping it costs one
+            // sync's worth of promptness — not a crash in the page's event loop.
+        }
+    };
+    const read = async (body, signal) => {
+        const reader = body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done || signal.aborted)
+                return;
+            buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+            let at;
+            while ((at = buffer.indexOf('\n\n')) >= 0) {
+                dispatch(buffer.slice(0, at));
+                buffer = buffer.slice(at + 2);
+            }
+        }
+    };
+    const connect = async () => {
+        if (stopped)
+            return;
+        controller = new AbortController();
+        try {
+            const res = await doFetch(url, {
+                method: 'GET',
+                headers,
+                credentials: 'same-origin',
+                signal: controller.signal,
+            });
+            if (res.status === 401 || res.status === 403) {
+                stopped = true;
+                opts.onError?.(new http_js_1.SyncUnauthorized(protocol_js_1.SYNC_ROUTES.events));
+                return;
+            }
+            if (!res.ok || !res.body)
+                throw new Error(`sync ${protocol_js_1.SYNC_ROUTES.events} failed: ${res.status} ${res.statusText}`);
+            // Connected: the next pause, if there is one, starts short again.
+            wait = firstRetry;
+            await read(res.body, controller.signal);
+        }
+        catch (err) {
+            if (stopped)
+                return;
+            opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+        }
+        schedule();
+    };
+    void connect();
+    return {
+        stop() {
+            stopped = true;
+            if (timer)
+                clearTimeout(timer);
+            timer = null;
+            controller?.abort();
+        },
+        get active() {
+            return !stopped;
+        },
+    };
+}
 
 }
   };

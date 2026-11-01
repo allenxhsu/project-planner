@@ -1,12 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
+exports.storageStatus = exports.requestPersistentStorage = exports.FileStore = exports.IndexedDbStore = exports.LocalStore = exports.MemoryStore = exports.SyncedDocument = exports.parseConnectLink = exports.buildConnectLink = exports.onSyncNow = exports.requestSync = exports.publishStatus = exports.SYNC_EVENTS = exports.mergeRecord = exports.SYNC_ROUTES = exports.portalSignInPath = exports.portalRemote = exports.portalSession = exports.portalApp = exports.watchChanges = exports.SyncUnauthorized = exports.HttpTransport = exports.SYNC_CURSOR_KEYS = exports.SyncEngine = void 0;
 var engine_js_1 = require("./engine.js");
 Object.defineProperty(exports, "SyncEngine", { enumerable: true, get: function () { return engine_js_1.SyncEngine; } });
 Object.defineProperty(exports, "SYNC_CURSOR_KEYS", { enumerable: true, get: function () { return engine_js_1.SYNC_CURSOR_KEYS; } });
 var http_js_1 = require("./http.js");
 Object.defineProperty(exports, "HttpTransport", { enumerable: true, get: function () { return http_js_1.HttpTransport; } });
 Object.defineProperty(exports, "SyncUnauthorized", { enumerable: true, get: function () { return http_js_1.SyncUnauthorized; } });
+var watch_js_1 = require("./watch.js");
+Object.defineProperty(exports, "watchChanges", { enumerable: true, get: function () { return watch_js_1.watchChanges; } });
 var portal_js_1 = require("./portal.js");
 Object.defineProperty(exports, "portalApp", { enumerable: true, get: function () { return portal_js_1.portalApp; } });
 Object.defineProperty(exports, "portalSession", { enumerable: true, get: function () { return portal_js_1.portalSession; } });

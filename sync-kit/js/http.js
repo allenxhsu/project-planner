@@ -1,4 +1,5 @@
 import { SYNC_ROUTES } from './protocol.js';
+import { watchChanges } from './watch.js';
 /**
  * A refusal that means "your credential, not your request".
  *
@@ -78,5 +79,24 @@ export class HttpTransport {
     }
     push(req) {
         return this.call(SYNC_ROUTES.push, req);
+    }
+    /**
+     * Hears about pushes to this workspace as they are accepted; see
+     * `watchChanges`. The same URL and token as pull and push, and a refused
+     * credential reaches `onUnauthorized` the same way a refused pull does.
+     */
+    watch(onChange, extra = {}) {
+        const { onError, ...rest } = extra;
+        return watchChanges({
+            baseUrl: this.opts.baseUrl,
+            ...(this.opts.token ? { token: this.opts.token } : {}),
+            ...rest,
+            onChange,
+            onError: (err) => {
+                if (err.code === 'unauthorized')
+                    this.opts.onUnauthorized?.();
+                onError?.(err);
+            },
+        });
     }
 }

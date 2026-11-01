@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpTransport = exports.SyncUnauthorized = void 0;
 const protocol_js_1 = require("./protocol.js");
+const watch_js_1 = require("./watch.js");
 /**
  * A refusal that means "your credential, not your request".
  *
@@ -82,6 +83,25 @@ class HttpTransport {
     }
     push(req) {
         return this.call(protocol_js_1.SYNC_ROUTES.push, req);
+    }
+    /**
+     * Hears about pushes to this workspace as they are accepted; see
+     * `watchChanges`. The same URL and token as pull and push, and a refused
+     * credential reaches `onUnauthorized` the same way a refused pull does.
+     */
+    watch(onChange, extra = {}) {
+        const { onError, ...rest } = extra;
+        return (0, watch_js_1.watchChanges)({
+            baseUrl: this.opts.baseUrl,
+            ...(this.opts.token ? { token: this.opts.token } : {}),
+            ...rest,
+            onChange,
+            onError: (err) => {
+                if (err.code === 'unauthorized')
+                    this.opts.onUnauthorized?.();
+                onError?.(err);
+            },
+        });
     }
 }
 exports.HttpTransport = HttpTransport;

@@ -1,5 +1,6 @@
 import type { SyncRecord } from './store.js';
 import type { PullRequest, PullResponse, PushRequest, PushResponse, Transport } from './protocol.js';
+import { type ChangeEvent, type WatchHandle, type WatchOptions } from './watch.js';
 export interface HttpTransportOptions {
     /** The workspace URL, e.g. `https://host/w/idef0`. The routes are appended. */
     baseUrl: string;
@@ -45,4 +46,10 @@ export declare class HttpTransport<R extends SyncRecord = SyncRecord> implements
     private call;
     pull(req: PullRequest): Promise<PullResponse<R>>;
     push(req: PushRequest<R>): Promise<PushResponse>;
+    /**
+     * Hears about pushes to this workspace as they are accepted; see
+     * `watchChanges`. The same URL and token as pull and push, and a refused
+     * credential reaches `onUnauthorized` the same way a refused pull does.
+     */
+    watch(onChange: (change: ChangeEvent) => void, extra?: Partial<Omit<WatchOptions, 'baseUrl' | 'onChange'>>): WatchHandle;
 }

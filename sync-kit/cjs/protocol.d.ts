@@ -26,6 +26,12 @@ export interface PushResponse {
     accepted: number;
     /** Server clock at the time of the write, so clients can advance safely. */
     cursor: number;
+    /**
+     * Ids the server refused to store because the caller may not write them —
+     * records of a project they are not a member of, in a project-scoped
+     * workspace. Absent from servers that predate it, and empty everywhere else.
+     */
+    rejected?: string[];
 }
 /** Anything that can move records between two stores. */
 export interface Transport<R extends SyncRecord = SyncRecord> {
@@ -37,4 +43,6 @@ export declare const SYNC_ROUTES: {
     readonly pull: '/sync/pull';
     readonly push: '/sync/push';
     readonly health: '/sync/health';
+    /** `GET`: a server-sent event per accepted push. See `watch.ts`. */
+    readonly events: '/sync/events';
 };
