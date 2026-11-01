@@ -28,7 +28,7 @@ import { renderPriority } from './ui/priority.js';
 import { renderBottom, checkBadge } from './ui/bottom.js';
 import { initHeader, renderHeader, renderToolbar, renderStatus, saveProject, saveProjectAs, openFile, loadText, COMMANDS, newMenu, findResults } from './ui/toolbar.js';
 import { modalOpen } from './ui/dialog.js';
-import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, keepsEdits, APP_ID } from './state/sync.js';
+import { initSync, syncAfterSave, adoptRemoteSettings, readStoredAutosave, storeCounts, keepsEdits, APP_ID, SHELF_EVENT } from './state/sync.js';
 import { SYNC_EVENTS } from '../sync-kit/js/events.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 
@@ -296,6 +296,12 @@ initSync({ preferStored: !hosted && startedOnFallback })
     // The task lists, the calendar and People read the shelf: now that it is open, read it.
     void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());
     void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans());
+    // A sync that brought another plan — edited or deleted elsewhere, by the
+    // MCP say — makes the copies these views keep stale: re-read the shelf.
+    window.addEventListener(SHELF_EVENT, () => {
+      void import('./ui/alltasks.js').then((m) => m.reloadAllTasks());
+      void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans());
+    });
     // Routines come round by themselves: now, and every hour after (a new day, a new week).
     const routines = () => { void import('./state/sync.js').then((m) => m.spawnRoutinesEverywhere()).then((n) => {
       if (n) { void import('./ui/alltasks.js').then((m) => m.reloadAllTasks()); void import('./ui/calendar.js').then((m) => m.reloadCalendarPlans()); }

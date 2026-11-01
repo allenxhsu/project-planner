@@ -495,6 +495,23 @@ function announce() {
   publishStatus(lastStatus);
 }
 
+/**
+ * Raised on the window after a sync brought in a plan that is not the open
+ * one — edited elsewhere, or deleted. The calendar, the agenda and the task
+ * lists read the shelf, and a copy they keep is now stale: they re-read it
+ * (main.js), rather than waiting for the Refresh button.
+ */
+export const SHELF_EVENT = 'planner-shelf';
+
+/**
+ * Whether what a sync applied changes the shelf other views read: any plan
+ * record but the open one's, deletions included. The open plan is adopted on
+ * screen by `adopt()`, and a record of another kind is nobody's layout.
+ */
+export function shelfChanged(applied, openPlanId) {
+  return (applied || []).some((r) => r && r.type === 'document' && r.id !== openPlanId);
+}
+
 /** One sync, now. A failure is reported through the status, never thrown at a caller. */
 export async function syncNow() {
   if (!engine) { set({ hint: 'Set a sync URL in Sync… first.' }); return null; }
@@ -505,6 +522,9 @@ export async function syncNow() {
       await adopt(result.applied);
       // After adopt: the plan on screen is the newest one before anything is added to it.
       await applyFlowOps();
+      if (shelfChanged(result.applied, store.project.id) && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(SHELF_EVENT, { detail: { applied: result.applied.map((r) => r.id) } }));
+      }
     }
     lastStatus = { ...engine.status };
     // The readout says how many records are here and how many are there; a
