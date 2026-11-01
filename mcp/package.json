@@ -1,0 +1,12 @@
+{
+  "name": "project-planner-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Project Planner as an MCP server: Claude reads and edits plans through sync.",
+  "type": "module",
+  "bin": { "project-planner-mcp": "./server.mjs" },
+  "engines": { "node": ">=22.13" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2"
+  }
+}

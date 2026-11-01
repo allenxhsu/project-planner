@@ -547,6 +547,19 @@ resources and assignments become per-row records under the plan id, while the
 calendar and any baselines stay document-level — they are properties of the
 plan as a whole, and splitting them would buy nothing.
 
+## Claude, through MCP
+
+`mcp/` is the planner as a set of tools Claude can call from a Claude Code
+session: list the plans, read a task list with its schedule, ask what is due
+today, and add, edit, link, move, assign or delete tasks — "move the report
+out two weeks" — with the plan on screen updating as each edit lands. It is
+a sync device like any other: it pulls, edits with the model's own
+functions, pushes, and the server's change feed (`/sync/events`, which the
+open page listens to while it is in front) is what makes the edit show at
+once rather than on the next half-minute sync. A page with unsaved edits of
+its own still asks which to keep. Setup and the tool list are in
+[mcp/README.md](mcp/README.md).
+
 ## Flow
 
 The [Flow](../flow) app reads plans from the same `project` workspace, and

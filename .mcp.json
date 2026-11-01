@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "project-planner": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": {
+        "PROJECT_SYNC_URL": "${PROJECT_SYNC_URL}",
+        "PROJECT_SYNC_TOKEN": "${PROJECT_SYNC_TOKEN}"
+      }
+    }
+  }
+}
