@@ -2,6 +2,7 @@
 
 import { store, set, commit, tryCommit, emit } from './store.js';
 import * as agendaModule from '../model/agenda.js';
+import { FOCUS_CHOICES, cleanFocus } from '../model/focus.js';
 import { hosted } from '../host.js';
 import { insertTask as insertTaskRaw, removeTasks, indentTasks, outdentTasks, moveTask, linkChain, unlinkAll, link, unlink, taskIndex, descendants, setTaskField, setFinish, isSummary, getTask, addResource, personResource, removeResource, setResourceField, assign, unassign, setStage, addStage, renameStage, removeStage, moveStage, setStageDone, addTimesheet, removeTimesheet, setTimesheetField, breakIntoSubtasks, isSummary as isSummaryAt, addFeed, removeFeed, setFeedField, setFeedEvents, feeds, getFeed, setPhaseField, removePhase, movePhase, getPhase, phases, cleanField, fieldsOf, getField, removeField, setFieldValue, getResource, setPin, removePin, clearPins, phaseOf, pinsOf, stopWork, saveEvent, removeEvent, addComment, spawnRoutines, takeTasks, putTasks, moduleFromSummary, addModuleTasks, setSummaryStage } from '../model/model.js';
 import { workspaceNow } from './sync.js';
@@ -890,9 +891,13 @@ export function setAgenda(patch) {
     if (!LOAD_CHOICES.includes(load)) throw new Error(`An assumed load is one of ${LOAD_CHOICES.join(', ')} per cent.`);
     const cap = +(next.dailyCap ?? DEFAULT_AGENDA.dailyCap);
     if (!CAP_CHOICES.includes(cap)) throw new Error(`A day's limit is one of ${CAP_CHOICES.join(', ')} hours.`);
+    // The daily focus: how many tasks a day holds, in which buckets (model/focus.js).
+    const focusRaw = next.focus ?? null;
+    if (focusRaw !== null && Object.values(focusRaw).some((n) => !FOCUS_CHOICES.includes(+n))) throw new Error(`A day holds 0 to ${FOCUS_CHOICES.at(-1)} tasks of each kind.`);
+    const focus = focusRaw === null ? null : cleanFocus(focusRaw);
     const capSet = 'dailyCap' in patch || p.agenda?.capSet === true;
     const scheduleChosen = patch.scheduleChosen === true || p.agenda?.scheduleChosen === true;
-    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap, ...(capSet ? { capSet: true } : {}), ...(scheduleChosen ? { scheduleChosen: true } : {}) };
+    p.agenda = { blockHours: +next.blockHours, timeBlockId: next.timeBlockId || null, gapMinutes: gap, assumedLoad: load, dailyCap: cap, ...(focus ? { focus } : {}), ...(capSet ? { capSet: true } : {}), ...(scheduleChosen ? { scheduleChosen: true } : {}) };
   });
 }
 

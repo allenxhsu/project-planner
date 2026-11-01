@@ -15,6 +15,7 @@ import { computeSchedule } from '../model/schedule.js';
 import { weekStart, monthStart, addMonths, weekday, toDay, fromDay, today, formatDate, WEEKDAY_NAMES, MONTH_NAMES, makeCalendar } from '../model/calendar.js';
 import { isSummary, phases, getResource, URGENCIES, urgencyOf, checkInsOf } from '../model/model.js';
 import { showText } from './dialog.js';
+import { FOCUS_LABELS } from '../model/focus.js';
 import { resolveLate, resolveMissed } from './resolve.js';
 import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
@@ -817,14 +818,16 @@ export function renderCalendar(root) {
       // A fixed block that went by with the task open is missed too; resolving "not done" frees it.
       const missed = b.missed || (b.pinned && !b.live && info.percent < 100 && (b.day < toDay(today()) || (b.day === toDay(today()) && b.end + GRACE_MIN <= nowMinutes())));
       const lateLine = (all.late || []).find((l) => l.taskId === t.id && l.planId === b.planId);
+      // The one thing the day is for (model/focus.js) carries a star.
+      const priority = !b.worked && (all.focus?.on(b.day).priority || []).some((c) => c.taskId === b.taskId && c.planId === b.planId);
       col.append(el('div', {
         'data-task': b.taskId,
-        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${missed ? ' is-missed' : ''}${!foreign && !b.worked && !b.missed ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}`,
+        class: `cal-block${oneDay ? ' is-day' : ''}${tight && !oneDay ? ' is-tight' : ''}${b.overdue ? ' is-overdue' : ''}${b.late ? ' is-late' : ''}${b.pinned ? ' is-pinned' : ''}${b.live ? ' is-live' : ''}${b.worked ? ' is-worked' : ''}${missed ? ' is-missed' : ''}${!foreign && !b.worked && !b.missed ? ' is-draggable' : ''}${b.critical ? ' is-critical' : ''}${ui.selection.includes(t.id) && !foreign ? ' is-sel' : ''}${foreign ? ' is-other-plan' : ''}${shown === 'dim' ? ' is-dimmed' : ''}${priority ? ' is-priority' : ''}`,
         style: {
           top: `${y(b.start)}px`, height: `${height}px`, ...within(slot, width), right: 'auto',
           '--who': colour.line, borderLeftColor: colour.line,
         },
-        title: `${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${missed ? '\nWent by and not done — click to resolve' : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
+        title: `${priority ? `${FOCUS_LABELS.priority}\n` : ''}${t.name}\n${b.planName}${person.names.length ? ` · ${person.names.join(', ')}` : ''}\n${formatClock(b.start)} – ${formatClock(b.end)} · ${b.minutes / 60}h\n${info.percent}% complete${b.overdue ? `\nOverdue: it was due to start ${formatDate(fromDay(info.start), 'long')}` : ''}${b.late ? `\nAfter its deadline, ${formatDate(t.deadline, 'long')}` : ''}${missed ? '\nWent by and not done — click to resolve' : ''}${b.pinned ? '\nPinned here by hand — drag to move, or Unpin from the menu' : foreign ? '' : '\nDrag to pin it somewhere else'}`,
         onclick: (e) => {
           if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; }
           if (b.worked) { void taskSheet({ planId: b.planId, taskId: b.taskId }); return; }
@@ -847,7 +850,7 @@ export function renderCalendar(root) {
             onpointerdown: (e) => e.stopPropagation(),
             onclick: (e) => { e.stopPropagation(); if (missed) void resolveMissed(b); else if (!b.worked) void completeBlock(b, info.percent !== 100); },
           }, info.percent === 100 || b.worked ? '✓' : ''),
-          el('span', { class: 'cal-block-name' }, t.name),
+          el('span', { class: 'cal-block-name' }, priority ? '★ ' : '', t.name),
           el('span', { class: 'cal-block-icons' },
             b.live ? el('span', { class: 'cal-live', title: 'Running now', text: '▶' }) : null,
             // Running: stop it here — log the time and say what is left (Done, the circle, finishes it).
@@ -902,18 +905,29 @@ export function renderCalendar(root) {
   const heldBack = held.sort((a, b) => b.tasks.length - a.tasks.length).slice(0, 4).map((h) => `${h.name} ${h.tasks.length}`);
   if (held.length > 4) heldBack.push(`${held.length - 4} more`);
   const heldBackDetail = held.flatMap((h) => [`${h.name} — ${h.tasks.length}`, ...h.tasks.slice(0, 12).map((t) => `   ${t.name}`), h.tasks.length > 12 ? `   … ${h.tasks.length - 12} more` : null, '']).filter((x) => x !== null);
+  // The day's limit (model/focus.js): what these days held back to later
+  // days. A task refused twice is listed once, with the day it finally got.
+  const focus = all.focus;
+  const focusHeld = new Map();
+  if (focus && !focus.off) for (const d of columns) for (const h of focus.on(d).heldBack) {
+    const key = `${h.planId}|${h.taskId}`;
+    if (!focusHeld.has(key)) focusHeld.set(key, h);
+  }
+  const focusCount = focus && !focus.off ? focus.counts.priority + focus.counts.urgent + focus.counts.maintenance : 0;
+  const focusDetail = focusHeld.size ? ['', `Held back by the daily focus — ${focusHeld.size}`, ...[...focusHeld.values()].map((h) => `   ${h.name}${h.to === null ? ' — no day with room yet' : ` — moved to ${formatDate(fromDay(h.to), 'long')}`}`)] : [];
   const capHours = { ...DEFAULT_AGENDA, ...(project.agenda || {}) }.dailyCap;
   const room = capHours ? Math.max(0, capHours * columns.length - placedHours) : 1;
-  if (placedHours || laterTasks || notReleased) {
+  if (placedHours || laterTasks || notReleased || focusHeld.size) {
     pane.append(el('p', { class: 'sc-faint small cal-note' },
       `${placedHours}h placed${columns.length > 1 ? ` across ${columns.length} days` : ''}. `,
       !capHours ? '' : room > 0 ? `Room for ${Math.round(room * 10) / 10}h more at ${capHours}h a day. ` : `That is the ${capHours}h a day this plan allows. `,
       laterTasks ? `${laterTasks} ${laterTasks === 1 ? 'task is' : 'tasks are'} on the calendar but not scheduled to start until later. ` : '',
       notReleased ? `${notReleased} unfinished ${notReleased === 1 ? 'task is' : 'tasks are'} not on the calendar yet${heldBack.length ? ` — ${heldBack.join(', ')}` : ''}. ` : '',
-      notReleased ? el('button', {
+      focusHeld.size ? `Focus: at most ${focusCount} tasks a day, so ${focusHeld.size} ${focusHeld.size === 1 ? 'task was' : 'tasks were'} held back to later days. ` : '',
+      notReleased || focusHeld.size ? el('button', {
         class: 'sc-button sc-button--ghost sc-button--sm', text: 'Show what is held back',
-        title: 'Every unfinished task that is not on the calendar, by project',
-        onclick: () => showText('Not auto-scheduled', heldBackDetail.join('\n')),
+        title: 'Every unfinished task that is not on the calendar, by project, and what the daily focus moved to later days',
+        onclick: () => showText('Held back', [...heldBackDetail, ...focusDetail].join('\n')),
       }) : null));
   }
 

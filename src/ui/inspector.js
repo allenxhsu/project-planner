@@ -5,6 +5,7 @@ import * as act from '../state/actions.js';
 import { getResource, timesheetsFor, stages } from '../model/model.js';
 import { today, WEEKDAY_NAMES } from '../model/calendar.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA } from '../model/agenda.js';
+import { FOCUS_CHOICES, FOCUS_LABELS, focusOf } from '../model/focus.js';
 import { timeBlocks, feeds, PROVIDERS, bufferOf, BUFFER_CHOICES } from '../model/model.js';
 import { describeSchedule } from './schedules.js';
 import { subscribe as subscribeStore } from '../state/store.js';
@@ -103,6 +104,12 @@ function renderProject(root, { only = null } = {}) {
     field('Most work in a day', select(String((project.agenda || {}).dailyCap ?? DEFAULT_AGENDA.dailyCap),
       CAP_CHOICES.map((h) => ({ value: String(h), label: h ? `${h} hours` : 'No limit — fill the schedule' })), (v) => act.setAgenda({ dailyCap: +v })),
       'per person; with no limit the schedule’s hours are filled, as Motion fills them')));
+  // The daily focus: at most this many tasks a day, in three buckets.
+  const focus = focusOf(project);
+  const focusSelect = (k) => select(String(focus[k]), FOCUS_CHOICES.map((n) => ({ value: String(n), label: n === 0 ? 'None' : String(n) })), (v) => act.setAgenda({ focus: { ...focusOf(project), [k]: +v } }));
+  form.append(field('Daily focus', el('div', { class: 'focus-counts' },
+    ...Object.keys(FOCUS_LABELS).map((k) => el('label', { class: 'focus-count' }, el('span', { class: 'sc-faint small', text: FOCUS_LABELS[k] }), focusSelect(k)))),
+  `at most ${focus.priority + focus.urgent + focus.maintenance || 'any number of'} tasks a day; the rest wait for the next working day with room. Maintenance is routines and low-urgency work. All three at None switches the limit off`));
   form.append(field('When a task does not say its hours', select(String((project.agenda || {}).assumedLoad ?? DEFAULT_AGENDA.assumedLoad),
     LOAD_CHOICES.map((n) => ({ value: String(n), label: n === 100 ? 'All of its duration — full time' : `${n}% of its duration` })), (v) => act.setAgenda({ assumedLoad: +v })),
     'Microsoft Project counts a task’s days in full; a task’s own duration (its hours) always wins'));

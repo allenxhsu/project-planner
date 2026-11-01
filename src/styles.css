@@ -484,6 +484,14 @@ body { overflow: hidden; background: var(--sc-bg); color: var(--sc-text); font-f
 .today-due.is-overdue { color: var(--sc-danger); }
 .today-hours { font-size: 12px; white-space: nowrap; }
 .today-plan { --tint: var(--sc-text-3); font-size: 10px; margin-left: auto; white-space: nowrap; }
+/* The daily focus (model/focus.js): which bucket a task is in. */
+.today-bucket { font-size: 10px; white-space: nowrap; --tint: var(--sc-text-3); }
+.today-bucket.is-priority { --tint: var(--sc-accent); font-weight: 700; }
+.today-bucket.is-urgent { --tint: var(--sc-warning); }
+.today-bucket + .today-plan { margin-left: 0; }
+.focus-counts { display: flex; gap: 10px; flex-wrap: wrap; }
+.focus-count { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-block.is-priority { box-shadow: inset 0 0 0 1.5px var(--sc-accent); }
 .today-late .today-name { white-space: normal; color: var(--sc-text-1); }
 .today-empty { margin: 4px 8px; }
 .today-day { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; padding: 14px; border-left: 1px solid var(--sc-line); min-height: 0; }

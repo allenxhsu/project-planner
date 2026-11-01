@@ -17,6 +17,7 @@ import { toDay, fromDay, today, formatDate, weekday, WEEKDAY_NAMES } from '../mo
 import { formatClock, hoursLeft, parseTime, agendaOf } from '../model/agenda.js';
 import { isSummary, urgencyOf, URGENCIES, doneDay } from '../model/model.js';
 import { dayRows, caughtUp, burstKeys } from '../model/dayplan.js';
+import { FOCUS_LABELS } from '../model/focus.js';
 import { currentLayout, lateSentence, personColour, planPalette } from './calendar.js';
 import { taskSheet, meetingSheet } from './blockmenu.js';
 
@@ -33,7 +34,7 @@ async function complete(planId, taskId, done) {
   act.setPercent(taskId, done ? 100 : 0);
 }
 
-function taskRow({ planId, planName, task, info, extra, showPlan }) {
+function taskRow({ planId, planName, task, info, extra, showPlan, bucket = null }) {
   const due = task.deadline;
   const overdue = due && toDay(due) < toDay(today()) && info.percent < 100;
   const box = el('input', {
@@ -52,6 +53,7 @@ function taskRow({ planId, planName, task, info, extra, showPlan }) {
       task.name),
     due ? el('span', { class: `today-due${overdue ? ' is-overdue' : ''}`, text: `${WEEKDAY_NAMES[weekday(toDay(due))].slice(0, 2)} ${formatDate(due, 'day')}${due.slice(0, 4) !== today().slice(0, 4) ? ` ${due.slice(0, 4)}` : ''}` }) : null,
     extra ? el('span', { class: 'sc-faint today-hours', text: extra }) : null,
+    bucket ? el('span', { class: `sc-pill today-bucket is-${bucket}`, text: FOCUS_LABELS[bucket], title: 'The daily focus (model/focus.js)' }) : null,
     showPlan ? el('span', { class: 'sc-pill today-plan', text: planName }) : null);
 }
 
@@ -85,7 +87,13 @@ export function renderToday(root) {
   // Say what the day is, so Flow's task list can be this list rather than a
   // second opinion about it. Only when it changed; see publishAgenda.
   void import('../state/sync.js').then((m) => m.publishAgenda?.(iso, rowsToday)).catch(() => {});
-  const todays = rowsToday.map((r) => ({ planId: r.plan, taskId: r.task, minutes: r.minutes, first: r.start }));
+  // The day's focus: which bucket each task is in, and the order the day reads them.
+  const focus = all.focus && !all.focus.off ? all.focus.on(day) : null;
+  const bucketOf = new Map();
+  if (focus) for (const k of ['priority', 'urgent', 'maintenance']) focus[k].forEach((c, i) => bucketOf.set(`${c.planId}|${c.taskId}`, { bucket: k, at: ['priority', 'urgent', 'maintenance'].indexOf(k) * 100 + i }));
+  const todays = rowsToday.map((r) => ({ planId: r.plan, taskId: r.task, minutes: r.minutes, first: r.start, ...(bucketOf.get(`${r.plan}|${r.task}`) || { bucket: null, at: 999 }) }))
+    .sort((a, b) => a.at - b.at || a.first - b.first);
+  const heldBack = (focus?.heldBack || []).filter((h) => !hiddenPlan(h.planId));
 
   // Past deadline: not done, not archived, due before this day — anywhere.
   const past = [];
@@ -155,8 +163,21 @@ export function renderToday(root) {
     const hit = find(r.planId, r.taskId);
     if (!hit) return null;
     return taskRow({ planId: r.planId, planName: hit.e.project.name, task: hit.task, info: hit.info,
-      extra: `${formatClock(r.first)} · ${hoursText(r.minutes)}`, showPlan: many });
+      extra: `${formatClock(r.first)} · ${hoursText(r.minutes)}`, showPlan: many, bucket: r.bucket });
   }).filter(Boolean), 'Nothing is laid on this day. Put tasks on the calendar and their hours land here.');
+  // What the daily focus moved off this day: one line, opening into the list.
+  if (heldBack.length) {
+    const seen = new Set();
+    const rows = heldBack.filter((h) => !seen.has(`${h.planId}|${h.taskId}`) && seen.add(`${h.planId}|${h.taskId}`)).map((h) => {
+      const hit = find(h.planId, h.taskId);
+      if (!hit) return null;
+      return taskRow({ planId: h.planId, planName: hit.e.project.name, task: hit.task, info: hit.info, showPlan: many,
+        extra: h.to === null ? 'no day with room yet' : `moved to ${WEEKDAY_NAMES[weekday(h.to)].slice(0, 3)} ${formatDate(fromDay(h.to), 'day')}` });
+    }).filter(Boolean);
+    main.append(el('details', { class: 'today-old today-held' },
+      el('summary', { class: 'sc-muted', text: `${rows.length} more task${rows.length === 1 ? '' : 's'} held back to later days by the daily focus (at most ${all.focus.counts.priority + all.focus.counts.urgent + all.focus.counts.maintenance} a day).` }),
+      el('ul', { class: 'today-list' }, ...rows)));
+  }
 
   section(`Completed ${title === 'Today' ? 'today' : title === 'Tomorrow' || title === 'Yesterday' ? title.toLowerCase() : `on ${title}`}`,
     finished.sort((a, b) => a.task.doneAt.localeCompare(b.task.doneAt)).map(({ e, task, info }) => taskRow({
