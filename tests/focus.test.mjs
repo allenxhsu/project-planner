@@ -12,6 +12,7 @@ import { createProject, insertTask, addResource, assign, setTaskField, setPin, s
 import { computeSchedule } from '../src/model/schedule.js';
 import { planBlocksAcross } from '../src/model/agenda.js';
 import { DEFAULT_FOCUS, FOCUS_CHOICES, cleanFocus, focusOf, isMaintenanceWork, rankEssential, dayFocus, makeFocus } from '../src/model/focus.js';
+import { PLANNING_ROUTINE_ID, ensurePlanningRoutine } from '../src/model/planning.js';
 
 const MON = '2026-09-21';   // a Monday
 const TUE = '2026-09-22';
@@ -256,4 +257,88 @@ test('held back is per day: a task refused twice reports the day it finally got'
   const last = out.focus.on(toDay(MON)).heldBack.find((h) => h.taskId === jobs[12].id);
   assert.equal(last.to, toDay(WED));
   assert.equal(out.focus.on(toDay(TUE)).heldBack.find((h) => h.taskId === jobs[12].id).to, toDay(WED));
+});
+
+// ---- the built-in routine: plan the next day's action items
+
+test('the planning routine is made once, as a weekday routine with its occurrences, and never twice', () => {
+  const { p } = week();
+  const made = ensurePlanningRoutine(p, MON);
+  assert.ok(made, 'made on first asking');
+  const r = p.tasks.find((t) => t.id === PLANNING_ROUTINE_ID);
+  assert.equal(r.name, 'Plan the next day’s action items');
+  assert.deepEqual(r.repeat, { freq: 'weekdays', from: MON, made: r.repeat.made });
+  assert.equal(r.builtin, 'plan-tomorrow');
+  assert.equal(r.endOfDay, true);
+  assert.equal(+r.work, 0.5, 'half an hour');
+  assert.equal(r.calendar.show, false, 'the pattern itself is not on the calendar');
+  const occurrences = p.tasks.filter((t) => t.repeatOf === PLANNING_ROUTINE_ID);
+  assert.ok(occurrences.length >= 5, 'a fortnight of weekdays made');
+  assert.equal(occurrences[0].occurrence, MON);
+  assert.equal(occurrences[0].endOfDay, true, 'an occurrence keeps the end-of-day placement');
+  assert.equal(ensurePlanningRoutine(p, TUE), null, 'asked again, nothing new');
+  assert.equal(p.tasks.filter((t) => t.id === PLANNING_ROUTINE_ID).length, 1);
+});
+
+test('its occurrence sits at the end of the working day and is one of the day’s maintenance items', () => {
+  const { p, ann } = week();
+  ensurePlanningRoutine(p, MON);
+  const occurrence = p.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID && t.occurrence === MON);
+  assign(p, occurrence.id, ann.id, 1);
+  job(p, ann, 'Job');
+  const out = lay(p);
+  const mine = out.blocks.filter((b) => b.taskId === occurrence.id);
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].dateIso, MON);
+  assert.equal(mine[0].start, 16 * 60 + 30, 'the last half hour of 09:00–17:00');
+  assert.equal(mine[0].end, 17 * 60);
+  const mon = out.focus.on(toDay(MON));
+  assert.deepEqual(ids(mon.maintenance), [occurrence.id]);
+  assert.equal(ids(mon.priority).length, 1, 'the job is the day’s priority');
+});
+
+test('it takes one of the three maintenance slots, so only two other maintenance items are picked', () => {
+  const { p, ann } = week();
+  ensurePlanningRoutine(p, MON);
+  const occurrence = p.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID && t.occurrence === MON);
+  assign(p, occurrence.id, ann.id, 1);
+  const lows = Array.from({ length: 4 }, (_, i) => job(p, ann, `Low ${i + 1}`, { urgency: 'low' }));
+  const mon = lay(p).focus.on(toDay(MON));
+  assert.deepEqual(ids(mon.maintenance), [lows[0].id, lows[1].id, occurrence.id], 'two others, and the planning last');
+  assert.deepEqual(mon.heldBack.map((h) => h.taskId), [lows[2].id, lows[3].id]);
+});
+
+test('essential work does not take the planning slot either', () => {
+  const { p, ann } = week();
+  ensurePlanningRoutine(p, MON);
+  const occurrence = p.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID && t.occurrence === MON);
+  assign(p, occurrence.id, ann.id, 1);
+  // Six ordinary jobs due Monday, so every one of them sorts before the planning routine.
+  const jobs = Array.from({ length: 6 }, (_, i) => job(p, ann, `Job ${i + 1}`, { deadline: MON }));
+  const out = lay(p);
+  const mon = out.focus.on(toDay(MON));
+  assert.equal(ids(mon.priority).length + ids(mon.urgent).length, 3);
+  assert.deepEqual(ids(mon.maintenance), [jobs[3].id, jobs[4].id, occurrence.id], 'two jobs overflow into maintenance, the third waits');
+  assert.ok(out.blocks.some((b) => b.taskId === occurrence.id && b.dateIso === MON), 'the planning is on Monday');
+});
+
+test('ticked off, a planning occurrence is done like any other task and leaves the day', () => {
+  const { p, ann } = week();
+  ensurePlanningRoutine(p, MON);
+  const occurrence = p.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID && t.occurrence === MON);
+  assign(p, occurrence.id, ann.id, 1);
+  occurrence.percent = 100;
+  const out = lay(p);
+  assert.equal(out.blocks.filter((b) => b.taskId === occurrence.id).length, 0);
+  assert.ok(out.blocks.some((b) => b.taskId === `${PLANNING_ROUTINE_ID}@${TUE}`), 'Tuesday’s is still to come');
+});
+
+test('with the limit off, the planning routine is still laid, at the end of the day', () => {
+  const { p, ann } = week();
+  p.agenda.focus = { priority: 0, urgent: 0, maintenance: 0 };
+  ensurePlanningRoutine(p, MON);
+  const occurrence = p.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID && t.occurrence === MON);
+  assign(p, occurrence.id, ann.id, 1);
+  const mine = lay(p).blocks.filter((b) => b.taskId === occurrence.id);
+  assert.equal(mine[0]?.start, 16 * 60 + 30);
 });
