@@ -21,7 +21,7 @@ import { EVENT_COLOURS } from '../model/model.js';
 import { blockMenu, blockSheet, meetingSheet, taskSheet, slotMenu, unlockBlock, completeBlock } from './blockmenu.js';
 import { renderDock, renderStrip, runningCount } from './running.js';
 import { carryMissed, missedBlocks, missedKey } from '../model/missed.js';
-import { visibilityOf } from '../state/mode.js';
+import { visibilityOf, currentMode } from '../state/mode.js';
 import { icon } from './icons.js';
 
 /** Which day is on screen, or a day inside the week or month that is. */
@@ -116,8 +116,9 @@ let layoutMemo = { key: '', value: null };
 export function currentLayout() {
   const { project, schedule, ui } = store;
   // The quarter hour is in the key: as the day goes on, the hours behind now
-  // stop being free, and the layout has to say so.
-  const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${Math.floor(Date.now() / 900000)}`;
+  // stop being free, and the layout has to say so. So is the mode: at work a
+  // home plan's work takes none of the day's six (model/focus.js).
+  const key = `${project.id}|${revision()}|${othersVersion}|${ui.calendarScope}|${currentMode()}|${Math.floor(Date.now() / 900000)}`;
   if (layoutMemo.key === `${key}|${missedVersion}` && layoutMemo.value) return layoutMemo.value;
   // Live projects are planned; finished and archived ones are history — their
   // logged time is drawn, nothing of them is laid. The open project is
@@ -127,7 +128,9 @@ export function currentLayout() {
   const onlyOpen = ui.calendarScope === 'plan';
   const entries = [...(openIsLive ? [open] : []), ...(onlyOpen ? [] : others.filter((e) => e.project.id !== project.id))];
   const history = [...(openIsLive || project.template ? [] : [open]), ...(onlyOpen ? [] : historyPlans.filter((e) => e.project.id !== project.id))];
-  const all = planBlocksAcross(entries, { held: heldBlocks(), history });
+  // A plan the place is hiding is laid, as Busy, but is not one of the day's six.
+  const hiddenPlans = new Set(entries.filter((e) => visibilityOf(e.project.workspaceId) === 'hide').map((e) => e.project.id));
+  const all = planBlocksAcross(entries, { held: heldBlocks(), history, hidden: (planId) => hiddenPlans.has(planId) });
   rememberToday(all.blocks);
   // Blocks that went by with the task still open: kept where they were, with a "!" (model/missed.js).
   all.missed = missedBlocks(readMissed(), [...entries, ...history]);

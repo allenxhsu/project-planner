@@ -212,9 +212,13 @@ export function notBeforeOf(t) {
  * which buckets. Unsaid, it is the first plan's setting — the open plan's,
  * since one calendar holds every plan and one count has to rule it.
  *
+ * `hidden(planId)` says which plans the place is not showing (state/mode.js):
+ * their work is laid and their hours are booked as ever, but it takes none
+ * of the day's focus slots, since those are for what the person can see.
+ *
  * @returns {{ blocks, byTask, overflow, meetings, late, droppedPins, focus }}
  */
-export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [], history = [], focus = null } = {}) {
+export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [], history = [], focus = null, hidden = () => false } = {}) {
   // One plan, once. The same plan arriving twice — the open copy and its own
   // record from the shelf — would book every hour of it twice over.
   const seenPlans = new Set();
@@ -372,6 +376,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     const people = peopleOf(project, t);
     const lanes = lanesOf(t);
     const floor = floorOf(project);
+    const aside = hidden(project.id);
     let left = Math.round(hoursLeft(project, info, t) * 60);
     let used = 0;
     pins.forEach((pin, index) => {
@@ -392,8 +397,9 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       blocks.push(block);
       if (!byTask.has(t.id)) byTask.set(t.id, []);
       byTask.get(t.id).push(block);
-      // Fixed by hand: on its day whatever the day's count.
-      if (attentionOf(t) !== 'background') roster.admit(day, c.focus, { force: true });
+      // Fixed by hand: on its day whatever the day's count. A hidden plan's
+      // block is Busy, not one of the day's six.
+      if (attentionOf(t) !== 'background' && !aside) roster.admit(day, c.focus, { force: true });
       // A background task runs alongside: it books nobody's time, so focus work goes over it.
       if (attentionOf(t) !== 'background') for (const lane of people) { bookedOn(lane, day).push({ start: pin.start, end: pin.start + minutes + a.gap }); fill(lane, day, minutes); }
       left -= minutes;
@@ -512,6 +518,10 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     // else is there — meetings, focus work, other background work — and books
     // no one's time or day's allowance. It only keeps off the past and itself.
     const background = attentionOf(t) === 'background';
+    // A plan the place is hiding (at work, a home plan) is laid as before —
+    // its hours are Busy — but it is not what the day is for: it takes none
+    // of the day's six, which are the tasks the person can see.
+    const aside = background || hidden(project.id);
     const ownOn = (d) => mine.filter((b) => b.day === d).map((b) => ({ start: b.start, end: b.end }));
     let day = firstDay;
     let guard = 0;
@@ -534,8 +544,8 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       // The day's limit: a day that would hold a block of this task holds it
       // only if it has a slot for the task (model/focus.js). A day with no
       // room in its hours is not asked, so it keeps its slots for what fits.
-      // Background work runs alongside and is not one of the day's six.
-      if (!background && slots.some(([from, to]) => from + Math.min(size, left) <= to) && !roster.admit(day, c.focus)) { day = nextDay(day + 1); continue; }
+      // Background work runs alongside, and a hidden plan's work is Busy: neither is one of the day's six.
+      if (!aside && slots.some(([from, to]) => from + Math.min(size, left) <= to) && !roster.admit(day, c.focus)) { day = nextDay(day + 1); continue; }
       // End-of-day work (planning tomorrow) is laid from the end of the last
       // free stretch backwards, so it is the last thing in the day.
       const fromEnd = !!t.endOfDay;

@@ -287,7 +287,8 @@ test('a hidden plan’s tasks book their hours but take none of the day’s six'
   assert.deepEqual(mon.heldBack.map((h) => h.taskId), [jobs[6].id], 'and nothing hidden was held back');
 
   const shown = layAcross([p, home.p]);
-  assert.equal(planTasksOn(shown.blocks, p.id, MON).length, 4, 'at home, the same two study tasks are two of the six');
+  assert.equal(tasksOn(shown.blocks, MON).length, 6, 'at home, the study tasks are among the six like any other');
+  assert.ok(study.every((t) => shown.focus.on(toDay(MON)).heldBack.some((h) => h.taskId === t.id)), 'so, laid after the jobs, they wait for Tuesday');
 });
 
 test('a hidden plan’s block fixed by hand is not one of the six either', () => {
