@@ -352,11 +352,12 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
   // The day's limit. Each candidate is described once for the roster, with
   // its place in the order above as the last word in the ranking.
-  const roster = makeFocus(focus || focusOf(entries[0]?.project));
+  // A slot is kept for the built-in planning routine when a plan has one (model/planning.js).
+  const roster = makeFocus(focus || focusOf(entries[0]?.project), { reserve: candidates.some((c) => c.t.builtin) });
   candidates.forEach((c, i) => {
     c.focus = {
       planId: c.project.id, taskId: c.t.id, name: c.t.name, urgency: urgencyOf(c.t), deadline: c.deadline,
-      critical: !!c.info.critical, routine: !!c.t.repeatOf || isRoutine(c.t), order: i,
+      critical: !!c.info.critical, routine: !!c.t.repeatOf || isRoutine(c.t), order: i, ...(c.t.builtin ? { builtin: c.t.builtin } : {}),
     };
   });
 
@@ -535,9 +536,12 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       // room in its hours is not asked, so it keeps its slots for what fits.
       // Background work runs alongside and is not one of the day's six.
       if (!background && slots.some(([from, to]) => from + Math.min(size, left) <= to) && !roster.admit(day, c.focus)) { day = nextDay(day + 1); continue; }
-      for (const [from, to] of slots) {
-        let at = from;
-        while (left > 0 && at + Math.min(size, left) <= to && usedToday + Math.min(size, left) <= roomToday) {
+      // End-of-day work (planning tomorrow) is laid from the end of the last
+      // free stretch backwards, so it is the last thing in the day.
+      const fromEnd = !!t.endOfDay;
+      for (const [from, to] of fromEnd ? slots.slice().reverse() : slots) {
+        let at = fromEnd ? to - Math.min(size, left) : from;
+        while (left > 0 && (fromEnd ? at >= from : at + Math.min(size, left) <= to) && usedToday + Math.min(size, left) <= roomToday) {
           const minutes = Math.min(size, left);
           const block = {
             taskId: t.id, planId: project.id, planName: project.name,
@@ -554,9 +558,9 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
           // starts after it rather than back to back. Booked for every person
           // on the task, which is what stops the double-booking.
           if (!background) for (const lane of people) { bookedOn(lane, day).push({ start: at, end: at + minutes + a.gap }); fill(lane, day, minutes); }
-          at += minutes + a.gap;
           left -= minutes;
           usedToday += minutes;
+          at = fromEnd ? at - Math.min(size, left) - a.gap : at + minutes + a.gap;
         }
         if (left <= 0 || usedToday + Math.min(size, left) > roomToday) break;
       }

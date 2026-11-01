@@ -161,6 +161,9 @@ export function parse(text) {
       // A routine's pattern, and an occurrence's routine and day (model/routines.js).
       ...(cleanRepeat(t.repeat) ? { repeat: cleanRepeat(t.repeat) } : {}),
       ...(typeof t.repeatOf === 'string' && t.repeatOf && isoValid(t.occurrence) ? { repeatOf: t.repeatOf, occurrence: t.occurrence } : {}),
+      // A built-in routine's mark, and work laid at the end of the day (model/planning.js).
+      ...(typeof t.builtin === 'string' && t.builtin ? { builtin: t.builtin } : {}),
+      ...(t.endOfDay === true ? { endOfDay: true } : {}),
       ...(t.attention === 'background' ? { attention: 'background', ...(CHECK_CHOICES.includes(+t.checkEvery) ? { checkEvery: +t.checkEvery } : {}) } : {}),
       // The task's history: kept as long as each line is a dated entry.
       ...(Array.isArray(t.activity) ? { activity: t.activity

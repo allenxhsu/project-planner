@@ -58,9 +58,14 @@ export function rankEssential(a, b) {
     || ((a.critical ? 0 : 1) - (b.critical ? 0 : 1))
     || (a.order - b.order);
 }
-/** Maintenance rank: routines first, then low urgency, then whatever remains in essential rank. */
+/**
+ * Maintenance rank: routines first, then low urgency, then whatever remains
+ * in essential rank — and the built-in planning routine last of all, since it
+ * is the end of the day (model/planning.js).
+ */
 export function rankMaintenance(a, b) {
-  return ((a.routine ? 0 : 1) - (b.routine ? 0 : 1))
+  return ((a.builtin ? 1 : 0) - (b.builtin ? 1 : 0))
+    || ((a.routine ? 0 : 1) - (b.routine ? 0 : 1))
     || ((a.urgency === 'low' ? 0 : 1) - (b.urgency === 'low' ? 0 : 1))
     || rankEssential(a, b);
 }
@@ -83,6 +88,11 @@ export function dayFocus(onDay, counts) {
 /**
  * The roster: which tasks each day admits.
  *
+ * With `reserve`, one maintenance slot a day is kept for the built-in
+ * planning routine (a candidate marked `builtin`): other maintenance work has
+ * one slot fewer, and essential work cannot spill into it either, so the
+ * routine has its place whenever in the day's order it is asked for.
+ *
  * `admit(day, candidate)` says whether the task may have hours on that day,
  * and records it when it may. Asked again for the same task and day it says
  * yes and counts nothing: a task is one of the six however many blocks it
@@ -95,10 +105,11 @@ export function dayFocus(onDay, counts) {
  * refused that day, with `to`, the day it was admitted instead (null while
  * it has not been).
  */
-export function makeFocus(counts = DEFAULT_FOCUS) {
+export function makeFocus(counts = DEFAULT_FOCUS, { reserve = false } = {}) {
   counts = cleanFocus(counts);
   const off = focusOff(counts);
   const total = counts.priority + counts.urgent + counts.maintenance;
+  const kept = reserve && counts.maintenance > 0 ? 1 : 0;
   /** day → Map(key → candidate) */
   const days = new Map();
   /** day → [{ ...candidate, to }] */
@@ -114,8 +125,10 @@ export function makeFocus(counts = DEFAULT_FOCUS) {
     if (!off && !force) {
       const have = [...onDay.values()];
       const upkeep = have.filter(maintenanceClass).length;
+      // The reserved slot is free to the built-in routine, and to nothing else until it is there.
+      const held = kept && !have.some((x) => x.builtin) && !c.builtin ? 1 : 0;
       // Upkeep keeps to its own slots; essential work may also take what upkeep left free.
-      const room = maintenanceClass(c) ? upkeep < counts.maintenance : have.length < total;
+      const room = maintenanceClass(c) ? upkeep < counts.maintenance - held : have.length < total - held;
       if (!room) {
         if (!refused.has(day)) refused.set(day, []);
         const entry = { ...c, day, to: null };

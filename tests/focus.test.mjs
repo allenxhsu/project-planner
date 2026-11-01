@@ -13,6 +13,7 @@ import { computeSchedule } from '../src/model/schedule.js';
 import { planBlocksAcross } from '../src/model/agenda.js';
 import { DEFAULT_FOCUS, FOCUS_CHOICES, cleanFocus, focusOf, isMaintenanceWork, rankEssential, dayFocus, makeFocus } from '../src/model/focus.js';
 import { PLANNING_ROUTINE_ID, ensurePlanningRoutine } from '../src/model/planning.js';
+import { serialize, parse } from '../src/io/json.js';
 
 const MON = '2026-09-21';   // a Monday
 const TUE = '2026-09-22';
@@ -341,4 +342,16 @@ test('with the limit off, the planning routine is still laid, at the end of the 
   assign(p, occurrence.id, ann.id, 1);
   const mine = lay(p).blocks.filter((b) => b.taskId === occurrence.id);
   assert.equal(mine[0]?.start, 16 * 60 + 30);
+});
+
+test('the planning routine survives a save: its mark and its place in the day', () => {
+  const { p } = week();
+  ensurePlanningRoutine(p, MON);
+  const back = parse(serialize(p)).project;
+  const r = back.tasks.find((t) => t.id === PLANNING_ROUTINE_ID);
+  const o = back.tasks.find((t) => t.repeatOf === PLANNING_ROUTINE_ID);
+  assert.equal(r.builtin, 'plan-tomorrow');
+  assert.equal(o.builtin, 'plan-tomorrow');
+  assert.equal(o.endOfDay, true);
+  assert.equal(ensurePlanningRoutine(back, MON), null, 'read back, not made again');
 });

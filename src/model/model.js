@@ -788,6 +788,8 @@ export function spawnRoutines(p, todayIso = localToday()) {
       ...(r.energy ? { energy: r.energy } : {}), ...(r.skill ? { skill: r.skill } : {}),
       ...(r.attention === 'background' ? { attention: 'background', ...(r.checkEvery ? { checkEvery: r.checkEvery } : {}) } : {}),
       ...(r.labels?.length ? { labels: [...r.labels] } : {}),
+      // A built-in routine's occurrences carry its mark and sit at the end of the day (model/planning.js).
+      ...(r.builtin ? { builtin: r.builtin } : {}), ...(r.endOfDay ? { endOfDay: true } : {}),
       calendar: { ...(r.calendar || {}), show: true, timeBlockIds: [...(r.calendar?.timeBlockIds || [])], pins: [] },
     });
     delete t.calendar.pins;

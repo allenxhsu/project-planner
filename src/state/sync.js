@@ -1703,8 +1703,19 @@ export async function spawnRoutinesEverywhere() {
   if (!recordStore) return 0;
   if (syncConfigured()) await syncNow();
   const { spawnRoutines } = await import('../model/model.js');
+  const { PLANNING_ROUTINE_ID, ensurePlanningRoutine } = await import('../model/planning.js');
   const day = today();
   let n = 0;
+  // The built-in planning routine (model/planning.js) lives in one live plan
+  // on the shelf. When none has it, the open plan gets it.
+  if (isLiveWork(store.project) && !store.project.tasks.some((t) => t.id === PLANNING_ROUTINE_ID)) {
+    let elsewhere = false;
+    for (const record of await planRecords()) {
+      if (record.id === store.project.id || !record.body.includes(`"${PLANNING_ROUTINE_ID}"`)) continue;
+      try { if (isLiveWork(parse(record.body).project)) { elsewhere = true; break; } } catch { /* unreadable */ }
+    }
+    if (!elsewhere) tryCommit('Plan the next day', (p) => { n += ensurePlanningRoutine(p, day) ? 1 : 0; });
+  }
   if (store.project.tasks.some((t) => t.repeat)) {
     const probe = parse(serialize(store.project)).project;
     if (spawnRoutines(probe, day).length) tryCommit('Routines come round', (p) => { n += spawnRoutines(p, day).length; });

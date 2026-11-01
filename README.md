@@ -165,7 +165,16 @@ calendar says *when*: which hours, on which days.
   work in; the first is the priority and the next two are urgent. Maintenance
   is a routine's occurrence first, then **Low**-urgency work, then whatever
   else there was room for. To promote a task, change its urgency; there is no
-  new field. The counts — 1 / 2 / 3 by default, 0 to 6 each, all three at
+  new field.
+
+  One maintenance slot every working day is spoken for: **Plan the next day's
+  action items**, a built-in weekday routine — half an hour at the end of the
+  working day to write down what tomorrow is for. Nobody makes it: the first
+  time routines come round, the open plan gets it unless another live plan on
+  the shelf already has it, and from then on it is a routine like any other
+  (`model/planning.js`): its occurrences are real tasks, logged, ticked off,
+  and late when skipped. The day keeps its slot whatever else is asked for,
+  so only two other maintenance items are picked, and it is listed last. The counts — 1 / 2 / 3 by default, 0 to 6 each, all three at
   none to switch the limit off — are **Daily focus** in Project settings ▸
   Working time, beside the gap and the daily limit, and the open plan's
   setting rules the whole calendar, since one calendar holds every plan.
