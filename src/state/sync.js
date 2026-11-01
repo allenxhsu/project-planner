@@ -46,6 +46,10 @@ let recordStore = null;
 let engine = null;
 let doc = null;
 let timer = null;
+/** The open change feed (`/sync/events`), while this tab is visible. */
+let watcher = null;
+let watchTransport = null;
+let pokeTimer = null;
 let commitTimer = null;
 let autosaveTimer = null;
 let unlisten = null;
@@ -318,6 +322,11 @@ export async function initSync({ preferStored = false } = {}) {
     unlisten = onSyncNow(() => { void syncNow(); });
     // Coming back to the window is the moment a stale plan is most obvious.
     window.addEventListener('focus', () => { if (syncConfigured()) void syncNow(); });
+    // The change feed follows visibility: open in front, closed behind.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') stopWatch();
+      else { startWatch(); if (syncConfigured()) void syncNow(); }
+    });
   }
   rebuild();
   // The blocks used to live in each plan. Gather them once, then keep every
@@ -435,13 +444,40 @@ function rebuild() {
   clearInterval(timer);
   timer = null;
   engine = null;
+  stopWatch();
+  watchTransport = null;
   let transport = null;
   if (portal) transport = new HttpTransport({ baseUrl: portal.baseUrl, label: portal.workspace, onUnauthorized });
   else if (settings.url) transport = new HttpTransport({ baseUrl: settings.url, token: settings.token, label: WORKSPACE });
   if (!recordStore || !transport) { announce(); return; }
   engine = new SyncEngine(recordStore, transport, deviceId());
-  if (syncConfigured()) timer = setInterval(() => { void syncNow(); }, INTERVAL_MS);
+  if (syncConfigured()) {
+    timer = setInterval(() => { void syncNow(); }, INTERVAL_MS);
+    watchTransport = transport;
+    startWatch();
+  }
   announce();
+}
+
+/**
+ * Hear about a push the moment the server accepts it — an edit made by the
+ * MCP, by another device — and pull, instead of waiting for the half-minute
+ * tick. Only while this tab is visible: a hidden tab holding a connection
+ * open keeps a server awake for nobody, and coming back to the front already
+ * syncs (the focus listener in initSync). Our own push is announced too; the
+ * sync it triggers pulls our own record back and applies nothing.
+ */
+function startWatch() {
+  if (watcher || !watchTransport || typeof document === 'undefined' || document.visibilityState === 'hidden') return;
+  watcher = watchTransport.watch(() => {
+    clearTimeout(pokeTimer);
+    pokeTimer = setTimeout(() => { void syncNow(); }, 150);
+  });
+}
+function stopWatch() {
+  watcher?.stop();
+  watcher = null;
+  clearTimeout(pokeTimer);
 }
 
 /**
