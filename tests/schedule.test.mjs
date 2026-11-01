@@ -1122,3 +1122,14 @@ test('today is the local date, east or west of Greenwich', async () => {
   // A Saturday morning in California is Saturday, not Friday.
   assert.equal(localDate(new Date(2026, 8, 26, 10, 45)), '2026-09-26');
 });
+
+test('a sync that brought another plan means the shelf is re-read; the open plan, or nothing of the kind, does not', async () => {
+  const { shelfChanged } = await import('../src/state/sync.js');
+  const doc = (id, extra = {}) => ({ id, type: 'document', body: '{}', updatedAt: 1, deletedAt: null, ...extra });
+  assert.equal(shelfChanged([doc('plan_b')], 'plan_a'), true, 'another plan arrived, edited elsewhere');
+  assert.equal(shelfChanged([doc('plan_b', { deletedAt: 5 })], 'plan_a'), true, 'a deleted plan leaves the calendar');
+  assert.equal(shelfChanged([doc('plan_a')], 'plan_a'), false, 'the open plan is adopted on screen, not re-read from the shelf');
+  assert.equal(shelfChanged([{ id: 'agenda_1', type: 'agenda', updatedAt: 1 }], 'plan_a'), false, 'a record that is not a plan');
+  assert.equal(shelfChanged([], 'plan_a'), false);
+  assert.equal(shelfChanged(null, 'plan_a'), false);
+});

@@ -14,6 +14,7 @@ import { planBlocksAcross } from '../src/model/agenda.js';
 import { DEFAULT_FOCUS, FOCUS_CHOICES, cleanFocus, focusOf, isMaintenanceWork, rankEssential, dayFocus, makeFocus } from '../src/model/focus.js';
 import { PLANNING_ROUTINE_ID, ensurePlanningRoutine } from '../src/model/planning.js';
 import { serialize, parse } from '../src/io/json.js';
+import { dayRows, heldBackFrom } from '../src/model/dayplan.js';
 
 const MON = '2026-09-21';   // a Monday
 const TUE = '2026-09-22';
@@ -258,6 +259,55 @@ test('held back is per day: a task refused twice reports the day it finally got'
   const last = out.focus.on(toDay(MON)).heldBack.find((h) => h.taskId === jobs[12].id);
   assert.equal(last.to, toDay(WED));
   assert.equal(out.focus.on(toDay(TUE)).heldBack.find((h) => h.taskId === jobs[12].id).to, toDay(WED));
+});
+
+// ---- plans the place is hiding (state/mode.js): at work, a home plan's time is only "Busy"
+
+/** A home plan: the same person, two hours before the working day. */
+function homePlan() {
+  const { p, ann } = week();
+  p.name = 'Home';
+  p.timeBlocks = [{ id: 'tb', name: 'Study', from: '06:00', to: '08:00', days: [1, 2, 3, 4, 5] }];
+  return { p, ann };
+}
+const layAcross = (plans, opts = {}) => planBlocksAcross(plans.map((p) => ({ project: p, schedule: computeSchedule(p) })), { now: new Date(2026, 8, 21, 0, 0), ...opts });
+const planTasksOn = (blocks, planId, iso) => [...new Set(blocks.filter((b) => b.planId === planId && b.dateIso === iso).map((b) => b.taskId))];
+
+test('a hidden plan’s tasks book their hours but take none of the day’s six', () => {
+  const { p, ann } = week();
+  const jobs = Array.from({ length: 7 }, (_, i) => job(p, ann, `Job ${i + 1}`));
+  const home = homePlan();
+  const study = Array.from({ length: 2 }, (_, i) => job(home.p, home.ann, `Study ${i + 1}`));
+  const out = layAcross([p, home.p], { hidden: (planId) => planId === home.p.id });
+  assert.deepEqual(planTasksOn(out.blocks, home.p.id, MON), study.map((t) => t.id), 'the hidden work is laid where it was: its hours are Busy');
+  assert.equal(planTasksOn(out.blocks, p.id, MON).length, 6, 'the shown plan still has its six');
+  assert.deepEqual(planTasksOn(out.blocks, p.id, TUE), [jobs[6].id]);
+  const mon = out.focus.on(toDay(MON));
+  assert.ok([...mon.priority, ...mon.urgent, ...mon.maintenance].every((c) => c.planId === p.id), 'the buckets hold only what is shown');
+  assert.deepEqual(mon.heldBack.map((h) => h.taskId), [jobs[6].id], 'and nothing hidden was held back');
+
+  const shown = layAcross([p, home.p]);
+  assert.equal(planTasksOn(shown.blocks, p.id, MON).length, 4, 'at home, the same two study tasks are two of the six');
+});
+
+test('a hidden plan’s block fixed by hand is not one of the six either', () => {
+  const { p, ann } = week();
+  Array.from({ length: 6 }, (_, i) => job(p, ann, `Job ${i + 1}`));
+  const home = homePlan();
+  const workout = job(home.p, home.ann, 'Workout');
+  setPin(home.p, workout.id, { day: MON, start: 20 * 60, minutes: 60 });
+  const out = layAcross([p, home.p], { hidden: (planId) => planId === home.p.id });
+  assert.ok(out.blocks.some((b) => b.taskId === workout.id && b.dateIso === MON && b.pinned), 'the workout is on Monday evening');
+  assert.equal(planTasksOn(out.blocks, p.id, MON).length, 6, 'all six jobs stay on Monday');
+});
+
+test('a task held back from a day is that day’s business no more: it is laid, and listed, on the day it got', () => {
+  const { p, ann } = week();
+  const jobs = Array.from({ length: 7 }, (_, i) => job(p, ann, `Job ${i + 1}`));
+  const out = lay(p);
+  assert.deepEqual(dayRows(out.blocks, toDay(MON)).map((r) => r.task).includes(jobs[6].id), false);
+  assert.deepEqual(dayRows(out.blocks, toDay(TUE)).map((r) => r.task), [jobs[6].id]);
+  assert.deepEqual(heldBackFrom(out.focus.on(toDay(MON)).heldBack), [{ planId: p.id, taskId: jobs[6].id, to: toDay(TUE) }]);
 });
 
 // ---- the built-in routine: plan the next day's action items

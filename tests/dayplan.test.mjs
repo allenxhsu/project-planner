@@ -2,7 +2,7 @@
 // Flow reads. Pure, so it is tested directly rather than through a render.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayRows, agendaRecord, sameDay, caughtUp, burstKeys } from '../src/model/dayplan.js';
+import { dayRows, agendaRecord, sameDay, caughtUp, burstKeys, lateOn, heldBackFrom } from '../src/model/dayplan.js';
 
 const DAY = 10;
 const blocks = [
@@ -122,4 +122,35 @@ test('just under the threshold is still a day of work', () => {
   assert.equal(burstKeys(four).size, 0, 'four in five minutes is not a burst');
   const five = Array.from({ length: 5 }, (_, i) => ({ key: `t${i}`, at: at(9, 0) + i }));
   assert.equal(burstKeys(five).size, 5, 'five is');
+});
+
+// ---- the rest of a day's page: what is late, what was held back
+
+test('“Will be late” under a day is what is due that day and will not make it; the rest is for Checks', () => {
+  const late = [
+    { taskId: 'a', planId: 'p', deadline: DAY },
+    { taskId: 'b', planId: 'p', deadline: DAY + 3 },
+    { taskId: 'c', planId: 'p', deadline: DAY - 1 },
+    { taskId: 'd', planId: 'h', deadline: DAY },
+  ];
+  assert.deepEqual(lateOn(late, DAY).map((l) => l.taskId), ['a', 'd'], 'due that day');
+  assert.deepEqual(lateOn(late, DAY + 3).map((l) => l.taskId), ['b'], 'a later deadline is that day’s business, not this one’s');
+  assert.deepEqual(lateOn(late, DAY, { hidden: (p) => p === 'h' }).map((l) => l.taskId), ['a'], 'a hidden plan is left out');
+  assert.deepEqual(lateOn([], DAY), []);
+  assert.deepEqual(lateOn(null, DAY), []);
+});
+
+test('what a day held back is said once a task, with the day it went to', () => {
+  const held = [
+    { planId: 'p', taskId: 'x', to: DAY + 1 },
+    { planId: 'p', taskId: 'x', to: DAY + 1 },
+    { planId: 'p', taskId: 'y', to: null },
+    { planId: 'h', taskId: 'z', to: DAY + 2 },
+  ];
+  assert.deepEqual(heldBackFrom(held, { hidden: (p) => p === 'h' }), [
+    { planId: 'p', taskId: 'x', to: DAY + 1 },
+    { planId: 'p', taskId: 'y', to: null },
+  ]);
+  assert.deepEqual(heldBackFrom([]), []);
+  assert.deepEqual(heldBackFrom(null), []);
 });
