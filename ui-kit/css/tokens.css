@@ -61,6 +61,8 @@
   --sc-app-reading-rgb: 232 189 79;
   --sc-app-pipeline: #7a8cf0;
   --sc-app-pipeline-rgb: 122 140 240;
+  --sc-app-galley: #e67e5c;
+  --sc-app-galley-rgb: 230 126 92;
   --sc-app: var(--sc-accent);
   --sc-app-rgb: var(--sc-accent-rgb);
 }
@@ -309,4 +311,9 @@
 [data-app="pipeline"] {
   --sc-app: var(--sc-app-pipeline);
   --sc-app-rgb: var(--sc-app-pipeline-rgb);
+}
+
+[data-app="galley"] {
+  --sc-app: var(--sc-app-galley);
+  --sc-app-rgb: var(--sc-app-galley-rgb);
 }

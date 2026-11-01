@@ -156,6 +156,7 @@ public enum SCAppColor {
     public static let skills = Color(red: 0.435, green: 0.827, blue: 0.780)
     public static let reading = Color(red: 0.910, green: 0.741, blue: 0.310)
     public static let pipeline = Color(red: 0.478, green: 0.549, blue: 0.941)
+    public static let galley = Color(red: 0.902, green: 0.494, blue: 0.361)
 }
 
 /// Each app as tokens.json lists it. The Launcher and any native app switcher read names,
@@ -182,6 +183,7 @@ public enum SCApps {
         SCAppInfo(id: "skills", name: "Skills", mark: "SK", color: SCAppColor.skills),
         SCAppInfo(id: "reading", name: "Reading", mark: "RL", color: SCAppColor.reading),
         SCAppInfo(id: "pipeline", name: "Pipeline", mark: "PL", color: SCAppColor.pipeline),
+        SCAppInfo(id: "galley", name: "Galley", mark: "GL", color: SCAppColor.galley),
     ]
     public static func app(_ id: String) -> SCAppInfo? { all.first { $0.id == id } }
 }
