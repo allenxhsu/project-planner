@@ -11,6 +11,8 @@
 // week without anything to keep in step.
 
 import { makeCalendar, toDay, fromDay, weekday } from './calendar.js';
+import { isRoutine } from './routines.js';
+import { focusOf, makeFocus } from './focus.js';
 import { isSummary, timeBlocks, getTimeBlock, timeBlockIdsOf, slotsOf, feeds, bufferOf, getResource, identityOf, pinsOf, eventsOf, eventPieces, URGENCIES, urgencyOf, attentionOf } from './model.js';
 
 /** The block sizes a task can be cut into, in hours. */
@@ -205,7 +207,14 @@ export function notBeforeOf(t) {
   return toDay(s.slice(0, 10)) * 24 * 60 + (+s.slice(11, 13)) * 60 + (+s.slice(14, 16));
 }
 
-export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [], history = [] } = {}) {
+/**
+ * `focus` is the day's limit (model/focus.js): how many tasks a day holds, in
+ * which buckets. Unsaid, it is the first plan's setting — the open plan's,
+ * since one calendar holds every plan and one count has to rule it.
+ *
+ * @returns {{ blocks, byTask, overflow, meetings, late, droppedPins, focus }}
+ */
+export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(), held = [], history = [], focus = null } = {}) {
   // One plan, once. The same plan arriving twice — the open copy and its own
   // record from the shelf — would book every hour of it twice over.
   const seenPlans = new Set();
@@ -341,11 +350,21 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       || (URGENCIES[urgencyOf(a.t)].rank - URGENCIES[urgencyOf(b.t)].rank)
       || (a.info.start - b.info.start)
       || (a.info.critical === b.info.critical ? a.info.slack - b.info.slack : a.info.critical ? -1 : 1));
+  // The day's limit. Each candidate is described once for the roster, with
+  // its place in the order above as the last word in the ranking.
+  const roster = makeFocus(focus || focusOf(entries[0]?.project));
+  candidates.forEach((c, i) => {
+    c.focus = {
+      planId: c.project.id, taskId: c.t.id, name: c.t.name, urgency: urgencyOf(c.t), deadline: c.deadline,
+      critical: !!c.info.critical, routine: !!c.t.repeatOf || isRoutine(c.t), order: i,
+    };
+  });
 
   // ---- pins first: a block someone put somewhere by hand is where it is.
   const pinnedMinutes = new Map();
   const droppedPins = [];
-  for (const { t, info, project } of candidates) {
+  for (const c of candidates) {
+    const { t, info, project } = c;
     const pins = pinsOf(t);
     if (!pins.length) continue;
     const a = agendaOf(project, t);
@@ -372,6 +391,8 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       blocks.push(block);
       if (!byTask.has(t.id)) byTask.set(t.id, []);
       byTask.get(t.id).push(block);
+      // Fixed by hand: on its day whatever the day's count.
+      if (attentionOf(t) !== 'background') roster.admit(day, c.focus, { force: true });
       // A background task runs alongside: it books nobody's time, so focus work goes over it.
       if (attentionOf(t) !== 'background') for (const lane of people) { bookedOn(lane, day).push({ start: pin.start, end: pin.start + minutes + a.gap }); fill(lane, day, minutes); }
       left -= minutes;
@@ -404,6 +425,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     blocks.push(block);
     if (!byTask.has(t.id)) byTask.set(t.id, []);
     byTask.get(t.id).push(block);
+    roster.admit(h.day, c.focus, { force: true });
     for (const lane of people) { bookedOn(lane, h.day).push({ start: h.start, end: h.start + minutes + a.gap }); fill(lane, h.day, minutes); }
     pinnedMinutes.set(t.id, (pinnedMinutes.get(t.id) || 0) + minutes);
   }
@@ -436,7 +458,8 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
   }
 
   // ---- then everything else, around them.
-  for (const { t, info, project, deadline } of candidates) {
+  for (const c of candidates) {
+    const { t, info, project } = c;
     // A task that is not auto-scheduled keeps only its fixed blocks.
     if (!agendaOf(project, t).show) { if (!byTask.has(t.id)) byTask.set(t.id, []); continue; }
     const a = agendaOf(project, t);
@@ -507,6 +530,11 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
         ? [...(day === todayDay && nowMinute > 0 ? [{ start: 0, end: nowMinute }] : []), ...ownOn(day), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])]
         : [...people.flatMap((lane) => bookedOn(lane, day)), ...(day === laterDay ? [{ start: 0, end: laterMinute }] : [])];
       const slots = today.flatMap((w) => freeSlots(busyForAll, w.from, w.to)).sort((x, y) => x[0] - y[0]);
+      // The day's limit: a day that would hold a block of this task holds it
+      // only if it has a slot for the task (model/focus.js). A day with no
+      // room in its hours is not asked, so it keeps its slots for what fits.
+      // Background work runs alongside and is not one of the day's six.
+      if (!background && slots.some(([from, to]) => from + Math.min(size, left) <= to) && !roster.admit(day, c.focus)) { day = nextDay(day + 1); continue; }
       for (const [from, to] of slots) {
         let at = from;
         while (left > 0 && at + Math.min(size, left) <= to && usedToday + Math.min(size, left) <= roomToday) {
@@ -561,7 +589,7 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
 
   blocks.sort((x, y) => x.day - y.day || x.start - y.start);
   meetings.sort((x, y) => x.day - y.day || x.start - y.start);
-  return { blocks, byTask, overflow, meetings, late, droppedPins };
+  return { blocks, byTask, overflow, meetings, late, droppedPins, focus: roster };
 }
 
 /**

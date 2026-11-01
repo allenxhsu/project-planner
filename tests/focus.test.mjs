@@ -243,7 +243,8 @@ test('a block fixed by hand keeps its day even when the day is full', () => {
   setPin(p, fixed.id, { day: MON, start: 16 * 60, minutes: 60 });
   const out = lay(p);
   assert.ok(out.blocks.some((b) => b.taskId === fixed.id && b.dateIso === MON && b.pinned));
-  assert.equal(tasksOn(out.blocks, MON).length, 7, 'six placed, and the one fixed by hand');
+  assert.equal(tasksOn(out.blocks, MON).length, 6, 'the fixed block is one of the six');
+  assert.equal(tasksOn(out.blocks, TUE).length, 1, 'so one placed job moves on');
 });
 
 test('held back is per day: a task refused twice reports the day it finally got', () => {
