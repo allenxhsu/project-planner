@@ -86,7 +86,7 @@ the duration.
 | Projects | every plan in hand as a card, with finished ones folded into the archive: dates, progress, task and resource counts. Open one, start one, or take one off the shelf |
 | Kanban | the open plan's tasks as cards, in columns by **stage**, by progress or by resource. Dragging a card is a real edit |
 | Calendar | a day, the working week, the whole week including the weekend, or a month. Each task's hours are laid into blocks: a task appears when it asks to, in the size of block it asks for, inside the time block it belongs to |
-| Agenda | the day, first thing: the tasks the calendar laid on it — at most the day's six, labelled **Essential priority**, **Essential and urgent** or **Maintenance**, in that order — with what the daily focus held back to later days under them; then what was finished, what will be late and what is past its deadline, beside the day's hours |
+| Agenda | the day, first thing: the tasks the calendar laid on it — at most the day's six, labelled **Essential priority**, **Essential and urgent** or **Maintenance**, in that order — with a closed count of what the daily focus held back to later days; then what was finished, what is due that day and will be late (later deadlines are the Checks' to say), and what is past its deadline, beside the day's hours. Another plan edited or deleted elsewhere — by the MCP, say — is on the page as soon as the sync brings it |
 | Priority | what to work on now, ranked by what is late, what has no slack and what is nearest, with work that is waiting on something else kept separate |
 | All Tasks | every task in every plan, grouped by project and then phase — the active phase marked, each group with its task count, hours left, deadline range and progress, and + Task to add one there — or by project alone, or flat; filtered by late / unfinished / critical / unassigned, searchable, and a row opens its task sheet |
 
@@ -157,7 +157,11 @@ calendar says *when*: which hours, on which days.
   working day with a free slot: nothing is dropped, and the calendar's footer
   says how many were held back, with **Show what is held back** listing each
   and the day it moved to. A task counts once however many blocks it is cut
-  into; a block fixed by hand is on its day whatever the count.
+  into; a block fixed by hand is on its day whatever the count. At work, a
+  home plan's work is laid as **Busy** and takes none of the six: the day's
+  tasks are the ones the person can see. The Agenda lists each task on the
+  day it got; the day it was held back from shows one closed line with the
+  count, which opens into the names and where each went.
 
   Which bucket is automatic, from what the plan already knows. The essential
   work of a day is ranked by urgency **ASAP** first, then **High**, then the
