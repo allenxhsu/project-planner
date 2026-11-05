@@ -53,7 +53,7 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | `due_tasks` | Open tasks across every plan that finish, or have a deadline, in a date range (default today) |
 | `checks` | The live checks: missed deadlines, negative slack, cycles, overallocation |
 | `add_task` | A task at the end, right after a task, or as the last subtask of a summary |
-| `edit_task` | Name, duration, work, percent, deadline, start (pins it), constraint, urgency, predecessors, resources, notes |
+| `edit_task` | Name, duration, work, percent, deadline, start (pins it), constraint, urgency, predecessors, resources, notes, `claude_scheduled` |
 | `link_tasks` / `unlink_tasks` | A dependency: FS, SS, FF or SF, with a lag |
 | `move_task` | Up, down, indent, outdent |
 | `delete_task` | A task and everything under it |

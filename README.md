@@ -55,6 +55,7 @@ working calendar:
 | A link on a summary | binds every task under it |
 | Constraint | As Soon As Possible, Start/Finish No Earlier/Later Than, Must Start/Finish On |
 | Deadline | a marker on the chart and a check; a missed deadline shows as negative slack |
+| Claude / MCP scheduled | Claude chose the start date and deadline (through the MCP server or the browser). The calendar lays the task only from that start, "Do it now" and project shifts leave its dates alone, and the task list and Gantt tag it. Auto-schedule is for small work: over 30 minutes left to it is a check |
 | Calendar | working weekdays, hours per day, holidays (Project ▸ Information) |
 
 Work matters beyond the total: it is what the resource checks measure (twelve
