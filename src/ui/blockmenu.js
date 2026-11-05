@@ -624,6 +624,21 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const labels = el('input', { class: 'sc-input', type: 'text', value: (t.labels || []).join(', '), placeholder: 'None — comma-separated' });
     // Auto-scheduled or not: every task can be laid by the calendar, or kept off it.
     const auto = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!agendaOf(project, t).show });
+    // Claude / MCP scheduled: Claude chose its start date and deadline. It is still
+    // on the calendar, laid only inside them, so Auto-schedule reads off and is
+    // not the switch's to change while this one is on.
+    const claude = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: t.scheduledBy === 'claude' });
+    const autoNote = el('span', { class: 'sc-faint small' });
+    let autoFree = auto.checked;
+    auto.addEventListener('change', () => { autoFree = auto.checked; });
+    const showClaude = () => {
+      auto.disabled = claude.checked;
+      auto.checked = claude.checked ? false : autoFree;
+      autoNote.textContent = claude.checked ? 'Claude planned — laid between its start date and deadline'
+        : pins.length ? `${pins.length} fixed block${pins.length === 1 ? '' : 's'}` : '';
+    };
+    claude.addEventListener('change', showClaude);
+    showClaude();
     // Duration, Motion's way: pick one or type one ("3h", "90m", "1h 30m", "1.5").
     const durationList = el('datalist', { id: `dur-${t.id}` }, ...[15, 30, 45, 60, 120, 180, 240, 360, 480].map((m) => el('option', { value: minText(m) })));
     const duration = el('input', { class: 'sc-input fact-duration', type: 'text', value: minText(expectedMin), list: `dur-${t.id}`, placeholder: 'Choose or type a duration',
@@ -653,7 +668,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
       hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, energy: energy.value, skill: skill.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
-      auto: auto.checked, duration: duration.value,
+      auto: auto.checked, claude: claude.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
     });
     setTimeout(() => document.querySelector('.task-sheet')?.addEventListener('keydown', (e) => {
@@ -774,9 +789,11 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           el('label', { class: `fact-done${info?.percent === 100 ? ' is-done' : ''}` }, done, el('span', { text: 'Task complete' }),
             info?.percent === 100 && t.doneAt ? el('span', { class: 'sc-faint small fact-done-at', text: `${formatDate(t.doneAt.slice(0, 10), 'day')}${t.doneAt.length > 10 ? `, ${formatClock(parseTime(t.doneAt.slice(11)))}` : ''}` }) : null),
           fact('Project', el('span', { class: 'fact-project' }, el('span', { class: 'fact-project-name', text: project.name }), projectToggle, moveButton)),
+          el('label', { class: 'fact fact-auto fact-claude', title: 'Claude scheduled it through the planner’s MCP server or the browser. Its start date and deadline hold: Auto-schedule lays it only between them and never moves them.' },
+            el('span', { class: 'fact-label', text: 'Claude / MCP scheduled' }),
+            el('span', { class: 'fact-switch' }, claude, el('span', { class: 'tp-switch' }))),
           el('label', { class: 'fact fact-auto' }, el('span', { class: 'fact-label', text: 'Auto-schedule' }),
-            el('span', { class: 'fact-switch' }, auto, el('span', { class: 'tp-switch' }),
-              el('span', { class: 'sc-faint small', text: pins.length ? `${pins.length} fixed block${pins.length === 1 ? '' : 's'}` : '' }))),
+            el('span', { class: 'fact-switch' }, auto, el('span', { class: 'tp-switch' }), autoNote)),
           el('div', { class: 'fact-gap' }),
           phases(project).length ? fact('Stage', stage) : null,
           fact('Assignee', list(who)),
@@ -827,7 +844,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   if ((saved.energy || '') !== (t.energy || '')) act.editTask(t.id, 'energy', saved.energy);
   if (saved.skill.trim() !== (t.skill || '')) act.editTask(t.id, 'skill', saved.skill);
   if (saved.attention === 'background' && saved.checkEvery !== (+t.checkEvery || 0)) act.editTask(t.id, 'checkEvery', saved.checkEvery);
-  if (saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
+  // Claude's mark first: switching it off hands the task back to the Auto-schedule switch.
+  if (saved.claude !== (t.scheduledBy === 'claude')) act.editTask(t.id, 'scheduledBy', saved.claude ? 'claude' : null);
+  if (!saved.claude && saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
   const minutes = saved.duration.trim() === minText(expectedMin) ? expectedMin : parseDurationText(saved.duration);
   if (minutes === null && saved.duration.trim()) act.hint(`“${saved.duration}” is not a duration — try 45 min, 2h or 1h 30m.`);
   else if (minutes !== null && minutes !== expectedMin) act.editTask(t.id, 'work', String(Math.round((minutes / 60) * 100) / 100));
