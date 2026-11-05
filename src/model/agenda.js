@@ -507,7 +507,8 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
     // own hours) keeps to its plan's working week.
     const windowsOn = (d) => (own.holidays.has(d) ? [] : a.windows.filter((w) => (w.days ? w.days.includes(weekday(d)) : own.workDays.has(weekday(d)))));
     const nextDay = (d) => { let i = 0; while (!windowsOn(d).length && i++ < 400) d++; return d; };
-    const firstDay = nextDay(Math.max(urgency === 'now' ? floor : Math.max(info.start, floor), laterDay));
+    // Except a Claude-scheduled task: its start date is the one Claude chose, and holds.
+    const firstDay = nextDay(Math.max(urgency === 'now' && t.scheduledBy !== 'claude' ? floor : Math.max(info.start, floor), laterDay));
     const overdue = info.start < floor;
     // As early as there is room, as Motion lays work: every free hour of the
     // task's schedule from its first day on is filled before the next day is

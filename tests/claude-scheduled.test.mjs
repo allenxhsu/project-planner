@@ -180,8 +180,8 @@ test('the MCP tools set and clear the mark through the model', async () => {
   const t = p.tasks.at(-1);
   assert.equal(t.scheduledBy, 'claude');
   assert.equal(t.calendar.show, true);
-  await runTool(client, 'edit_task', { task: t.id, claude_scheduled: false });
+  await runTool(client, 'edit_task', { task: 'Bracket drawing', claude_scheduled: false });
   assert.equal('scheduledBy' in t, false);
-  await runTool(client, 'edit_task', { task: t.id, claude_scheduled: true });
+  await runTool(client, 'edit_task', { task: 'Bracket drawing', claude_scheduled: true });
   assert.equal(t.scheduledBy, 'claude');
 });

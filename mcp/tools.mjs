@@ -208,6 +208,7 @@ export const TOOLS = [
         urgency: { type: 'string', enum: ['now', 'high', 'normal', 'low'] },
         percent: { type: 'number' },
         notes: { type: 'string' },
+        claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
       },
       required: ['name'],
       additionalProperties: false,
@@ -231,7 +232,7 @@ export const TOOLS = [
         }
         const t = insertTask(p, at, { name, level });
         setTaskField(p, t.id, 'duration', args.duration == null ? 1 : args.duration);
-        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes']);
+        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes', 'claude_scheduled']);
         return t.id;
       });
       const t = project.tasks.find((x) => x.id === id);
@@ -260,12 +261,13 @@ export const TOOLS = [
         resources: { type: 'string', description: 'Replaces the assignments: "Ana, Ben [50%]". "" unassigns.' },
         milestone: { type: 'boolean' },
         notes: { type: 'string' },
+        claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
       },
       required: ['task'],
       additionalProperties: false,
     },
     async handler(client, args) {
-      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes'];
+      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes', 'claude_scheduled'];
       if (!fields.some((f) => args[f] !== undefined)) throw new Error('Nothing to change: pass at least one field.');
       let before = null;
       let id = null;
@@ -385,7 +387,7 @@ export const TOOLS = [
 ];
 
 /** The task fields a tool accepts, mapped onto the model's names. */
-const FIELD_NAMES = { constraint_type: 'constraintType', constraint_date: 'constraintDate' };
+const FIELD_NAMES = { constraint_type: 'constraintType', constraint_date: 'constraintDate', claude_scheduled: 'scheduledBy' };
 function applyFields(p, id, args, fields) {
   for (const f of fields) {
     if (args[f] === undefined) continue;

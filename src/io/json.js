@@ -153,6 +153,8 @@ export function parse(text) {
       phaseId: typeof t.phaseId === 'string' && t.phaseId ? t.phaseId : null,
       archived: t.archived === true,
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
+      // Claude / MCP scheduled (model.js): the only scheduler a task names.
+      ...(t.scheduledBy === 'claude' ? { scheduledBy: 'claude' } : {}),
       ...(t.energy === 'physical' || t.energy === 'mental' ? { energy: t.energy } : {}),
       ...(typeof t.skill === 'string' && t.skill.trim() ? { skill: t.skill.trim().slice(0, 40) } : {}),
       // Which process module, and which of its tasks, this came from (model/processes.js).

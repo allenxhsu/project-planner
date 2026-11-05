@@ -1561,6 +1561,7 @@ function describeField(p, t, field) {
     case 'start': case 'constraintDate': case 'constraintType': return ['start date', t.constraint?.date || 'none'];
     case 'deadline': return ['deadline', t.deadline || 'none'];
     case 'hardDeadline': return ['hard deadline', t.hardDeadline ? 'on' : 'off'];
+    case 'scheduledBy': return ['scheduled by', t.scheduledBy === 'claude' ? 'Claude' : 'not Claude'];
     case 'attention': return ['attention', attentionOf(t) === 'background' ? 'background' : 'focus'];
     case 'energy': return ['energy', t.energy || 'the project’s'];
     case 'skill': return ['skill', t.skill || 'the project’s'];
@@ -1709,7 +1710,17 @@ function applyTaskField(p, t, id, field, value) {
       if (value === 'now') t.calendar = { ...t.calendar, show: true };
       break;
     }
-    case 'calendarShow': t.calendar = { ...t.calendar, show: !!value }; break;
+    // Off the calendar is manual: whatever Claude planned for it no longer holds.
+    case 'calendarShow': t.calendar = { ...t.calendar, show: !!value }; if (!value) delete t.scheduledBy; break;
+    // Claude / MCP scheduled: Claude chose its start date and deadline. It is laid
+    // on the calendar inside them, and nothing automatic moves them (model/agenda.js,
+    // stages.js shiftProject).
+    case 'scheduledBy': {
+      if (value === true || value === 'claude') { t.scheduledBy = 'claude'; t.calendar = { ...t.calendar, show: true }; }
+      else if (value === null || value === undefined || value === false || value === '') delete t.scheduledBy;
+      else throw new Error('Scheduled by is "claude", or empty to clear it.');
+      break;
+    }
     case 'blockHours': {
       const n = parseFloat(value);
       if (!BLOCK_CHOICES.includes(n)) throw new Error(`A block is one of ${BLOCK_CHOICES.join(', ')} hours.`);
