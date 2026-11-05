@@ -1179,6 +1179,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .fact-elbow { color: var(--sc-text-3); }
 .fact-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .fact-auto { cursor: pointer; }
+.fact-auto:has(.tp-switch-box:disabled) { cursor: default; opacity: .6; }
+.fact-claude .tp-switch-box:checked + .tp-switch { background: #d97757; }
+.claude-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 16px; color: #d97757; border: 1px solid color-mix(in srgb, #d97757 55%, transparent); white-space: nowrap; }
 .fact-duration-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fact-duration { width: 110px; }
 

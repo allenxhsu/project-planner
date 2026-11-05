@@ -135,7 +135,8 @@ export function buildGanttSvg(project, sched, rows, { zoom = 'day', from, to, pa
         g.append(svg('rect', { class: 'g-resize', x: x + w - 6, y: yb, width: 6, height: h, dataset: { part: 'resize' }, fill: 'transparent' }));
         g.append(svg('circle', { cx: x + w + 7, cy: yb + h / 2, r: 4.5, dataset: { part: 'link' }, ...PC('g-linkdot', 'linkdot') }));
       }
-      const names = formatAssignments(project, task);
+      // Who it is for, and a Claude-scheduled task says so (its dates are Claude's).
+      const names = [task.scheduledBy === 'claude' ? '◈ Claude' : '', formatAssignments(project, task)].filter(Boolean).join(' · ');
       if (names) labels.append(svg('text', { x: x + w + (interactive ? 16 : 6), y: yb + h / 2 + 4, ...P('label') }, names));
     }
     if (task.deadline) {

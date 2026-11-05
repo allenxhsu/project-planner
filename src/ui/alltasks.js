@@ -79,7 +79,7 @@ function readPlan(record) {
         order: i, name: t.name, deadline: t.deadline, start: s.startIso, percent: s.percent, milestone: s.milestone,
         who, expected: exp, done: Math.max(0, exp - left),
         doneAt: t.doneAt || null, archived: !!t.archived, cancelled: !!status.cancelled || !!t.archived,
-        status: status.name, urgency: urgencyOf(t), auto: agenda.show, labels: t.labels || [],
+        status: status.name, urgency: urgencyOf(t), auto: agenda.show, claude: t.scheduledBy === 'claude', labels: t.labels || [],
         blockedBy: t.predecessors.map((l) => nameOfTask(l.id)).filter(Boolean),
         blocking: project.tasks.filter((x) => x.predecessors.some((l) => l.id === t.id)).map((x) => x.name),
         schedule: t.calendar?.timeBlockIds?.length ? agenda.timeBlocks.map((b) => b.name).join(', ') : 'Any',
@@ -924,7 +924,7 @@ function listLayout(list, view, layout) {
     el('td', { colspan: cols.length + 2, style: pad(level) }, el('button', { class: 'ps-add', text: '＋ Add task', onclick: () => { void addTo(target); } }))));
   const leaf = (rs, level, target) => {
     sortRows(rs, view, layout).forEach((r, i) => body.append(el('tr', { class: `clickable tl-task${r.percent === 100 ? ' is-done' : ''}${r.cancelled ? ' is-cancelled' : ''}${visibilityOf(r.workspaceId) === 'dim' ? ' is-dimmed' : ''}`, onclick: () => { void openRow(r); } },
-      el('td', { style: pad(level) }, el('span', { class: 'sc-faint tl-n', text: String(i + 1) }), el('span', { class: `tl-ring${r.percent === 100 ? ' is-done' : ''}` }), el('span', { class: 'tl-name', text: r.name }),
+      el('td', { style: pad(level) }, el('span', { class: 'sc-faint tl-n', text: String(i + 1) }), el('span', { class: `tl-ring${r.percent === 100 ? ' is-done' : ''}` }), el('span', { class: 'tl-name', text: r.name }), r.claude ? el('span', { class: 'claude-tag', text: 'Claude', title: 'Scheduled by Claude: its start date and deadline hold' }) : null,
         r.percent < 100 && !r.cancelled ? switchToggle({ on: r.auto, title: r.auto ? 'Auto-scheduled — switch off to keep it off the calendar' : 'Not auto-scheduled — switch on to let the calendar lay it',
           onchange: (on) => { void setAuto(r, on); } }) : null),
       ...cols.map((c) => cellOf(c, r, layout)), el('td'))));

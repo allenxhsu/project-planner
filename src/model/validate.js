@@ -2,6 +2,7 @@
 
 import { computeSchedule, resourceLoad } from './schedule.js';
 import { fromDay, toDay, formatDate, today } from './calendar.js';
+import { pinsOf } from './model.js';
 
 export const RULES = {
   'cycle':            ['error',   'A chain of links leads back to where it started; the tasks in it cannot be scheduled.'],
@@ -15,6 +16,7 @@ export const RULES = {
   'late':             ['warning', 'By the status date the task should have started (or finished) but has not.'],
   'empty-summary':    ['info',    'A summary task with no subtasks is just a task.'],
   'bad-date':         ['error',   'A date in the plan could not be read.'],
+  'unplanned-long':   ['warning', 'Auto-schedule is for small work: a task over 30 minutes should be planned on the calendar — scheduled by Claude, or fixed at a time.'],
 };
 
 export function validate(p, sched = computeSchedule(p)) {
@@ -48,6 +50,10 @@ export function validate(p, sched = computeSchedule(p)) {
     if (!bound && leaves.indexOf(t) > 0 && !info.milestone && !t.repeatOf) add('no-predecessor', `${label(t)} has no predecessor.`, { taskId: t.id });
     if (!hasSucc.has(t.id) && !info.milestone && !t.repeatOf && info.finish < sched.finish && leaves.length > 1 && !ancestorsHaveSuccs(p, i, hasSucc)) add('no-successor', `${label(t)} has no successor.`, { taskId: t.id });
     if (!t.assignments.length && !info.milestone) add('unassigned', `${label(t)} has no resource.`, { taskId: t.id });
+    const hours = t.work ?? info.work;
+    if (info.percent < 100 && !t.archived && t.calendar?.show && t.scheduledBy !== 'claude' && !pinsOf(t).length && hours > 0.5) {
+      add('unplanned-long', `${label(t)} is ${Math.round(hours * 60)} min of work left to Auto-schedule; plan it on the calendar.`, { taskId: t.id });
+    }
     if (info.percent < 100 && info.finish < status) add('late', `${label(t)} should have finished by ${formatDate(fromDay(status))} (${info.percent}% done).`, { taskId: t.id });
     else if (info.percent === 0 && info.start < status) add('late', `${label(t)} should have started by ${formatDate(fromDay(status))}.`, { taskId: t.id });
   }

@@ -258,7 +258,8 @@ export function shiftProject(p, days) {
   if (p.deadline) p.deadline = mv(p.deadline);
   for (const ph of phases(p)) if (ph.deadline) ph.deadline = mv(ph.deadline);
   for (const t of p.tasks) {
-    if ((t.percent ?? 0) >= 100) continue;
+    // Claude chose a Claude-scheduled task's dates; they stay where it put them.
+    if ((t.percent ?? 0) >= 100 || t.scheduledBy === 'claude') continue;
     if (t.constraint?.date) t.constraint = { ...t.constraint, date: mv(t.constraint.date) };
     if (t.deadline) t.deadline = mv(t.deadline);
   }
