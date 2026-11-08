@@ -116,7 +116,7 @@ describe('MCP tools read and edit plans through sync', { skip: present ? false :
     for (const t of TOOLS) {
       assert.ok(t.name && t.description && t.inputSchema, t.name);
     }
-    for (const expected of ['list_plans', 'create_plan', 'use_plan', 'get_plan', 'find_task', 'due_tasks', 'checks', 'add_task', 'edit_task', 'link_tasks', 'unlink_tasks', 'move_task', 'delete_task', 'assign_task', 'unassign_task']) {
+    for (const expected of ['list_plans', 'create_plan', 'use_plan', 'add_event', 'list_events', 'delete_event', 'get_plan', 'find_task', 'due_tasks', 'checks', 'add_task', 'edit_task', 'link_tasks', 'unlink_tasks', 'move_task', 'delete_task', 'assign_task', 'unassign_task']) {
       assert.ok(names.includes(expected), `${expected} is a tool`);
     }
     assert.equal(new Set(names).size, names.length, 'no duplicate names');
@@ -314,6 +314,55 @@ describe('MCP tools read and edit plans through sync', { skip: present ? false :
     await fails('create_plan', { name: 'Bad start', start: 'next week' }, /date/i);
     assert.equal((await run('list_plans')).data.length, 4);
     await run('use_plan', { plan: 'relaunch' });
+  });
+
+  test('schedule: a task is put in time blocks by name; unknown names and ambiguity are refused', async () => {
+    await run('use_plan', { plan: 'relaunch' });
+    const one = await run('edit_task', { task: 'Final review', schedule: 'Deep focus' });
+    assert.equal(one.data.after.schedule, 'Deep focus');
+    const design = (await onServer('plan_relaunch')).tasks.find((t) => t.name === 'Final review');
+    assert.deepEqual(design.calendar.timeBlockIds, ['tb_focus'], 'the server has the block id');
+    const two = await run('edit_task', { task: 'Final review', schedule: 'work, deep' });
+    assert.equal(two.data.after.schedule, 'Work, Deep focus', 'several, case-insensitive, a unique prefix is enough');
+    const cleared = await run('edit_task', { task: 'Final review', schedule: '' });
+    assert.equal(cleared.data.after.schedule, 'any', 'blank means any block');
+    await fails('edit_task', { task: 'Final review', schedule: 'Study' }, /schedule/i);
+    assert.equal((await onServer('plan_relaunch')).tasks.find((t) => t.name === 'Final review').calendar.timeBlockIds.length, 0, 'a refused edit changes nothing');
+    const added = await run('add_task', { name: 'Focused thing', schedule: 'Deep focus' });
+    assert.equal(added.data.schedule, 'Deep focus');
+    const row = (await run('get_plan')).data.tasks.find((t) => t.name === 'Focused thing');
+    assert.equal(row.schedule, 'Deep focus', 'get_plan shows the schedule');
+    await run('delete_task', { task: 'Focused thing' });
+  });
+
+  test('events: busy time the work goes around, added by day and clock time, listed, and removed', async () => {
+    await run('use_plan', { plan: 'relaunch' });
+    const { data, text } = await run('add_event', { title: 'Snowboard Mammoth', day: '2026-11-13', end_day: '2026-11-15', from: '08:30', to: '16:00', notes: 'Ikon' });
+    assert.match(data.id, /^ev_/);
+    assert.equal(data.title, 'Snowboard Mammoth');
+    assert.equal(data.day, '2026-11-13');
+    assert.equal(data.endDay, '2026-11-15');
+    assert.equal(data.from, '08:30');
+    assert.equal(data.to, '16:00');
+    assert.equal(data.busy, true);
+    assert.match(text, /Snowboard Mammoth/);
+    const server = (await onServer('plan_relaunch')).events.find((e) => e.title === 'Snowboard Mammoth');
+    assert.equal(server.start, 8 * 60 + 30, 'minutes into the day on the server');
+    assert.equal(server.end, 16 * 60);
+    const whole = await run('add_event', { title: 'Drive to Mammoth', day: '2026-11-12', from: '18:00', to: '23:00' });
+    assert.equal(whole.data.endDay, '2026-11-12', 'one day when end_day is left out');
+    const allDay = await run('add_event', { title: 'Thanksgiving', day: '2026-11-26', all_day: true });
+    assert.equal(allDay.data.from, '00:00');
+    const listed = (await run('list_events', { from: '2026-11-12', to: '2026-11-30' })).data;
+    assert.deepEqual(listed.map((e) => e.title).sort(), ['Drive to Mammoth', 'Snowboard Mammoth', 'Thanksgiving']);
+    await fails('add_event', { title: 'Bad', day: '2026-11-13', from: '16:00', to: '08:30' }, /end/i);
+    await fails('add_event', { title: 'Bad', day: 'friday', from: '08:00', to: '09:00' }, /date/i);
+    await fails('add_event', { title: 'Bad', day: '2026-11-13', from: '8am', to: '09:00' }, /time/i);
+    const gone = await run('delete_event', { event: 'Thanksgiving' });
+    assert.equal(gone.data.removed, 1);
+    await fails('delete_event', { event: 'Mammoth' }, /Several/);
+    await fails('delete_event', { event: 'Christmas' }, /No event/);
+    assert.equal((await onPage('plan_relaunch')).events.length, 2, 'the page sees the add and the delete');
   });
 
   test('due_tasks: across every plan, by finish or deadline, open tasks only', async () => {

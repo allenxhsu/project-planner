@@ -54,11 +54,12 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | `due_tasks` | Open tasks across every plan that finish, or have a deadline, in a date range (default today) |
 | `checks` | The live checks: missed deadlines, negative slack, cycles, overallocation |
 | `add_task` | A task at the end, right after a task, or as the last subtask of a summary |
-| `edit_task` | Name, duration, work, percent, deadline, start (pins it), constraint, urgency, predecessors, resources, notes, `claude_scheduled` |
+| `edit_task` | Name, duration, work, percent, deadline, start (pins it), constraint, urgency, predecessors, resources, notes, `claude_scheduled`, `schedule` (the time blocks it is laid in, by name) |
 | `link_tasks` / `unlink_tasks` | A dependency: FS, SS, FF or SF, with a lag |
 | `move_task` | Up, down, indent, outdent |
 | `delete_task` | A task and everything under it |
 | `assign_task` / `unassign_task` | A person on a task, at full time or a fraction |
+| `add_event` / `list_events` / `delete_event` | Blocked time the work goes around (a trip, a ride day, a drive, an appointment): one day or a span, by clock time or all day; events on any plan count for the whole shelf |
 
 A task is named by the **row number** the task list shows, or by its
 **name** — exact, or a prefix or fragment that fits exactly one task. Two

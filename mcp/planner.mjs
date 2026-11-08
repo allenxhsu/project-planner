@@ -14,7 +14,7 @@ import { SyncEngine, HttpTransport, MemoryStore, FileStore } from '../sync-kit/j
 import { parse, serialize } from '../src/io/json.js';
 import { computeSchedule } from '../src/model/schedule.js';
 import { validate } from '../src/model/validate.js';
-import { formatAssignments, formatPredecessors, createProject } from '../src/model/model.js';
+import { formatAssignments, formatPredecessors, createProject, timeBlockIdsOf, getTimeBlock } from '../src/model/model.js';
 
 export const FORMAT = 'project-planner';
 
@@ -157,6 +157,7 @@ export function taskRow(project, schedule, task, index) {
     resources: formatAssignments(project, task),
     urgency: task.urgency || 'normal',
     constraint: c.type === 'ASAP' || !c.type ? 'ASAP' : `${c.type} ${c.date || ''}`.trim(),
+    schedule: timeBlockIdsOf(task).map((id) => getTimeBlock(project, id)?.name).filter(Boolean).join(', ') || 'any',
     notes: task.notes || '',
   };
 }

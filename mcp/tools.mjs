@@ -11,10 +11,65 @@
 import { PlannerClient, taskRow } from './planner.mjs';
 import {
   setTaskField, insertTask, removeTasks, moveTask, indentTasks, outdentTasks,
-  link, unlink, addResource, assign, unassign, descendants, taskIndex,
+  link, unlink, addResource, assign, unassign, descendants, taskIndex, timeBlocks,
+  saveEvent, removeEvent, eventsOf,
 } from '../src/model/model.js';
 import { isoValid, today } from '../src/model/calendar.js';
 import { computeSchedule } from '../src/model/schedule.js';
+
+
+/**
+ * Time blocks ("schedules" in the app) named the way a person types them:
+ * "Study", "work, deep" — case-insensitive, exact or a prefix that fits one.
+ * Returns ids. "" means none: the task may go in any block.
+ */
+export function resolveBlocks(project, text) {
+  const names = String(text ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const all = timeBlocks(project);
+  return names.map((q) => {
+    const lq = q.toLowerCase();
+    const exact = all.filter((b) => String(b.name).toLowerCase() === lq);
+    const hits = exact.length ? exact : all.filter((b) => String(b.name).toLowerCase().startsWith(lq));
+    if (hits.length === 1) return hits[0].id;
+    const have = all.map((b) => b.name).join(', ');
+    if (hits.length > 1) throw new Error(`Several schedules match “${q}”: ${hits.map((b) => b.name).join(', ')}. Say which.`);
+    throw new Error(`No schedule named “${q}” in this plan. It has: ${have}.`);
+  });
+}
+
+
+// ------------------------------------------------------------------ events
+
+/** "08:30" → minutes into the day. Anything else is an error the person can read. */
+function minutesOf(text, what) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(text ?? '').trim());
+  if (!m || +m[1] > 23 || +m[2] > 59) throw new Error(`\`${what}\` is a time of day like 08:30.`);
+  return +m[1] * 60 + +m[2];
+}
+const clock = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+/** One event as the tools return it. */
+function eventRow(ev, planName = null) {
+  return {
+    id: ev.id, title: ev.title, day: ev.day, endDay: ev.endDay, from: clock(ev.start), to: clock(ev.end),
+    allDay: !!ev.allDay, busy: ev.busy !== false, repeat: ev.repeat || 'none', notes: ev.notes || '',
+    ...(planName ? { plan: planName } : {}),
+  };
+}
+
+/** The one event an id or a title fragment means; two candidates are an error. */
+function resolveEvent(project, ref) {
+  const q = String(ref ?? '').trim().toLowerCase();
+  const all = eventsOf(project);
+  const byId = all.filter((e) => e.id === ref);
+  if (byId.length === 1) return byId[0];
+  const exact = all.filter((e) => String(e.title).toLowerCase() === q);
+  if (exact.length === 1) return exact[0];
+  const hits = exact.length ? exact : all.filter((e) => String(e.title).toLowerCase().includes(q));
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1) throw new Error(`Several events match “${ref}”: ${hits.map((e) => `${e.title} (${e.day})`).join(', ')}. Say which.`);
+  throw new Error(`No event matches “${ref}”. list_events shows them.`);
+}
 
 // ------------------------------------------------------------------ naming
 
@@ -141,6 +196,79 @@ export const TOOLS = [
     },
   },
   {
+    name: 'add_event',
+    description: 'Block out time the work goes around: a trip, a ride day, a drive, an appointment. One day or a span of days, by clock time or all day. Events on any plan count for the whole shelf.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plan: PLAN_ARG,
+        title: { type: 'string' },
+        day: { type: 'string', description: 'First day, YYYY-MM-DD.' },
+        end_day: { type: 'string', description: 'Last day, YYYY-MM-DD; the same day when left out.' },
+        from: { type: 'string', description: 'Start time of day, like 08:30. Required unless all_day.' },
+        to: { type: 'string', description: 'End time of day, like 16:00. Required unless all_day.' },
+        all_day: { type: 'boolean' },
+        busy: { type: 'boolean', description: 'Default true: the time is taken. false shows the event without blocking work.' },
+        notes: { type: 'string' },
+      },
+      required: ['title', 'day'],
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      const title = String(args.title || '').trim();
+      if (!title) throw new Error('An event needs a title.');
+      if (!isoValid(args.day)) throw new Error('`day` is a date, YYYY-MM-DD.');
+      if (args.end_day != null && args.end_day !== '' && !isoValid(args.end_day)) throw new Error('`end_day` is a date, YYYY-MM-DD.');
+      const allDay = args.all_day === true;
+      const start = allDay ? 0 : minutesOf(args.from, 'from');
+      const end = allDay ? 24 * 60 : minutesOf(args.to, 'to');
+      const { project, pushed, result: ev } = await client.edit(args.plan, (p) => saveEvent(p, {
+        title, day: args.day, endDay: args.end_day || args.day, start, end, allDay,
+        busy: args.busy !== false, notes: args.notes || '',
+      }));
+      const row = eventRow(ev, project.name);
+      return { text: `Blocked “${row.title}” ${row.day}${row.endDay !== row.day ? ` → ${row.endDay}` : ''}, ${row.allDay ? 'all day' : `${row.from}–${row.to}`}${row.busy ? '' : ' (not busy)'}.`, data: { ...row, pushed } };
+    },
+  },
+  {
+    name: 'list_events',
+    description: 'The events (blocked time) on a plan, or on every plan when none is chosen, optionally within a date range.',
+    inputSchema: {
+      type: 'object',
+      properties: { plan: PLAN_ARG, from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } },
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      for (const k of ['from', 'to']) if (args[k] != null && args[k] !== '' && !isoValid(args[k])) throw new Error(`\`${k}\` is a date, YYYY-MM-DD.`);
+      await client.sync();
+      const plans = (args.plan || client.defaultPlanId) ? [await client.resolvePlan(args.plan)] : await client.plans();
+      const out = [];
+      for (const { project } of plans) for (const ev of eventsOf(project)) {
+        if (args.from && ev.endDay < args.from) continue;
+        if (args.to && ev.day > args.to) continue;
+        out.push(eventRow(ev, project.name));
+      }
+      out.sort((a, b) => a.day.localeCompare(b.day) || a.from.localeCompare(b.from));
+      const text = out.length ? out.map((e) => `${e.day}${e.endDay !== e.day ? `→${e.endDay}` : ''} ${e.allDay ? 'all day' : `${e.from}–${e.to}`}  ${e.title} (${e.plan})`).join('\n') : 'No events.';
+      return { text, data: out };
+    },
+  },
+  {
+    name: 'delete_event',
+    description: 'Remove one event by its id or its title (exact, or a fragment that fits one).',
+    inputSchema: {
+      type: 'object',
+      properties: { plan: PLAN_ARG, event: { type: 'string' } },
+      required: ['event'],
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      let title = null;
+      const { pushed } = await client.edit(args.plan, (p) => { const ev = resolveEvent(p, args.event); title = ev.title; removeEvent(p, ev.id); });
+      return { text: `Removed “${title}”.`, data: { removed: 1, title, pushed } };
+    },
+  },
+  {
     name: 'use_plan',
     description: 'Choose the plan later calls work on, so they need not name it. Returns its name and id.',
     inputSchema: { type: 'object', properties: { plan: { ...PLAN_ARG, description: 'The plan: its name (or a unique part of it) or id.' } }, required: ['plan'], additionalProperties: false },
@@ -240,6 +368,7 @@ export const TOOLS = [
         percent: { type: 'number' },
         notes: { type: 'string' },
         claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
+        schedule: { type: 'string', description: 'The schedule(s) (time blocks) the task is laid in, by name: "Study", "Work, Deep focus". "" means any.' },
       },
       required: ['name'],
       additionalProperties: false,
@@ -263,7 +392,7 @@ export const TOOLS = [
         }
         const t = insertTask(p, at, { name, level });
         setTaskField(p, t.id, 'duration', args.duration == null ? 1 : args.duration);
-        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes', 'claude_scheduled']);
+        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes', 'claude_scheduled', 'schedule']);
         return t.id;
       });
       const t = project.tasks.find((x) => x.id === id);
@@ -293,12 +422,13 @@ export const TOOLS = [
         milestone: { type: 'boolean' },
         notes: { type: 'string' },
         claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
+        schedule: { type: 'string', description: 'The schedule(s) (time blocks) the task is laid in, by name: "Study", "Work, Deep focus". "" means any.' },
       },
       required: ['task'],
       additionalProperties: false,
     },
     async handler(client, args) {
-      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes', 'claude_scheduled'];
+      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes', 'claude_scheduled', 'schedule'];
       if (!fields.some((f) => args[f] !== undefined)) throw new Error('Nothing to change: pass at least one field.');
       let before = null;
       let id = null;
@@ -422,6 +552,7 @@ const FIELD_NAMES = { constraint_type: 'constraintType', constraint_date: 'const
 function applyFields(p, id, args, fields) {
   for (const f of fields) {
     if (args[f] === undefined) continue;
+    if (f === 'schedule') { setTaskField(p, id, 'timeBlock', resolveBlocks(p, args[f])); continue; }
     // The model parses "3d", "2w", "12h" itself, as the task list does.
     setTaskField(p, id, FIELD_NAMES[f] || f, args[f]);
   }
