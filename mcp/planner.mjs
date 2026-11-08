@@ -14,7 +14,7 @@ import { SyncEngine, HttpTransport, MemoryStore, FileStore } from '../sync-kit/j
 import { parse, serialize } from '../src/io/json.js';
 import { computeSchedule } from '../src/model/schedule.js';
 import { validate } from '../src/model/validate.js';
-import { formatAssignments, formatPredecessors, createProject, timeBlockIdsOf, getTimeBlock } from '../src/model/model.js';
+import { formatAssignments, formatPredecessors, createProject, timeBlockIdsOf, getTimeBlock, pinsOf } from '../src/model/model.js';
 
 export const FORMAT = 'project-planner';
 
@@ -133,6 +133,8 @@ export class PlannerClient {
   }
 }
 
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
 /** One task as a row of the task list: what every read tool returns. */
 export function taskRow(project, schedule, task, index) {
   const info = schedule.tasks[task.id] || {};
@@ -158,6 +160,7 @@ export function taskRow(project, schedule, task, index) {
     urgency: task.urgency || 'normal',
     constraint: c.type === 'ASAP' || !c.type ? 'ASAP' : `${c.type} ${c.date || ''}`.trim(),
     schedule: timeBlockIdsOf(task).map((id) => getTimeBlock(project, id)?.name).filter(Boolean).join(', ') || 'any',
+    pins: pinsOf(task).map((x) => `${x.day} ${hhmm(x.start)}-${hhmm(x.start + x.minutes)}`),
     notes: task.notes || '',
   };
 }

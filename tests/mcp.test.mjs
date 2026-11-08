@@ -335,6 +335,26 @@ describe('MCP tools read and edit plans through sync', { skip: present ? false :
     await run('delete_task', { task: 'Focused thing' });
   });
 
+  test('pin: a task is fixed to clock time on a day; several pins, replace, clear, and bad input refused', async () => {
+    await run('use_plan', { plan: 'relaunch' });
+    const one = await run('edit_task', { task: 'Final review', pin: '2026-11-09 09:00-13:00' });
+    assert.deepEqual(one.data.after.pins, ['2026-11-09 09:00-13:00']);
+    const srv = (await onServer('plan_relaunch')).tasks.find((t) => t.name === 'Final review');
+    assert.deepEqual(srv.calendar.pins, [{ day: '2026-11-09', start: 540, minutes: 240 }], 'the server holds the pin in minutes');
+    const two = await run('edit_task', { task: 'Final review', pin: '2026-11-10 09:00-13:00, 2026-11-10 13:30-14:30' });
+    assert.deepEqual(two.data.after.pins, ['2026-11-10 09:00-13:00', '2026-11-10 13:30-14:30'], 'pin replaces the set, sorted');
+    const cleared = await run('edit_task', { task: 'Final review', pin: '' });
+    assert.deepEqual(cleared.data.after.pins, []);
+    await fails('edit_task', { task: 'Final review', pin: '2026-11-09 13:00-09:00' }, /pin/i);
+    await fails('edit_task', { task: 'Final review', pin: 'monday 9-1' }, /pin/i);
+    assert.equal(((await onServer('plan_relaunch')).tasks.find((t) => t.name === 'Final review').calendar.pins || []).length, 0, 'a refused pin changes nothing');
+    const added = await run('add_task', { name: 'Pinned thing', pin: '2026-11-12 09:00-12:30', work: '3.5h' });
+    assert.deepEqual(added.data.pins, ['2026-11-12 09:00-12:30']);
+    const row = (await run('get_plan')).data.tasks.find((t) => t.name === 'Pinned thing');
+    assert.deepEqual(row.pins, ['2026-11-12 09:00-12:30'], 'get_plan shows pins');
+    await run('delete_task', { task: 'Pinned thing' });
+  });
+
   test('events: busy time the work goes around, added by day and clock time, listed, and removed', async () => {
     await run('use_plan', { plan: 'relaunch' });
     const { data, text } = await run('add_event', { title: 'Snowboard Mammoth', day: '2026-11-13', end_day: '2026-11-15', from: '08:30', to: '16:00', notes: 'Ikon' });

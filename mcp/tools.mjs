@@ -12,7 +12,7 @@ import { PlannerClient, taskRow } from './planner.mjs';
 import {
   setTaskField, insertTask, removeTasks, moveTask, indentTasks, outdentTasks,
   link, unlink, addResource, assign, unassign, descendants, taskIndex, timeBlocks,
-  saveEvent, removeEvent, eventsOf,
+  saveEvent, removeEvent, eventsOf, setPin, clearPins, pinsOf,
 } from '../src/model/model.js';
 import { isoValid, today } from '../src/model/calendar.js';
 import { computeSchedule } from '../src/model/schedule.js';
@@ -37,6 +37,26 @@ export function resolveBlocks(project, text) {
   });
 }
 
+
+
+// ------------------------------------------------------------------ pins
+
+/**
+ * "2026-11-09 09:00-13:00, 2026-11-10 13:30-14:30" → pins the model takes.
+ * A pin fixes the task to that clock time on that day; its minutes count
+ * against the task's work. "" means no pins.
+ */
+export function parsePins(text) {
+  const parts = String(text ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return parts.map((part) => {
+    const m = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(part);
+    if (!m) throw new Error(`A pin looks like "2026-11-09 09:00-13:00" (day, start-end); got “${part}”.`);
+    const start = +m[2] * 60 + +m[3], end = +m[4] * 60 + +m[5];
+    if (+m[2] > 23 || +m[3] > 59 || +m[4] > 24 || +m[5] > 59) throw new Error(`A pin's times are clock times; got “${part}”.`);
+    if (end <= start) throw new Error(`A pin ends after it starts; got “${part}”.`);
+    return { day: m[1], start, minutes: end - start };
+  });
+}
 
 // ------------------------------------------------------------------ events
 
@@ -369,6 +389,7 @@ export const TOOLS = [
         notes: { type: 'string' },
         claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
         schedule: { type: 'string', description: 'The schedule(s) (time blocks) the task is laid in, by name: "Study", "Work, Deep focus". "" means any.' },
+        pin: { type: 'string', description: 'Fix the task to clock time: "2026-11-09 09:00-13:00", several separated by commas; replaces earlier pins; "" unpins. The pinned minutes count against the task’s work.' },
       },
       required: ['name'],
       additionalProperties: false,
@@ -392,7 +413,7 @@ export const TOOLS = [
         }
         const t = insertTask(p, at, { name, level });
         setTaskField(p, t.id, 'duration', args.duration == null ? 1 : args.duration);
-        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes', 'claude_scheduled', 'schedule']);
+        applyFields(p, t.id, args, ['work', 'deadline', 'start', 'predecessors', 'resources', 'urgency', 'percent', 'notes', 'claude_scheduled', 'schedule', 'pin']);
         return t.id;
       });
       const t = project.tasks.find((x) => x.id === id);
@@ -423,12 +444,13 @@ export const TOOLS = [
         notes: { type: 'string' },
         claude_scheduled: { type: 'boolean', description: 'Mark it Claude / MCP scheduled: Claude chose its start and deadline, the calendar lays it only inside them and nothing automatic moves them. Use it for anything over 30 minutes; false makes it manual again.' },
         schedule: { type: 'string', description: 'The schedule(s) (time blocks) the task is laid in, by name: "Study", "Work, Deep focus". "" means any.' },
+        pin: { type: 'string', description: 'Fix the task to clock time: "2026-11-09 09:00-13:00", several separated by commas; replaces earlier pins; "" unpins. The pinned minutes count against the task’s work.' },
       },
       required: ['task'],
       additionalProperties: false,
     },
     async handler(client, args) {
-      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes', 'claude_scheduled', 'schedule'];
+      const fields = ['name', 'duration', 'work', 'percent', 'deadline', 'start', 'constraint_type', 'constraint_date', 'urgency', 'predecessors', 'resources', 'milestone', 'notes', 'claude_scheduled', 'schedule', 'pin'];
       if (!fields.some((f) => args[f] !== undefined)) throw new Error('Nothing to change: pass at least one field.');
       let before = null;
       let id = null;
@@ -553,6 +575,7 @@ function applyFields(p, id, args, fields) {
   for (const f of fields) {
     if (args[f] === undefined) continue;
     if (f === 'schedule') { setTaskField(p, id, 'timeBlock', resolveBlocks(p, args[f])); continue; }
+    if (f === 'pin') { const pins = parsePins(args[f]); clearPins(p, id); for (const pin of pins) setPin(p, id, pin); continue; }
     // The model parses "3d", "2w", "12h" itself, as the task list does.
     setTaskField(p, id, FIELD_NAMES[f] || f, args[f]);
   }
