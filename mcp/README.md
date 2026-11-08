@@ -47,6 +47,7 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | Tool | What it does |
 |---|---|
 | `list_plans` | Every plan: name, id, tasks, start → finish, % done |
+| `create_plan` | A new, empty plan: name, optional start date and working weekdays (Mon–Fri by default, `[0,6]` for weekends, all seven for every day); it becomes the plan later calls work on |
 | `use_plan` | Choose the plan later calls work on; it is remembered for the session |
 | `get_plan` | The task list with the schedule: row, name, duration, start, finish, deadline, %, slack, predecessors, resources |
 | `find_task` | Which tasks a row number or name fragment means |

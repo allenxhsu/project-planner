@@ -110,6 +110,37 @@ export const TOOLS = [
     },
   },
   {
+    name: 'create_plan',
+    description: 'Make a new, empty plan on the shelf. It becomes the plan later calls work on. Names are unique.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        start: { type: 'string', description: 'YYYY-MM-DD the plan starts; today when omitted.' },
+        work_days: {
+          type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 },
+          description: 'Working weekdays, 0 = Sunday … 6 = Saturday. Default Mon–Fri [1,2,3,4,5]; [0,1,2,3,4,5,6] for a plan that runs every day; [0,6] for weekend-only.',
+        },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      if (args.start != null && !isoValid(args.start)) throw new Error('`start` is a date, YYYY-MM-DD.');
+      let workDays = null;
+      if (args.work_days != null) {
+        const days = Array.isArray(args.work_days) ? args.work_days : [args.work_days];
+        if (!days.length || days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) throw new Error('`work_days` lists weekdays 0 (Sunday) to 6 (Saturday).');
+        workDays = [...new Set(days)].sort();
+      }
+      const { record, project, pushed } = await client.create({ name: args.name, start: args.start || null, workDays });
+      return {
+        text: `Made “${project.name}” (${record.id}), starting ${project.start}, working ${project.calendar.workDays.join(',')}. Later calls work on it.`,
+        data: { id: record.id, name: project.name, start: project.start, workDays: project.calendar.workDays, pushed },
+      };
+    },
+  },
+  {
     name: 'use_plan',
     description: 'Choose the plan later calls work on, so they need not name it. Returns its name and id.',
     inputSchema: { type: 'object', properties: { plan: { ...PLAN_ARG, description: 'The plan: its name (or a unique part of it) or id.' } }, required: ['plan'], additionalProperties: false },

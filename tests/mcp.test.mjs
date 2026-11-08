@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { SyncEngine, HttpTransport, MemoryStore } from '../sync-kit/js/index.js';
 import { createProject, insertTask, link, addResource, assign } from '../src/model/model.js';
 import { serialize, parse } from '../src/io/json.js';
+import { today } from '../src/model/calendar.js';
 import { PlannerClient } from '../mcp/planner.mjs';
 import { TOOLS, runTool } from '../mcp/tools.mjs';
 
@@ -115,7 +116,7 @@ describe('MCP tools read and edit plans through sync', { skip: present ? false :
     for (const t of TOOLS) {
       assert.ok(t.name && t.description && t.inputSchema, t.name);
     }
-    for (const expected of ['list_plans', 'use_plan', 'get_plan', 'find_task', 'due_tasks', 'checks', 'add_task', 'edit_task', 'link_tasks', 'unlink_tasks', 'move_task', 'delete_task', 'assign_task', 'unassign_task']) {
+    for (const expected of ['list_plans', 'create_plan', 'use_plan', 'get_plan', 'find_task', 'due_tasks', 'checks', 'add_task', 'edit_task', 'link_tasks', 'unlink_tasks', 'move_task', 'delete_task', 'assign_task', 'unassign_task']) {
       assert.ok(names.includes(expected), `${expected} is a tool`);
     }
     assert.equal(new Set(names).size, names.length, 'no duplicate names');
@@ -282,6 +283,37 @@ describe('MCP tools read and edit plans through sync', { skip: present ? false :
     const names = (await run('get_plan')).data.tasks.map((t) => t.name);
     assert.deepEqual(names, ['Final review', 'Done thing', 'Launch']);
     assert.equal((await onPage('plan_relaunch')).tasks.length, 3);
+  });
+
+  test('create_plan: a new plan reaches the server and the page, becomes the default, and names are unique', async () => {
+    const { data, text } = await run('create_plan', { name: 'Personal tasks', work_days: [0, 1, 2, 3, 4, 5, 6], start: '2026-11-07' });
+    assert.match(data.id, /^plan_/);
+    assert.equal(data.name, 'Personal tasks');
+    assert.deepEqual(data.workDays, [0, 1, 2, 3, 4, 5, 6]);
+    assert.match(text, /Personal tasks/);
+    const onShelf = (await run('list_plans')).data.find((p) => p.name === 'Personal tasks');
+    assert.ok(onShelf, 'list_plans shows it');
+    assert.equal(onShelf.tasks, 0);
+    const server = await onServer(data.id);
+    assert.equal(server?.name, 'Personal tasks', 'the server has it');
+    assert.deepEqual(server.calendar.workDays, [0, 1, 2, 3, 4, 5, 6]);
+    assert.equal(server.start, '2026-11-07');
+    assert.equal((await onPage(data.id))?.name, 'Personal tasks', 'the page has it');
+    // The new plan is the one later calls work on, as after use_plan.
+    const added = await run('add_task', { name: 'Pay parking violation', start: '2026-11-08' });
+    assert.equal(added.data.start, '2026-11-08', 'a Sunday lays on a Sunday in a seven-day plan');
+    assert.equal((await onServer(data.id)).tasks.length, 1);
+    // Defaults: today, Mon–Fri.
+    const weekday = await run('create_plan', { name: 'Snowboard 2027 Project' });
+    assert.deepEqual(weekday.data.workDays, [1, 2, 3, 4, 5]);
+    assert.equal(weekday.data.start, today());
+    // Refusals change nothing.
+    await fails('create_plan', { name: 'personal tasks' }, /already/i);
+    await fails('create_plan', { name: '   ' }, /name/i);
+    await fails('create_plan', { name: 'Bad days', work_days: [7] }, /work_days/i);
+    await fails('create_plan', { name: 'Bad start', start: 'next week' }, /date/i);
+    assert.equal((await run('list_plans')).data.length, 4);
+    await run('use_plan', { plan: 'relaunch' });
   });
 
   test('due_tasks: across every plan, by finish or deadline, open tasks only', async () => {

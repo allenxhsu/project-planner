@@ -14,7 +14,7 @@ import { SyncEngine, HttpTransport, MemoryStore, FileStore } from '../sync-kit/j
 import { parse, serialize } from '../src/io/json.js';
 import { computeSchedule } from '../src/model/schedule.js';
 import { validate } from '../src/model/validate.js';
-import { formatAssignments, formatPredecessors } from '../src/model/model.js';
+import { formatAssignments, formatPredecessors, createProject } from '../src/model/model.js';
 
 export const FORMAT = 'project-planner';
 
@@ -103,6 +103,28 @@ export class PlannerClient {
     await this.store.put([{ ...record, name: project.name, body, updatedAt, origin: this.deviceId }]);
     const { pushed } = await this.sync();
     return { project, schedule: computeSchedule(project), pushed, result };
+  }
+
+  /**
+   * Make a new, empty plan and push it. Names are unique on the shelf,
+   * ignoring case, so a later `use_plan` by name can never be ambiguous.
+   * The new plan becomes the default for later calls, as after use_plan.
+   * @returns {{ record, project, pushed: number }}
+   */
+  async create({ name, start = null, workDays = null }) {
+    const clean = String(name ?? '').trim();
+    if (!clean) throw new Error('A plan needs a name.');
+    await this.sync();
+    const taken = (await this.plans()).find((p) => String(p.project.name).toLowerCase() === clean.toLowerCase());
+    if (taken) throw new Error(`A plan named “${taken.project.name}” already exists (${taken.record.id}).`);
+    const project = createProject(clean, start);
+    if (workDays) project.calendar = { ...project.calendar, workDays: [...workDays] };
+    const now = Date.now();
+    const record = { id: project.id, type: 'document', format: FORMAT, name: project.name, body: serialize(project), updatedAt: now, deletedAt: null, origin: this.deviceId };
+    await this.store.put([record]);
+    const { pushed } = await this.sync();
+    this.defaultPlanId = project.id;
+    return { record, project, pushed };
   }
 
   /** The live checks over a plan, as the Checks panel lists them. */
