@@ -878,6 +878,12 @@ export function setProjectInfo(patch) {
     if (patch.statusDate !== undefined) p.statusDate = patch.statusDate || null;
     if (patch.currency !== undefined) p.currency = patch.currency || '$';
     if (patch.colour !== undefined) p.colour = patch.colour === null ? null : ((Math.round(+patch.colour) % 360) + 360) % 360;
+    // The plan's Google calendar (state/gcal.js): { account, calendarId, calendarName }, or null to match by name again.
+    if (patch.gcal !== undefined) {
+      const g = patch.gcal;
+      if (g && typeof g === 'object' && typeof g.calendarId === 'string' && g.calendarId) p.gcal = { account: String(g.account || ''), calendarId: g.calendarId, calendarName: String(g.calendarName || '') };
+      else delete p.gcal;
+    }
   });
 }
 export function setAgenda(patch) {

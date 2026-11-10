@@ -135,6 +135,25 @@ function renderProject(root, { only = null } = {}) {
         el('button', { class: 'sc-button sc-button--ghost sc-button--icon sc-button--sm', text: '✕', title: 'Disconnect', onclick: () => act.disconnectCalendar(f.id) })),
       el('div', { class: 'sc-faint small', text: `${f.google ? `Google · ${f.google.account}` : PROVIDERS[f.provider]} · ${f.events.length} busy event${f.events.length === 1 ? '' : 's'}${f.events.some((e) => e.location) ? `, ${f.events.filter((e) => e.location).length} with a place to get to` : ''}${f.fetchedAt ? ` · read ${new Date(f.fetchedAt).toLocaleString()}` : ' · not read yet'}` })));
   }
+  // This plan's own Google calendar (state/gcal.js): where its blocks go as events.
+  const planCal = el('select', { class: 'sc-select' }, el('option', { value: '', text: project.gcal?.calendarName ? `${project.gcal.calendarName} (set)` : 'By name — “Claude - <workspace> - <plan>”, or the plan’s name' }));
+  planCal.onchange = () => {
+    const v = planCal.value;
+    if (!v) { act.setProjectInfo({ gcal: null }); return; }
+    const c = planCal.options[planCal.selectedIndex];
+    act.setProjectInfo({ gcal: { account: c.dataset.account, calendarId: v, calendarName: c.text } });
+  };
+  void import('../state/gcal.js').then((m) => m.googleStatus()).then((status) => {
+    for (const c of status.calendars || []) {
+      const opt = el('option', { value: c.id, text: c.name, selected: project.gcal?.calendarId === c.id });
+      opt.dataset.account = c.account;
+      planCal.append(opt);
+    }
+    if (!status.calendars?.length) planCal.append(el('option', { value: '', text: status.reason === 'not-granted' ? '(connect Google with writing allowed to pick one)' : '(connect a Google account to pick one)', disabled: true }));
+  }).catch(() => {});
+  list.append(el('div', { class: 'tb-card sc-card' },
+    el('div', { class: 'tb-row feed-row' }, el('span', { class: 'sc-label', text: 'Plan calendar' }), planCal),
+    el('div', { class: 'sc-faint small', text: 'Sync Google (calendar toolbar) writes this plan’s blocks there as events and reads back what moves. Only calendars the connected account may write to are offered.' })));
   list.append(el('div', { class: 'tb-row' },
     el('button', { class: 'sc-button sc-button--sm sc-button--primary', text: '＋ Google calendars…', title: 'Sign in with Google and tick calendars', onclick: () => { void import('./gcal.js').then((m) => m.googleCalendarsDialog()); } }),
     el('button', { class: 'sc-button sc-button--sm', text: '+ Paste a calendar link…', title: 'Outlook, Hotmail or any published iCalendar address', onclick: () => act.connectCalendarDialog() })));

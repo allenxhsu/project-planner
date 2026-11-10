@@ -25,6 +25,10 @@ export function parse(text) {
   if (!isoValid(raw.start)) repairs.push('The project start date was missing or unreadable; today is used.');
   p.statusDate = isoValid(raw.statusDate) ? raw.statusDate : null;
   p.currency = typeof raw.currency === 'string' ? raw.currency : '$';
+  // The plan's Google calendar (state/gcal.js).
+  if (raw.gcal && typeof raw.gcal === 'object' && typeof raw.gcal.calendarId === 'string' && raw.gcal.calendarId) {
+    p.gcal = { account: String(raw.gcal.account || ''), calendarId: raw.gcal.calendarId, calendarName: String(raw.gcal.calendarName || '') };
+  }
   if (raw.calendar && typeof raw.calendar === 'object') {
     const c = raw.calendar;
     p.calendar.workDays = Array.isArray(c.workDays) ? c.workDays.map(Number).filter((d) => d >= 0 && d <= 6) : p.calendar.workDays;
