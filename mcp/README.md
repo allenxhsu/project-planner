@@ -60,7 +60,7 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | `delete_task` | A task and everything under it |
 | `assign_task` / `unassign_task` | A person on a task, at full time or a fraction |
 | `add_event` / `list_events` / `delete_event` | Blocked time the work goes around (a trip, a ride day, a drive, an appointment): one day or a span, by clock time or all day; events on any plan count for the whole shelf |
-| `sync_calendar` | Keep the planner and Google Calendar in step, the calendar winning: calendar edits (move, resize, rename, ✓, delete) flow to the task, laid blocks without an event are pushed, one event per task per day on each plan's own calendar. A dry run by default; `dry_run: false` writes, `confirm_links` writes the links proposed for hand-made events, `adopt_new` makes tasks from unmatched events, `plan` narrows it, `days` sets the horizon. Setup below. |
+| `sync_calendar` | Keep the planner and Google Calendar in step, the calendar winning: calendar edits (move, resize, rename, ✓, delete) flow to the task, laid blocks without an event are pushed, one event per task per day on each plan's own calendar. A dry run by default; `dry_run: false` writes, `confirm_links` writes the links proposed for hand-made events, `adopt_new` makes tasks from unmatched events, `push: false` keeps new events from going out, `plan` narrows it, `days` sets the horizon. Setup below. |
 
 A task is named by the **row number** the task list shows, or by its
 **name** — exact, or a prefix or fragment that fits exactly one task. Two
@@ -102,6 +102,7 @@ node mcp/gcal.mjs --dry-run                  # what would change, nothing writte
 node mcp/gcal.mjs --apply                    # write both sides
 node mcp/gcal.mjs --apply --confirm-links    # also write the links the dry run proposed
 node mcp/gcal.mjs --apply --adopt-new        # also make tasks from unmatched events
+node mcp/gcal.mjs --apply --no-push          # link and pull only; push nothing new
 node mcp/gcal.mjs --apply --plan "ISEN 616" --days 7
 ```
 

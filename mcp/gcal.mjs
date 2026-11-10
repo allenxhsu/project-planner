@@ -158,9 +158,11 @@ function pickPlan(entries, ref) {
 /**
  * One run: lay the plans, read the calendars, reconcile and — unless
  * `dryRun` — write both sides. `plan` narrows the writes to one plan (the
- * layout is still of every plan, since they share the hours).
+ * layout is still of every plan, since they share the hours); `push: false`
+ * keeps new events from going out, for a run that only links and pulls;
+ * `skip` names event ids the run must leave alone.
  */
-export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false }) {
+export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false, push = true, skip = [] }) {
   await client.sync();
   const all = await client.plans();
   const entries = liveEntries(all);
@@ -171,16 +173,19 @@ export async function syncCalendar({ client, gcal, calendars, now = new Date(), 
   const primary = (await gcal.listEvents('primary', fromMs, toMs)).map((raw) => fromGoogleEvent(raw, 'primary')).filter(Boolean);
   const busy = primary.map((e) => ({ title: e.title, start: e.startMs, end: e.endMs, allDay: e.allDay, busy: !e.transparent, location: e.location }));
 
+  // Events named in `skip` are left as they are: not linked, not pulled, not listed.
+  const skipped = new Set(skip || []);
   const scope = (only ? [only] : entries).map((e) => calendars[e.project.name]).filter(Boolean);
   const existing = [];
   for (const calendarId of [...new Set(scope)]) {
     for (const raw of await gcal.listEvents(calendarId, fromMs, toMs)) {
       const e = fromGoogleEvent(raw, calendarId);
-      if (e) existing.push(e);
+      if (e && !skipped.has(e.id)) existing.push(e);
     }
   }
 
   const actions = reconcile(entries, existing, { calendars, now, horizonDays, lookbackDays, busy, planId: only?.project.id || null });
+  if (!push) actions.create = [];        // link and pull only: nothing new goes out
   const text = describeActions(actions, { unmapped: actions.unmapped, window: actions.window });
   if (dryRun) return { actions, text, applied: false, unmapped: actions.unmapped, window: actions.window };
 
@@ -217,7 +222,7 @@ async function main(argv) {
   const flag = (name) => argv.includes(name);
   const value = (name, fallback = null) => { const i = argv.indexOf(name); return i >= 0 && argv[i + 1] != null ? argv[i + 1] : fallback; };
   if (flag('--help') || flag('-h')) {
-    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--days N] [--plan NAME] [--auth]\n'
+    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--no-push] [--skip id,id] [--days N] [--plan NAME] [--auth]\n'
       + 'Reads PROJECT_SYNC_URL and PROJECT_SYNC_TOKEN. --auth signs in to Google Calendar once.');
     return;
   }
@@ -226,7 +231,8 @@ async function main(argv) {
   const { PlannerClient } = await import('./planner.mjs');
   const client = await PlannerClient.open({ url: process.env.PROJECT_SYNC_URL, token: process.env.PROJECT_SYNC_TOKEN, deviceId: 'gcal' });
   const out = await syncCalendar({
-    client, gcal, calendars: loadCalendars(), dryRun: !flag('--apply'), confirmLinks: flag('--confirm-links'), adoptNew: flag('--adopt-new'),
+    client, gcal, calendars: loadCalendars(), dryRun: !flag('--apply'), confirmLinks: flag('--confirm-links'), adoptNew: flag('--adopt-new'), push: !flag('--no-push'),
+    skip: String(value('--skip', '')).split(',').map((x) => x.trim()).filter(Boolean),
     horizonDays: +value('--days', HORIZON_DAYS) || HORIZON_DAYS, plan: value('--plan'),
   });
   console.log(out.text);

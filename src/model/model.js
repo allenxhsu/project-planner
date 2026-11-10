@@ -1055,9 +1055,10 @@ export function setScheduled(p, taskId, value) {
 // ---------------------------------------------------------------- links
 //
 // A task's events on an outside calendar (Google Calendar, through mcp/gcal):
-// which calendar, which event, and where the event was when the two were last
-// in step — day, start, minutes, title — so the next sync can tell which side
-// moved. One task may hold several (a block split across days).
+// which calendar, which event, and how both sides stood when they were last
+// in step — the event's day, start, minutes and title, the task's name and
+// whether it was done — so the next sync can tell which side moved. One task
+// may hold several (a block split across days).
 
 const cleanLink = (l) => {
   if (!l || typeof l !== 'object') return null;
@@ -1065,7 +1066,8 @@ const cleanLink = (l) => {
   if (!calendarId || !eventId || !/^\d{4}-\d{2}-\d{2}$/.test(String(l.day))) return null;
   const start = Math.round(+l.start), minutes = Math.round(+l.minutes);
   if (!Number.isFinite(start) || !Number.isFinite(minutes)) return null;
-  return { calendarId, eventId, day: l.day, start, minutes, title: String(l.title ?? '') };
+  return { calendarId, eventId, day: l.day, start, minutes, title: String(l.title ?? ''),
+    ...(l.name != null ? { name: String(l.name) } : {}), ...(l.done ? { done: true } : {}) };
 };
 export const linksOf = (task) => (Array.isArray(task?.calendar?.links) ? task.calendar.links : []);
 export function setLinks(p, taskId, links) {

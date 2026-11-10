@@ -94,20 +94,54 @@ export function liveEntries(plans) {
 // ------------------------------------------------------------- the titles
 
 /**
- * What an event title says: the task name, less a trailing "(Plan)", a ✓
- * at either end (done) and "(time approx.)" (approx).
+ * What an event title says: the task name, less the plan — a trailing
+ * "(Plan)" or "(Alc…)" that begins the plan's name, or a leading "Plan:" —
+ * a ✓ at either end (done), "(time approx.)" (approx) and a trailing
+ * "— priority / urgent / maintenance" note.
  */
 export function parseTitle(title, planName) {
   let s = String(title || '').trim();
   let done = false, approx = false;
-  const suffix = planName ? `(${planName})`.toLowerCase() : null;
+  const plan = String(planName || '').toLowerCase();
+  const namesPlan = (x) => x && plan && plan.startsWith(x.toLowerCase());
   for (let before = null; before !== s;) {
     before = s;
     s = s.replace(/^[✓✔☑]\s*/, () => { done = true; return ''; }).replace(/\s*[✓✔☑]$/, () => { done = true; return ''; });
     s = s.replace(/\s*\(time approx\.?\)$/i, () => { approx = true; return ''; });
-    if (suffix && s.toLowerCase().endsWith(suffix)) s = s.slice(0, -suffix.length).trimEnd();
+    s = s.replace(/\s*[—–-]+\s*(priority|urgent|maintenance)$/i, '');
+    const tag = /\(([^()]+)\)$/.exec(s);
+    if (tag && namesPlan(tag[1])) s = s.slice(0, tag.index).trimEnd();
+    const prefix = /^([^:]{2,40}):\s+/.exec(s);
+    if (prefix && namesPlan(prefix[1])) s = s.slice(prefix[0].length);
   }
   return { name: s.replace(/\s+/g, ' ').trim(), done, approx };
+}
+
+/**
+ * The words of a name worth comparing: words of four letters or more, cut
+ * to five so "lecture" and "lectures" agree, and anything with a digit in
+ * it kept whole ("1/30", "27G", "HW6", "11-08") when it is more than one
+ * character — a lecture's date is what tells it from the next one.
+ */
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'that', 'this', 'then', 'about', 'after', 'before']);
+function wordsOf(s) {
+  const out = new Set();
+  for (const raw of String(s || '').toLowerCase().split(/[\s,;()"“”]+/)) {
+    const t = raw.replace(/^[^\p{L}\p{N}$]+|[^\p{L}\p{N}%]+$/gu, '');
+    if (!t) continue;
+    if (/\d/.test(t)) { if (t.length >= 2) out.add(t); continue; }
+    const w = t.replace(/[^\p{L}]/gu, '');
+    if (w.length >= 4 && !STOP.has(w)) out.add(w.slice(0, 5));
+  }
+  return out;
+}
+/** How much two names share: common words over the geometric mean of their counts; 0 when either has none. */
+export function overlap(a, b) {
+  const A = wordsOf(a), B = wordsOf(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  for (const w of A) if (B.has(w)) n += 1;
+  return n / Math.sqrt(A.size * B.size);
 }
 
 /** The task name the description's "Planner: Plan › Task" line names, or null. */
@@ -115,17 +149,40 @@ function describedName(description) {
   const m = /^\s*Planner:\s*.*?›\s*(.+?)\s*$/m.exec(String(description || ''));
   return m ? m[1].replace(/\.$/, '') : null;
 }
+/** The row numbers a "Planner: Plan › row 17" / "rows 5, 12" / "rows 26–43" line names. */
+function describedRows(description) {
+  const m = /›\s*rows?\s+([\d]+(?:\s*[,–-]\s*\d+)*)/i.exec(String(description || ''));
+  if (!m) return [];
+  const rows = [];
+  for (const part of m[1].split(',')) {
+    const r = /^\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*$/.exec(part);
+    if (!r) continue;
+    const a = +r[1], b = r[2] ? +r[2] : a;
+    for (let i = a; i <= Math.min(b, a + 60); i++) rows.push(i);
+  }
+  return rows;
+}
 
 // ----------------------------------------------------------- the matching
+
+/** Words shared this much of the way are the same task said differently. */
+export const WORDS_THRESHOLD = 0.5;
 
 /**
  * Which task each unlinked event on a plan's calendar means.
  *
- * By title first — the event's title less its "(Plan)", or the task the
- * description names — and when no name fits, by slot: a task pinned on that
- * day starting at that time (a renamed event). One candidate is a
- * match with a score and a `how`; several are an ambiguity, listed with the
- * candidates; none is an orphan. One task may take several events.
+ * Four tiers, each tried only when the one before found nothing:
+ *   title  the event's title less its plan tag, or the task the description's
+ *          "Planner: Plan › Task" line names, equals a task's name (score 1;
+ *          0.9 when several tasks share the name and one is pinned that day);
+ *   row    the description says "› row 17" (score 0.95; "rows 5, 12" lists them);
+ *   slot   a task is pinned on that day starting when the event starts and
+ *          shares at least a word with it (score 0.75);
+ *   words  the names share at least half their words, a task pinned that day
+ *          preferred when it scores nearly as well (score 0.6–0.9).
+ * One candidate is a match; several, or a slot with nothing in common, are
+ * an ambiguity listed with the candidates; none is an orphan. One task may
+ * take several events.
  *
  * @returns {{ matches: Array<{event, task, score, how}>, ambiguous: Array<{event, candidates}>, orphans: Array }}
  */
@@ -134,28 +191,50 @@ export function matchEvents(events, { project, planName = project?.name }) {
   const out = { matches: [], ambiguous: [], orphans: [] };
   for (const ev of events) {
     if (ev.allDay) { out.orphans.push(ev); continue; }
-    // The title names the task; the description's "Planner: Plan › Task" line
-    // is the fallback for a hand-made event whose title was shortened.
-    const titled = norm(parseTitle(ev.title, planName).name), described = norm(describedName(ev.description) || '');
-    const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
-    const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
+    const name = parseTitle(ev.title, planName).name;
+    const titled = norm(name), described = norm(describedName(ev.description) || '');
     // A pin that starts when the event starts: the length may differ, since a
     // half-done task's block is drawn shorter than its pin.
     const pinnedThere = (t) => pinsOf(t).some((q) => q.day === ev.dateIso && q.start === ev.start);
     const onDay = (t) => pinsOf(t).some((q) => q.day === ev.dateIso);
-    if (byName.length === 1) out.matches.push({ event: ev, task: byName[0], score: 1, how: 'title' });
-    else if (byName.length > 1) {
-      // Same name on several tasks (a routine's occurrences): the one on this
-      // day. Two on the same day stay ambiguous — a slot is not a name.
-      const narrowed = byName.filter(onDay);
-      if (narrowed.length === 1) out.matches.push({ event: ev, task: narrowed[0], score: 0.9, how: 'title' });
-      else out.ambiguous.push({ event: ev, candidates: narrowed.length ? narrowed : byName });
-    } else {
-      const bySlot = tasks.filter(pinnedThere);
-      if (bySlot.length === 1) out.matches.push({ event: ev, task: bySlot[0], score: 0.6, how: 'slot' });
-      else if (bySlot.length > 1) out.ambiguous.push({ event: ev, candidates: bySlot });
-      else out.orphans.push(ev);
+    // Same name on several tasks (a routine's occurrences): the one on this
+    // day. Two on the same day stay ambiguous — a slot is not a name.
+    const settle = (hits, how, score) => {
+      if (hits.length === 1) { out.matches.push({ event: ev, task: hits[0], score, how }); return true; }
+      const narrowed = hits.filter(onDay);
+      if (narrowed.length === 1) { out.matches.push({ event: ev, task: narrowed[0], score: Math.min(score, 0.9), how }); return true; }
+      out.ambiguous.push({ event: ev, candidates: narrowed.length ? narrowed : hits });
+      return true;
+    };
+    const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
+    const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
+    if (byName.length) { settle(byName, 'title', 1); continue; }
+    // "› row 17" in the description: the row the event was made for.
+    const byRow = describedRows(ev.description).map((n) => project.tasks[n - 1]).filter((t) => t && !t.summary);
+    if (byRow.length) { settle(byRow, 'row', 0.95); continue; }
+    // A task pinned where the event starts that shares a word with it: the
+    // event was made for that pin, however it was retitled.
+    const scored = tasks.map((t) => ({ t, o: overlap(name, t.name) })).filter((x) => x.o >= WORDS_THRESHOLD);
+    const atSlot = tasks.filter(pinnedThere);
+    const slotShared = atSlot.filter((t) => overlap(name, t.name) > 0);
+    // …unless the pinned one shares only a word or two and another task shares
+    // twice as much of the name: then the name is the better witness.
+    const slotScore = slotShared.length === 1 ? overlap(name, slotShared[0].name) : 0;
+    const outworded = slotShared.length === 1 && scored.some((x) => x.t !== slotShared[0] && x.o >= slotScore + 0.3);
+    if (slotShared.length === 1 && !outworded) { out.matches.push({ event: ev, task: slotShared[0], score: 0.75, how: 'slot' }); continue; }
+    if (slotShared.length > 1) { out.ambiguous.push({ event: ev, candidates: slotShared }); continue; }
+    if (scored.length) {
+      // Among everything that shares the words, the task pinned that day
+      // (a routine's or a series' occurrence); else the best score.
+      const top = Math.max(...scored.map((x) => x.o));
+      const onThisDay = scored.filter((x) => onDay(x.t) && x.o >= top - 0.15);
+      const pool = onThisDay.length ? onThisDay : scored;
+      const best = Math.max(...pool.map((x) => x.o));
+      settle(pool.filter((x) => x.o === best).map((x) => x.t), 'words', Math.min(0.9, 0.6 + 0.3 * best));
+      continue;
     }
+    if (atSlot.length) out.ambiguous.push({ event: ev, candidates: atSlot });   // a slot alone is not a name
+    else out.orphans.push(ev);
   }
   return out;
 }
@@ -302,17 +381,23 @@ export function reconcile(entries, existing, { calendars = {}, now = new Date(),
     const parsed = parseTitle(ev.title, project.name);
     const minutes = ev.end - ev.start;
     const calendarChanged = !snap || snap.day !== ev.dateIso || snap.start !== ev.start || snap.minutes !== minutes || snap.title !== ev.title;
+    // The planner side is compared with what the task was at the last sync —
+    // its name and done then — not with the event's title, which is Allen's
+    // wording and may well differ from the task's.
     const plannerChanges = [];
     if (snap) {
       const snapTitle = parseTitle(snap.title, project.name);
+      const wasName = snap.name ?? snapTitle.name, wasDone = snap.name != null ? !!snap.done : snapTitle.done;
       if (!pinsOf(task).some((q) => samePin(q, snap))) plannerChanges.push(`pin ${pinsOf(task).map(at).join(', ') || 'none'}`);
-      if (norm(task.name) !== norm(snapTitle.name)) plannerChanges.push(`name “${task.name}”`);
-      if (isDone(task) !== snapTitle.done) plannerChanges.push(isDone(task) ? 'done' : 'reopened');
+      if (norm(task.name) !== norm(wasName)) plannerChanges.push(`name “${task.name}”`);
+      if (isDone(task) !== wasDone) plannerChanges.push(isDone(task) ? 'done' : 'reopened');
     }
     if (calendarChanged) {
       const changes = { pin: { from: snap ? { day: snap.day, start: snap.start, minutes: snap.minutes } : null, to: { day: ev.dateIso, start: ev.start, minutes } } };
       if (snap && snap.minutes !== minutes && task.work != null) changes.work = { from: task.work, to: Math.round((task.work + (minutes - snap.minutes) / 60) * 100) / 100 };
-      if (parsed.name && norm(parsed.name) !== norm(task.name)) changes.name = { from: task.name, to: parsed.name };
+      // A rename follows only a retitle: a moved event keeps the task's name.
+      const retitled = !snap || snap.title !== ev.title;
+      if (retitled && parsed.name && norm(parsed.name) !== norm(task.name)) changes.name = { from: task.name, to: parsed.name };
       if (parsed.done && !isDone(task)) changes.done = true;
       out.pull.push({ planId: project.id, planName: project.name, taskId: task.id, taskName: task.name, event: ev, link: snap, changes, conflict: plannerChanges.length > 0, plannerChange: plannerChanges.join(', ') });
     } else if (plannerChanges.length) {
@@ -359,7 +444,7 @@ const replacePin = (p, task, from, to) => {
   if (!pinsOf(task).some((q) => samePin(q, to))) setPin(p, task.id, to, i >= 0 ? i : null);
   else if (i >= 0) task.calendar = { ...task.calendar, pins: pinsOf(task).filter((q, k) => k !== i) };
 };
-const linkOf = (ev) => ({ calendarId: ev.calendarId, eventId: ev.id, day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start, title: ev.title });
+const linkOf = (ev, task) => ({ calendarId: ev.calendarId, eventId: ev.id, day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start, title: ev.title, name: task.name, ...(isDone(task) ? { done: true } : {}) });
 const putLink = (p, task, link) => setLinks(p, task.id, [...linksOf(task).filter((l) => !(l.calendarId === link.calendarId && l.eventId === link.eventId)), link]);
 
 /** Record that a task's block is now this event: link it and pin it there. */
@@ -367,7 +452,7 @@ export function recordLink(p, taskId, ev) {
   const task = getTask(p, taskId);
   if (!task) return;
   replacePin(p, task, null, { day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start });
-  putLink(p, task, linkOf(ev));
+  putLink(p, task, linkOf(ev, task));
 }
 
 /**
@@ -385,7 +470,7 @@ export function applyToPlan(p, actions, { confirmLinks = false, adoptNew = false
     if (c.changes.work) setTaskField(p, task.id, 'work', String(c.changes.work.to));
     if (c.changes.name) setTaskField(p, task.id, 'name', c.changes.name.to);
     if (c.changes.done) setTaskField(p, task.id, 'percent', 100);
-    putLink(p, task, linkOf(c.event));
+    putLink(p, task, linkOf(c.event, task));
     logActivity(task, { kind: 'calendar', text: `Google Calendar: ${span(c.event)}${c.changes.name ? `, renamed “${c.changes.name.to}”` : ''}${c.changes.done ? ', done' : ''}${c.conflict ? ` (calendar won over the planner's ${c.plannerChange})` : ''}` });
     changed += 1;
   }
@@ -400,11 +485,15 @@ export function applyToPlan(p, actions, { confirmLinks = false, adoptNew = false
     changed += 1;
   }
   if (confirmLinks) {
-    for (const l of actions.link.filter(mine)) {
+    const links = actions.link.filter(mine);
+    for (const l of links) {
       const task = getTask(p, l.taskId);
       if (!task) continue;
+      // A ✓ finishes the task only when every event it is linked to is ticked:
+      // one lecture of two watched is not the pair.
+      const all = [...links.filter((x) => x.taskId === task.id).map((x) => x.event.title), ...linksOf(task).filter((k) => !links.some((x) => x.event.id === k.eventId)).map((k) => k.title)];
+      if (!isDone(task) && all.length && all.every((t) => parseTitle(t, p.name).done)) setTaskField(p, task.id, 'percent', 100);
       recordLink(p, task.id, l.event);
-      if (parseTitle(l.event.title, p.name).done && !isDone(task)) setTaskField(p, task.id, 'percent', 100);
       changed += 1;
     }
   }
