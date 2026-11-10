@@ -299,6 +299,26 @@ test('reconcile: moved, resized, renamed and ticked on the calendar flow to the 
   assert.equal(out.create.length, 0, 'nothing is pushed over it');
 });
 
+test('a hand-made title that differs from the task name is left alone; a retime without a retitle does not rename the task', () => {
+  const { p, ann } = plan();
+  const t = job(p, ann, 'Fixture drawing', { work: 2 });
+  const hand = gev({ id: 'hand', title: 'Drawing, part 1 (Alcon) — priority', description: 'Planner: Alcon › row 1.' });
+  applyToPlan(p, rec([p], [hand]), { now: NOW, confirmLinks: true });
+  const [link] = linksOf(t);
+  assert.equal(link.title, hand.title);
+  assert.equal(link.name, 'Fixture drawing', 'the snapshot remembers the task name as well as the event title');
+  const linkedEv = { ...hand, planId: p.id, taskId: t.id };
+  const quiet = rec([p], [linkedEv]);
+  assert.equal(quiet.update.length, 0, 'nothing changed on either side: the hand-made title stays');
+  assert.equal(quiet.keep, 1);
+  const moved = { ...linkedEv, start: 13 * 60, end: 15 * 60, startMs: ms(MON, '13:00'), endMs: ms(MON, '15:00') };
+  const out = rec([p], [moved]);
+  assert.equal(out.pull.length, 1);
+  assert.equal(out.pull[0].changes.name, undefined, 'the task keeps its name when only the time moved');
+  const retitled = { ...linkedEv, title: 'Drawing, rev C (Alcon)' };
+  assert.deepEqual(rec([p], [retitled]).pull[0].changes.name, { from: 'Fixture drawing', to: 'Drawing, rev C' }, 'a retitle on the calendar still renames the task');
+});
+
 test('reconcile: a planner-side change alone goes to the calendar; both changed → calendar wins and the planner change is reported', () => {
   const { p, ann } = plan();
   const t = job(p, ann, 'Fixture drawing', { work: 2 });

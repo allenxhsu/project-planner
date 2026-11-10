@@ -390,17 +390,23 @@ export function reconcile(entries, existing, { calendars = {}, now = new Date(),
     const parsed = parseTitle(ev.title, project.name);
     const minutes = ev.end - ev.start;
     const calendarChanged = !snap || snap.day !== ev.dateIso || snap.start !== ev.start || snap.minutes !== minutes || snap.title !== ev.title;
+    // The planner side is compared with what the task was at the last sync —
+    // its name and done then — not with the event's title, which is Allen's
+    // wording and may well differ from the task's.
     const plannerChanges = [];
     if (snap) {
       const snapTitle = parseTitle(snap.title, project.name);
+      const wasName = snap.name ?? snapTitle.name, wasDone = snap.name != null ? !!snap.done : snapTitle.done;
       if (!pinsOf(task).some((q) => samePin(q, snap))) plannerChanges.push(`pin ${pinsOf(task).map(at).join(', ') || 'none'}`);
-      if (norm(task.name) !== norm(snapTitle.name)) plannerChanges.push(`name “${task.name}”`);
-      if (isDone(task) !== snapTitle.done) plannerChanges.push(isDone(task) ? 'done' : 'reopened');
+      if (norm(task.name) !== norm(wasName)) plannerChanges.push(`name “${task.name}”`);
+      if (isDone(task) !== wasDone) plannerChanges.push(isDone(task) ? 'done' : 'reopened');
     }
     if (calendarChanged) {
       const changes = { pin: { from: snap ? { day: snap.day, start: snap.start, minutes: snap.minutes } : null, to: { day: ev.dateIso, start: ev.start, minutes } } };
       if (snap && snap.minutes !== minutes && task.work != null) changes.work = { from: task.work, to: Math.round((task.work + (minutes - snap.minutes) / 60) * 100) / 100 };
-      if (parsed.name && norm(parsed.name) !== norm(task.name)) changes.name = { from: task.name, to: parsed.name };
+      // A rename follows only a retitle: a moved event keeps the task's name.
+      const retitled = !snap || snap.title !== ev.title;
+      if (retitled && parsed.name && norm(parsed.name) !== norm(task.name)) changes.name = { from: task.name, to: parsed.name };
       if (parsed.done && !isDone(task)) changes.done = true;
       out.pull.push({ planId: project.id, planName: project.name, taskId: task.id, taskName: task.name, event: ev, link: snap, changes, conflict: plannerChanges.length > 0, plannerChange: plannerChanges.join(', ') });
     } else if (plannerChanges.length) {
@@ -447,7 +453,7 @@ const replacePin = (p, task, from, to) => {
   if (!pinsOf(task).some((q) => samePin(q, to))) setPin(p, task.id, to, i >= 0 ? i : null);
   else if (i >= 0) task.calendar = { ...task.calendar, pins: pinsOf(task).filter((q, k) => k !== i) };
 };
-const linkOf = (ev) => ({ calendarId: ev.calendarId, eventId: ev.id, day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start, title: ev.title });
+const linkOf = (ev, task) => ({ calendarId: ev.calendarId, eventId: ev.id, day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start, title: ev.title, name: task.name, ...(isDone(task) ? { done: true } : {}) });
 const putLink = (p, task, link) => setLinks(p, task.id, [...linksOf(task).filter((l) => !(l.calendarId === link.calendarId && l.eventId === link.eventId)), link]);
 
 /** Record that a task's block is now this event: link it and pin it there. */
@@ -455,7 +461,7 @@ export function recordLink(p, taskId, ev) {
   const task = getTask(p, taskId);
   if (!task) return;
   replacePin(p, task, null, { day: ev.dateIso, start: ev.start, minutes: ev.end - ev.start });
-  putLink(p, task, linkOf(ev));
+  putLink(p, task, linkOf(ev, task));
 }
 
 /**
@@ -473,7 +479,7 @@ export function applyToPlan(p, actions, { confirmLinks = false, adoptNew = false
     if (c.changes.work) setTaskField(p, task.id, 'work', String(c.changes.work.to));
     if (c.changes.name) setTaskField(p, task.id, 'name', c.changes.name.to);
     if (c.changes.done) setTaskField(p, task.id, 'percent', 100);
-    putLink(p, task, linkOf(c.event));
+    putLink(p, task, linkOf(c.event, task));
     logActivity(task, { kind: 'calendar', text: `Google Calendar: ${span(c.event)}${c.changes.name ? `, renamed “${c.changes.name.to}”` : ''}${c.changes.done ? ', done' : ''}${c.conflict ? ` (calendar won over the planner's ${c.plannerChange})` : ''}` });
     changed += 1;
   }
@@ -492,11 +498,11 @@ export function applyToPlan(p, actions, { confirmLinks = false, adoptNew = false
     for (const l of links) {
       const task = getTask(p, l.taskId);
       if (!task) continue;
-      recordLink(p, task.id, l.event);
       // A ✓ finishes the task only when every event it is linked to is ticked:
       // one lecture of two watched is not the pair.
       const all = [...links.filter((x) => x.taskId === task.id).map((x) => x.event.title), ...linksOf(task).filter((k) => !links.some((x) => x.event.id === k.eventId)).map((k) => k.title)];
       if (!isDone(task) && all.length && all.every((t) => parseTitle(t, p.name).done)) setTaskField(p, task.id, 'percent', 100);
+      recordLink(p, task.id, l.event);
       changed += 1;
     }
   }
