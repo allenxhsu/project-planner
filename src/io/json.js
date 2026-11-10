@@ -2,7 +2,7 @@
 
 import { cleanDocs } from '../model/docs.js';
 import { cleanRepeat } from '../model/routines.js';
-import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES, settleFinishedRunning, settleStoppedWork } from '../model/model.js';
+import { DEFAULT_STAGES, normalizeLevels, FORMAT, VERSION, createProject, newTask, newResource, LINK_TYPES, CONSTRAINTS, RESOURCE_TYPES, OLD_DEFAULT_STAGES, newTimesheet, URGENCIES, BUFFER_CHOICES, DEFAULT_BUFFER_MINUTES, mergeSlots, cleanField, fieldValue, cleanEvent, CHECK_CHOICES, settleFinishedRunning, settleStoppedWork, scheduledOf, scheduledFromPins, pinsOf } from '../model/model.js';
 import { isoValid } from '../model/calendar.js';
 import { uid } from '../util.js';
 import { BLOCK_CHOICES, GAP_CHOICES, LOAD_CHOICES, CAP_CHOICES, DEFAULT_AGENDA, parseTime } from '../model/agenda.js';
@@ -155,6 +155,8 @@ export function parse(text) {
       ...(t.hardDeadline === true ? { hardDeadline: true } : {}),
       // Claude / MCP scheduled (model.js): the only scheduler a task names.
       ...(t.scheduledBy === 'claude' ? { scheduledBy: 'claude' } : {}),
+      // The sitting it is scheduled for (model.js scheduledOf); settled against its pins below.
+      ...(scheduledOf(t) ? { scheduled: scheduledOf(t) } : {}),
       ...(t.energy === 'physical' || t.energy === 'mental' ? { energy: t.energy } : {}),
       ...(typeof t.skill === 'string' && t.skill.trim() ? { skill: t.skill.trim().slice(0, 40) } : {}),
       // Which process module, and which of its tasks, this came from (model/processes.js).
@@ -200,6 +202,8 @@ export function parse(text) {
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
       assignments: Array.isArray(t.assignments) ? t.assignments.filter((a) => a && resIds.has(a.resourceId)).map((a) => ({ resourceId: a.resourceId, units: Number.isFinite(+a.units) ? +a.units : 1 })) : [],
     });
+    // A file from before sittings: the first fixed block is the sitting.
+    { const s = scheduledFromPins(pinsOf(task)); if (s) task.scheduled = s; else delete task.scheduled; }
     if (task.constraint.type !== 'ASAP' && !task.constraint.date && CONSTRAINTS[task.constraint.type].dated) task.constraint = { type: 'ASAP', date: null };
     if (task.milestone) task.duration = 0;
     if (!task.id || ids.has(task.id)) { task.id = newTask().id; repairs.push(`Task “${task.name}” had no unique id; one was given.`); }

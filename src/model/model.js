@@ -980,6 +980,7 @@ export function setPin(p, taskId, pin, index = null) {
   if (index !== null && index >= 0 && index < list.length) list[index] = clean; else list.push(clean);
   list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.start - b.start));
   t.calendar = { ...(t.calendar || { show: true, timeBlockIds: [] }), pins: list };
+  syncScheduled(t);
   const clock = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
   logActivity(t, { kind: clean.live ? 'started' : 'fixed', text: `${clean.day} ${clock(clean.start)}, ${hoursWords(clean.minutes / 60)}` });
   return clean;
@@ -990,6 +991,7 @@ export function removePin(p, taskId, index) {
   if (!t) throw new Error('No such task.');
   const list = pinsOf(t).filter((_, i) => i !== index);
   t.calendar = { ...t.calendar, pins: list };
+  syncScheduled(t);
   logActivity(t, { kind: 'unfixed' });
 }
 
@@ -997,6 +999,57 @@ export function clearPins(p, taskId) {
   const t = getTask(p, taskId);
   if (!t) throw new Error('No such task.');
   t.calendar = { ...t.calendar, pins: [] };
+  syncScheduled(t);
+}
+
+// ---------------------------------------------------------------- scheduled
+//
+// When a task is scheduled: its one sitting, start and end, date and time —
+// `scheduled: { start: 'YYYY-MM-DDTHH:MM', end: 'YYYY-MM-DDTHH:MM' }`. A task
+// had a start date and a deadline, both days; the calendar laid it into clock
+// time and only Google Calendar showed the result. Now the task says so
+// itself: the sitting mirrors its calendar event, is kept in step with its
+// first fixed block, and is edited on the task sheet (which pins it there).
+
+const SCHEDULED_RE = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/;
+const clockOf = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+/** The sitting a list of pins says: the earliest one, or null. Midnight is the next day's 00:00. */
+export function scheduledFromPins(pins) {
+  const first = [...(pins || [])].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.start - b.start))[0];
+  if (!first) return null;
+  const end = first.start + first.minutes;
+  return { start: `${first.day}T${clockOf(first.start)}`, end: end >= 24 * 60 ? `${fromDay(toDay(first.day) + 1)}T00:00` : `${first.day}T${clockOf(end)}` };
+}
+export const scheduledOf = (task) => (task?.scheduled && SCHEDULED_RE.test(String(task.scheduled.start)) && SCHEDULED_RE.test(String(task.scheduled.end))
+  ? { start: task.scheduled.start, end: task.scheduled.end } : null);
+const syncScheduled = (t) => { const s = scheduledFromPins(pinsOf(t)); if (s) t.scheduled = s; else delete t.scheduled; };
+/** A sitting as a pin: one day, ending after it starts, five minutes or more. Throws when it is not one. */
+export function checkScheduled(value) {
+  if (!value || typeof value !== 'object' || !SCHEDULED_RE.test(String(value.start))) throw new Error('A sitting starts at YYYY-MM-DDTHH:MM.');
+  if (!SCHEDULED_RE.test(String(value.end))) throw new Error('A sitting needs an end, YYYY-MM-DDTHH:MM.');
+  const day = value.start.slice(0, 10);
+  const start = +value.start.slice(11, 13) * 60 + +value.start.slice(14, 16);
+  const endDay = value.end.slice(0, 10);
+  const endMin = +value.end.slice(11, 13) * 60 + +value.end.slice(14, 16);
+  const end = endDay === day ? endMin : endDay === fromDay(toDay(day) + 1) && endMin === 0 ? 24 * 60 : null;
+  if (end === null) throw new Error('A sitting is one day; it may end at midnight.');
+  if (end <= start) throw new Error('A sitting ends after it starts.');
+  if (end - start < 5) throw new Error('A sitting lasts at least five minutes.');
+  return { day, start, minutes: end - start };
+}
+/** Schedule a task for one sitting — fixed there, on the calendar — or clear it (null). */
+export function setScheduled(p, taskId, value) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  if (value === null || value === undefined || value === '') {
+    t.calendar = { ...(t.calendar || { show: true, timeBlockIds: [] }), pins: [] };
+    syncScheduled(t);
+    return null;
+  }
+  const pin = checkScheduled(value);
+  t.calendar = { ...(t.calendar || { timeBlockIds: [] }), show: true, pins: [pin] };
+  syncScheduled(t);
+  return scheduledOf(t);
 }
 
 // ---------------------------------------------------------------- links
@@ -1597,6 +1650,7 @@ function describeField(p, t, field) {
     case 'labels': return ['labels', (t.labels || []).join(', ') || 'none'];
     case 'resources': return ['assignee', t.assignments.map((a) => p.resources.find((r) => r.id === a.resourceId)?.name).filter(Boolean).join(', ') || 'nobody'];
     case 'calendarShow': return ['on the calendar', t.calendar?.show ? 'yes' : 'no'];
+    case 'scheduled': { const s = scheduledOf(t); return ['scheduled', s ? `${s.start.replace('T', ' ')} – ${s.end.slice(11)}` : 'not scheduled']; }
     case 'blockHours': return ['min chunk', t.calendar?.blockHours ? hoursWords(t.calendar.blockHours) : 'the plan’s'];
     case 'wholeBlock': return ['min chunk', t.calendar?.whole ? 'no chunks' : 'chunks'];
     case 'notBefore': return ['do later', t.calendar?.notBefore ? t.calendar.notBefore.replace('T', ' ') : 'any time'];
@@ -1736,6 +1790,8 @@ function applyTaskField(p, t, id, field, value) {
     }
     // Off the calendar is manual: whatever Claude planned for it no longer holds.
     case 'calendarShow': t.calendar = { ...t.calendar, show: !!value }; if (!value) delete t.scheduledBy; break;
+    // The one sitting the task is scheduled for (date and time), or null to clear it.
+    case 'scheduled': setScheduled(p, id, value); break;
     // Claude / MCP scheduled: Claude chose its start date and deadline. It is laid
     // on the calendar inside them, and nothing automatic moves them (model/agenda.js,
     // stages.js shiftProject).
