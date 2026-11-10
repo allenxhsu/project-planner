@@ -60,7 +60,7 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | `delete_task` | A task and everything under it |
 | `assign_task` / `unassign_task` | A person on a task, at full time or a fraction |
 | `add_event` / `list_events` / `delete_event` | Blocked time the work goes around (a trip, a ride day, a drive, an appointment): one day or a span, by clock time or all day; events on any plan count for the whole shelf |
-| `sync_calendar` | The planner's layout on Google Calendar, one event per task per day on each plan's own calendar, two weeks out; a dry run by default, `dry_run: false` writes, `plan` narrows it to one plan, `days` sets the horizon. Setup below. |
+| `sync_calendar` | Keep the planner and Google Calendar in step, the calendar winning: calendar edits (move, resize, rename, ✓, delete) flow to the task, laid blocks without an event are pushed, one event per task per day on each plan's own calendar. A dry run by default; `dry_run: false` writes, `confirm_links` writes the links proposed for hand-made events, `adopt_new` makes tasks from unmatched events, `plan` narrows it, `days` sets the horizon. Setup below. |
 
 A task is named by the **row number** the task list shows, or by its
 **name** — exact, or a prefix or fragment that fits exactly one task. Two
@@ -98,14 +98,20 @@ Then, with `PROJECT_SYNC_URL` and `PROJECT_SYNC_TOKEN` set as for the
 server:
 
 ```bash
-node mcp/gcal.mjs --dry-run            # what would change, nothing written
-node mcp/gcal.mjs --apply              # write it
+node mcp/gcal.mjs --dry-run                  # what would change, nothing written
+node mcp/gcal.mjs --apply                    # write both sides
+node mcp/gcal.mjs --apply --confirm-links    # also write the links the dry run proposed
+node mcp/gcal.mjs --apply --adopt-new        # also make tasks from unmatched events
 node mcp/gcal.mjs --apply --plan "ISEN 616" --days 7
 ```
 
-The dry run prints the horizon, the counts, and one line per change: `+`
-create, `~` update (with where it was), `↺` adopt a hand-made event, `✓` a
-done task's event, `-` delete, then `no calendar:` for plans not in the map.
+The dry run prints the window, the counts, and one line per change: `+`
+create, `~` update (with where it was), `-` delete, `←` a calendar edit
+flowing to its task (with `conflict` when the planner had moved too),
+`event deleted:` a task taken off the calendar, `link?` a proposed link for
+a hand-made event with how it matched and its score, `ambiguous:` the
+candidates nobody chose between, `new on calendar:` events that match no
+task, then `no calendar:` for plans not in the map.
 
 ## Testing
 

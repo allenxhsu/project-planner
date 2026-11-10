@@ -600,29 +600,39 @@ its own still asks which to keep. Setup and the tool list are in
 
 Tasks have dates and hours but no time of day; the planner's calendar lays
 them into clock time (time blocks, pins, events, the day's 1/2/3 focus).
-`mcp/gcal.mjs` puts that layout on Google Calendar, one way, so the day is
-read on a phone without hand work: one event per task per day on the plan's
-own secondary calendar (`mcp/plan-calendars.json` maps plan name →
-calendarId), today through two weeks out, titled `Task (Plan)` with
-`Planner: Plan › Task` as the first line of the description, then the task's
-notes and flags (Pinned · After its deadline · Overdue). Busy time on the
-primary Google calendar is read each run and the unpinned work is laid
-around it. Runs under 15 minutes and the built-in planning routine are not
-exported.
+Google Calendar — one secondary calendar per plan, mapped in
+`mcp/plan-calendars.json` — is where the day is read and edited, so
+`mcp/gcal.mjs` keeps the two in step with **the calendar winning**:
 
-A re-run reconciles rather than re-creates. Each event the export made
-carries `plan|task|day|run` in its private extended properties, and only
-those are updated or deleted; a hand-made event whose description starts
-with `Planner:` and overlaps a desired event on the same day is adopted
-(updated in place and tagged) rather than doubled; everything else on a
-calendar is never touched. An event whose task is done stays with a leading
-✓; one whose task was deleted goes; one the layout no longer makes is
-deleted when it lies ahead and kept once it has already ended. A plan with
-laid work but no calendar in the map is listed as "no calendar" and skipped.
+- **Calendar → planner.** An event dragged or resized becomes the task's
+  pin (that day, that clock time, that length) and a resize moves the work
+  by the same hours; a renamed event renames the task (less the trailing
+  `(Plan)`, a ✓ and `(time approx.)`); a ✓ in the title marks the task done;
+  a deleted event takes the task off the calendar (link and pin cleared,
+  "on the calendar" off, a line in its activity) so it is not laid back.
+  Deadlines, dependencies, summaries and resources are the planner's.
+- **Planner → calendar.** Laid blocks with no event yet are pushed as one
+  event per task per day, titled `Task (Plan)` with `Planner: Plan › Task`
+  first in the description, then pinned where they landed; a task renamed
+  or finished in the planner retitles its event; a task deleted deletes it.
+  Busy time on the primary calendar is laid around. Runs under 15 minutes
+  and the built-in planning routine are not pushed.
+- **Both changed** since the last run: the calendar wins and the planner's
+  change is reported.
+- **Stable ids both ways.** The event's private extended properties hold
+  the plan and task id; the task's `calendar.links` hold the calendar, the
+  event id and where the event was at the last sync, which is how a run
+  tells which side moved. Hand-made events are matched by title, then by
+  the description's `Planner:` line, then by slot; one candidate is
+  proposed, two are listed as ambiguous, none is "new on calendar".
+  Proposed links are written only when confirmed, new events become tasks
+  only when asked; nothing is guessed.
+- **Window:** 14 days back, 14 ahead. A plan with laid work but no calendar
+  in the map is listed as "no calendar" and skipped.
 
-Run it as the MCP tool `sync_calendar` (a dry run by default, `dry_run:
-false` to write, `plan` for one plan, `days` for the horizon) or from the
-shell with the same code; setup is in [mcp/README.md](mcp/README.md).
+Run it as the MCP tool `sync_calendar` (a dry run by default; `dry_run:
+false` writes both sides; `confirm_links`, `adopt_new`, `plan`, `days`) or
+from the shell with the same code; setup is in [mcp/README.md](mcp/README.md).
 
 ## Flow
 
