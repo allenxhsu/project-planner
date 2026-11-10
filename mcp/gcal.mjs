@@ -187,8 +187,8 @@ export const WORDS_THRESHOLD = 0.5;
  *   row    the description says "› row 17" (score 0.95; "rows 5, 12" lists them);
  *   slot   a task is pinned on that day starting when the event starts and
  *          shares at least a word with it (score 0.75);
- *   words  the names share at least half their words, the task pinned that
- *          day preferred (score 0.6–0.9).
+ *   words  the names share at least half their words, a task pinned that day
+ *          preferred when it scores nearly as well (score 0.6–0.9).
  * One candidate is a match; several, or a slot with nothing in common, are
  * an ambiguity listed with the candidates; none is an orphan. One task may
  * take several events.
@@ -223,15 +223,20 @@ export function matchEvents(events, { project, planName = project?.name }) {
     if (byRow.length) { settle(byRow, 'row', 0.95); continue; }
     // A task pinned where the event starts that shares a word with it: the
     // event was made for that pin, however it was retitled.
+    const scored = tasks.map((t) => ({ t, o: overlap(name, t.name) })).filter((x) => x.o >= WORDS_THRESHOLD);
     const atSlot = tasks.filter(pinnedThere);
     const slotShared = atSlot.filter((t) => overlap(name, t.name) > 0);
-    if (slotShared.length === 1) { out.matches.push({ event: ev, task: slotShared[0], score: 0.75, how: 'slot' }); continue; }
+    // …unless the pinned one shares only a word or two and another task shares
+    // twice as much of the name: then the name is the better witness.
+    const slotScore = slotShared.length === 1 ? overlap(name, slotShared[0].name) : 0;
+    const outworded = slotShared.length === 1 && scored.some((x) => x.t !== slotShared[0] && x.o >= slotScore + 0.3);
+    if (slotShared.length === 1 && !outworded) { out.matches.push({ event: ev, task: slotShared[0], score: 0.75, how: 'slot' }); continue; }
     if (slotShared.length > 1) { out.ambiguous.push({ event: ev, candidates: slotShared }); continue; }
-    const scored = tasks.map((t) => ({ t, o: overlap(name, t.name) })).filter((x) => x.o >= WORDS_THRESHOLD);
     if (scored.length) {
       // Among everything that shares the words, the task pinned that day
       // (a routine's or a series' occurrence); else the best score.
-      const onThisDay = scored.filter((x) => onDay(x.t));
+      const top = Math.max(...scored.map((x) => x.o));
+      const onThisDay = scored.filter((x) => onDay(x.t) && x.o >= top - 0.15);
       const pool = onThisDay.length ? onThisDay : scored;
       const best = Math.max(...pool.map((x) => x.o));
       settle(pool.filter((x) => x.o === best).map((x) => x.t), 'words', Math.min(0.9, 0.6 + 0.3 * best));

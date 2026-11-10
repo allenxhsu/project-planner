@@ -152,9 +152,10 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
   assert.deepEqual(dup.ambiguous[0].candidates.map((t) => t.id).sort(), [twinA.id, twinB.id].sort());
 
   const l130 = job(p, ann, 'Lectures 1/30, 2/2', { work: 2 });
-  job(p, ann, 'Lecture 1/28', { work: 1 });
+  const l128 = job(p, ann, 'Lecture 1/28', { work: 1 });
+  setPin(p, l128.id, { day: TUE, start: 6 * 60, minutes: 60 });
   const dated = run([gev({ id: 'e6a', day: TUE, from: '06:00', to: '07:00', title: 'Lecture 1/30 (Alcon) ✓', description: '' })]);
-  assert.deepEqual(dated.matches.map((m) => [m.task.id, m.how]), [[l130.id, 'words']], 'the date in the name counts as a word');
+  assert.deepEqual(dated.matches.map((m) => [m.task.id, m.how]), [[l130.id, 'words']], 'the date in the name counts as a word, over a same-day pin of the other lecture');
 
   const byRow = run([gev({ id: 'e6r', day: TUE, from: '15:00', to: '16:00', title: 'Afternoon block (Alcon)', description: `Planner: Alcon › row ${p.tasks.indexOf(report) + 1}. Due Tue.` })]);
   assert.deepEqual(byRow.matches.map((m) => [m.task.id, m.how]), [[report.id, 'row']], 'a "› row N" in the description names the task');
@@ -167,6 +168,12 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
   setPin(p, hw1.id, { day: WED, start: 19 * 60, minutes: 60 });
   const night = run([gev({ id: 'e6h', day: WED, from: '19:00', to: '20:00', title: 'Homework redo (HW1 → HW6, one part a night) (Alcon)', description: '' })]);
   assert.deepEqual(night.matches.map((m) => m.task.id), [hw1.id], 'among the tasks that share the words, the one pinned that day wins');
+
+  const leave = job(p, ann, 'MyLeave: submit hours + activity reports for Oct 25–Nov 7, by noon', { work: 1 });
+  const portal = job(p, ann, 'Buff Portal: submit weekly report (due 11-09)', { work: 1 });
+  setPin(p, portal.id, { day: WED, start: 20 * 60, minutes: 30 });
+  const weak = run([gev({ id: 'e6w', day: WED, from: '20:00', to: '20:30', title: 'MyLeave: hours + activity reports (25 Oct–7 Nov), due noon (Alcon)', description: '' })]);
+  assert.deepEqual(weak.matches.map((m) => [m.task.id, m.how]), [[leave.id, 'words']], 'a pin that shares one word yields to a task that shares most of them');
 
   const unsure = run([gev({ id: 'e6b', title: 'Deep work (Alcon)', description: '' })]);
   assert.equal(unsure.matches.length, 0, 'a slot alone, with no word in common, is not a match');
