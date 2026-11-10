@@ -132,7 +132,7 @@ function describedName(description) {
  *
  * By title first — the event's title less its "(Plan)", or the task the
  * description names — and when no name fits, by slot: a task pinned on that
- * day at that time for that long (a renamed event). One candidate is a
+ * day starting at that time (a renamed event). One candidate is a
  * match with a score and a `how`; several are an ambiguity, listed with the
  * candidates; none is an orphan. One task may take several events.
  *
@@ -148,8 +148,9 @@ export function matchEvents(events, { project, planName = project?.name }) {
     const titled = norm(parseTitle(ev.title, planName).name), described = norm(describedName(ev.description) || '');
     const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
     const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
-    const minutes = ev.end - ev.start;
-    const pinnedThere = (t) => pinsOf(t).some((q) => q.day === ev.dateIso && q.start === ev.start && q.minutes === minutes);
+    // A pin that starts when the event starts: the length may differ, since a
+    // half-done task's block is drawn shorter than its pin.
+    const pinnedThere = (t) => pinsOf(t).some((q) => q.day === ev.dateIso && q.start === ev.start);
     const onDay = (t) => pinsOf(t).some((q) => q.day === ev.dateIso);
     if (byName.length === 1) out.matches.push({ event: ev, task: byName[0], score: 1, how: 'title' });
     else if (byName.length > 1) {
