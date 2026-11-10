@@ -1,5 +1,5 @@
 {
-  "_note": "Calendars Claude created are named 'Claude - <workspace> - <plan>'; reused calendars keep their own names.",
+  "_note": "Every plan calendar is named 'Claude - <workspace> - <plan>'.",
   "plans": {
     "Alcon": {
       "calendarId": "ed963e9f3622a1a5bc8c1b4fb3803cece46e490ad7b7c22cbc8b16e28159aea0@group.calendar.google.com",
@@ -59,15 +59,15 @@
     },
     "TA Work": {
       "calendarId": "6od5uj54m61ob3dqmr02hsjiqs@group.calendar.google.com",
-      "calendarName": "CU Boulder TA"
+      "calendarName": "Claude - CU Work - CU Boulder TA"
     },
     "Snowboard 2027 Project": {
       "calendarId": "d5c1b3003d4e49f1e388de2fd2567146803b0e5ca166559da951f9ab1256cf15@group.calendar.google.com",
-      "calendarName": "Snowboard Calendar"
+      "calendarName": "Claude - Personal - Snowboard 2027"
     },
     "4runner": {
       "calendarId": "fd123d60c3163f7b783be7306c70fcc4f3490dfed59007d04efa779e78cd0f34@group.calendar.google.com",
-      "calendarName": "4runner Service"
+      "calendarName": "Claude - Personal - 4runner Service"
     }
   }
 }
