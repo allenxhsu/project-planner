@@ -104,6 +104,10 @@ test('parseTitle: the task name out of an event title, with ✓ and "(time appro
     ['Call the shop ✓ (time approx.)', 'Personal tasks', { name: 'Call the shop', done: true, approx: true }],
     ['Just a title', 'Alcon', { name: 'Just a title', done: false, approx: false }],
     ['Keep (my) brackets (Alcon)', 'Alcon', { name: 'Keep (my) brackets', done: false, approx: false }],
+    ['Black & Decker: Test weather strip', 'Black & Decker - Stanley SO 286652 WO 421950', { name: 'Test weather strip', done: false, approx: false }],
+    ['Nest design (AWTE) — priority', 'AWTE - Das Photonics SO 284999 WO 412856', { name: 'Nest design', done: false, approx: false }],
+    ['27G final setup, part 1 (Alcon) — priority', 'Alcon', { name: '27G final setup, part 1', done: false, approx: false }],
+    ['Gregory: confirm scope', 'Zipline Sales Action Items', { name: 'Gregory: confirm scope', done: false, approx: false }],
   ];
   for (const [title, planName, want] of rows) assert.deepEqual(parseTitle(title, planName), want, title);
 });
@@ -127,7 +131,9 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
 
   const rows = [
     ['exact title on its day', gev({ id: 'e1', title: 'Fixture drawing (Alcon)' }), { taskId: draw.id, how: 'title' }],
-    ['renamed on the calendar, same day and length as its pin', gev({ id: 'e2', title: 'Drawing for the fixture (Alcon)', description: '' }), { taskId: draw.id, how: 'slot' }],
+    ['renamed on the calendar, most words still the task\'s', gev({ id: 'e2', title: 'Drawing for the fixture (Alcon)', description: '' }), { taskId: draw.id, how: 'words' }],
+    ['shortened with the plan as a prefix', gev({ id: 'e2b', day: TUE, from: '13:00', to: '14:00', title: 'Alcon: NRE report, finish', description: '' }), { taskId: report.id, how: 'words' }],
+    ['a word or two in common at its pinned slot', gev({ id: 'e2c', title: 'Fixture work block (Alcon)', description: '' }), { taskId: draw.id, how: 'slot' }],
     ['moved to another day, title still matches', gev({ id: 'e3', day: WED, from: '10:00', to: '11:00', title: 'NRE report (Alcon)' }), { taskId: report.id, how: 'title' }],
     ['a split task: a second event on its second day', gev({ id: 'e4', day: TUE, title: 'Long study (Alcon)' }), { taskId: long.id, how: 'title' }],
     ['a ticked hand-made event still matches', gev({ id: 'e5', title: 'Fixture drawing (Alcon) ✓' }), { taskId: draw.id, how: 'title' }],
@@ -144,6 +150,10 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
   assert.equal(dup.matches.length, 0, 'two tasks of the same name on the same day: nobody is guessed');
   assert.equal(dup.ambiguous.length, 1);
   assert.deepEqual(dup.ambiguous[0].candidates.map((t) => t.id).sort(), [twinA.id, twinB.id].sort());
+
+  const unsure = run([gev({ id: 'e6b', title: 'Deep work (Alcon)', description: '' })]);
+  assert.equal(unsure.matches.length, 0, 'a slot alone, with no word in common, is not a match');
+  assert.deepEqual(unsure.ambiguous.map((a) => a.candidates.map((t) => t.id)), [[draw.id]], 'the one candidate is listed, not taken');
 
   const orphan = run([gev({ id: 'e7', from: '15:00', to: '16:00', title: 'Something new (Alcon)', description: '' })]);
   assert.equal(orphan.matches.length + orphan.ambiguous.length, 0);
@@ -461,10 +471,25 @@ test('a real run pushes new blocks and records the links, pulls calendar edits, 
   assert.equal(again.applied, true);
 });
 
+test('push false: calendar edits still flow in, links are still proposed, but no new events go out', async () => {
+  const { p, ann } = plan();
+  job(p, ann, 'Fixture drawing', { work: 2 });
+  const moved = job(p, ann, 'Moved job', { work: 1 });
+  linked(p, moved, gev({ id: 'mv', day: TUE, from: '09:00', to: '10:00', title: 'Moved job (Alcon)' }));
+  const gcal = fakeGoogle({ events: { [CAL]: [
+    graw({ id: 'mv', summary: 'Moved job (Alcon)', start: { dateTime: iso(TUE, '14:00') }, end: { dateTime: iso(TUE, '15:00') }, extendedProperties: { private: { [PROP_PLAN]: p.id, [PROP_TASK]: moved.id } } }),
+  ] } });
+  const out = await syncCalendar({ client: fakePlanner(p), gcal, calendars: CALS, now: NOW, dryRun: false, push: false });
+  assert.equal(out.actions.create.length, 0);
+  assert.equal(out.actions.pull.length, 1);
+  assert.ok(!gcal.calls.some(([op]) => op === 'insert'));
+  assert.deepEqual(pinsOf(moved), [{ day: TUE, start: 14 * 60, minutes: 60 }]);
+});
+
 test('the sync_calendar tool: dry by default, dry_run false applies, plan narrows it, confirm_links and adopt_new opt in', async () => {
   const tool = TOOLS.find((t) => t.name === 'sync_calendar');
   assert.ok(tool);
-  for (const k of ['dry_run', 'confirm_links', 'adopt_new']) assert.equal(tool.inputSchema.properties[k].type, 'boolean', k);
+  for (const k of ['dry_run', 'confirm_links', 'adopt_new', 'push']) assert.equal(tool.inputSchema.properties[k].type, 'boolean', k);
   const { p, ann } = plan();
   job(p, ann, 'Fixture drawing', { work: 2 });
   const { p: q, ann: a2 } = plan('Zipline');

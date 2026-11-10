@@ -103,20 +103,39 @@ export function liveEntries(plans) {
 // ------------------------------------------------------------- the titles
 
 /**
- * What an event title says: the task name, less a trailing "(Plan)", a ✓
- * at either end (done) and "(time approx.)" (approx).
+ * What an event title says: the task name, less the plan — a trailing
+ * "(Plan)" or "(Alc…)" that begins the plan's name, or a leading "Plan:" —
+ * a ✓ at either end (done), "(time approx.)" (approx) and a trailing
+ * "— priority / urgent / maintenance" note.
  */
 export function parseTitle(title, planName) {
   let s = String(title || '').trim();
   let done = false, approx = false;
-  const suffix = planName ? `(${planName})`.toLowerCase() : null;
+  const plan = String(planName || '').toLowerCase();
+  const namesPlan = (x) => x && plan && plan.startsWith(x.toLowerCase());
   for (let before = null; before !== s;) {
     before = s;
     s = s.replace(/^[✓✔☑]\s*/, () => { done = true; return ''; }).replace(/\s*[✓✔☑]$/, () => { done = true; return ''; });
     s = s.replace(/\s*\(time approx\.?\)$/i, () => { approx = true; return ''; });
-    if (suffix && s.toLowerCase().endsWith(suffix)) s = s.slice(0, -suffix.length).trimEnd();
+    s = s.replace(/\s*[—–-]+\s*(priority|urgent|maintenance)$/i, '');
+    const tag = /\(([^()]+)\)$/.exec(s);
+    if (tag && namesPlan(tag[1])) s = s.slice(0, tag.index).trimEnd();
+    const prefix = /^([^:]{2,40}):\s+/.exec(s);
+    if (prefix && namesPlan(prefix[1])) s = s.slice(prefix[0].length);
   }
   return { name: s.replace(/\s+/g, ' ').trim(), done, approx };
+}
+
+/** The words of a name worth comparing: four letters or more, cut to five, no stopwords. */
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'that', 'this', 'then', 'about', 'after', 'before']);
+const wordsOf = (s) => new Set(String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w.length >= 4 && !STOP.has(w)).map((w) => w.slice(0, 5)));
+/** How much two names share: common words over the longer one's; 0 when either has none. */
+export function overlap(a, b) {
+  const A = wordsOf(a), B = wordsOf(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  for (const w of A) if (B.has(w)) n += 1;
+  return n / Math.max(A.size, B.size);
 }
 
 /** The task name the description's "Planner: Plan › Task" line names, or null. */
@@ -127,14 +146,22 @@ function describedName(description) {
 
 // ----------------------------------------------------------- the matching
 
+/** Words shared this much of the way are the same task said differently. */
+export const WORDS_THRESHOLD = 0.5;
+
 /**
  * Which task each unlinked event on a plan's calendar means.
  *
- * By title first — the event's title less its "(Plan)", or the task the
- * description names — and when no name fits, by slot: a task pinned on that
- * day starting at that time (a renamed event). One candidate is a
- * match with a score and a `how`; several are an ambiguity, listed with the
- * candidates; none is an orphan. One task may take several events.
+ * Three tiers, each tried only when the one before found nothing:
+ *   title  the event's title less its plan tag, or the task the description's
+ *          "Planner: Plan › Task" line names, equals a task's name (score 1;
+ *          0.9 when several tasks share the name and one is pinned that day);
+ *   words  the names share at least half their words (score 0.6–0.9);
+ *   slot   a task is pinned on that day starting when the event starts and
+ *          shares at least a word with it (score 0.6).
+ * One candidate is a match; several, or a slot with nothing in common, are
+ * an ambiguity listed with the candidates; none is an orphan. One task may
+ * take several events.
  *
  * @returns {{ matches: Array<{event, task, score, how}>, ambiguous: Array<{event, candidates}>, orphans: Array }}
  */
@@ -143,28 +170,34 @@ export function matchEvents(events, { project, planName = project?.name }) {
   const out = { matches: [], ambiguous: [], orphans: [] };
   for (const ev of events) {
     if (ev.allDay) { out.orphans.push(ev); continue; }
-    // The title names the task; the description's "Planner: Plan › Task" line
-    // is the fallback for a hand-made event whose title was shortened.
-    const titled = norm(parseTitle(ev.title, planName).name), described = norm(describedName(ev.description) || '');
-    const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
-    const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
+    const name = parseTitle(ev.title, planName).name;
+    const titled = norm(name), described = norm(describedName(ev.description) || '');
     // A pin that starts when the event starts: the length may differ, since a
     // half-done task's block is drawn shorter than its pin.
     const pinnedThere = (t) => pinsOf(t).some((q) => q.day === ev.dateIso && q.start === ev.start);
     const onDay = (t) => pinsOf(t).some((q) => q.day === ev.dateIso);
-    if (byName.length === 1) out.matches.push({ event: ev, task: byName[0], score: 1, how: 'title' });
-    else if (byName.length > 1) {
-      // Same name on several tasks (a routine's occurrences): the one on this
-      // day. Two on the same day stay ambiguous — a slot is not a name.
-      const narrowed = byName.filter(onDay);
-      if (narrowed.length === 1) out.matches.push({ event: ev, task: narrowed[0], score: 0.9, how: 'title' });
-      else out.ambiguous.push({ event: ev, candidates: narrowed.length ? narrowed : byName });
-    } else {
-      const bySlot = tasks.filter(pinnedThere);
-      if (bySlot.length === 1) out.matches.push({ event: ev, task: bySlot[0], score: 0.6, how: 'slot' });
-      else if (bySlot.length > 1) out.ambiguous.push({ event: ev, candidates: bySlot });
-      else out.orphans.push(ev);
+    // Same name on several tasks (a routine's occurrences): the one on this
+    // day. Two on the same day stay ambiguous — a slot is not a name.
+    const settle = (hits, how, score) => {
+      if (hits.length === 1) { out.matches.push({ event: ev, task: hits[0], score, how }); return true; }
+      const narrowed = hits.filter(onDay);
+      if (narrowed.length === 1) { out.matches.push({ event: ev, task: narrowed[0], score: Math.min(score, 0.9), how }); return true; }
+      out.ambiguous.push({ event: ev, candidates: narrowed.length ? narrowed : hits });
+      return true;
+    };
+    const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
+    const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
+    if (byName.length) { settle(byName, 'title', 1); continue; }
+    const scored = tasks.map((t) => ({ t, o: overlap(name, t.name) })).filter((x) => x.o >= WORDS_THRESHOLD);
+    if (scored.length) {
+      const best = Math.max(...scored.map((x) => x.o));
+      settle(scored.filter((x) => x.o === best).map((x) => x.t), 'words', Math.min(0.9, 0.6 + 0.3 * best));
+      continue;
     }
+    const bySlot = tasks.filter(pinnedThere);
+    if (bySlot.length === 1 && overlap(name, bySlot[0].name) > 0) out.matches.push({ event: ev, task: bySlot[0], score: 0.6, how: 'slot' });
+    else if (bySlot.length) out.ambiguous.push({ event: ev, candidates: bySlot });
+    else out.orphans.push(ev);
   }
   return out;
 }
@@ -611,9 +644,10 @@ function pickPlan(entries, ref) {
 /**
  * One run: lay the plans, read the calendars, reconcile and — unless
  * `dryRun` — write both sides. `plan` narrows the writes to one plan (the
- * layout is still of every plan, since they share the hours).
+ * layout is still of every plan, since they share the hours); `push: false`
+ * keeps new events from going out, for a run that only links and pulls.
  */
-export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false }) {
+export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false, push = true }) {
   await client.sync();
   const all = await client.plans();
   const entries = liveEntries(all);
@@ -634,6 +668,7 @@ export async function syncCalendar({ client, gcal, calendars, now = new Date(), 
   }
 
   const actions = reconcile(entries, existing, { calendars, now, horizonDays, lookbackDays, busy, planId: only?.project.id || null });
+  if (!push) actions.create = [];        // link and pull only: nothing new goes out
   const text = describeActions(actions, { unmapped: actions.unmapped, window: actions.window });
   if (dryRun) return { actions, text, applied: false, unmapped: actions.unmapped, window: actions.window };
 
@@ -670,7 +705,7 @@ async function main(argv) {
   const flag = (name) => argv.includes(name);
   const value = (name, fallback = null) => { const i = argv.indexOf(name); return i >= 0 && argv[i + 1] != null ? argv[i + 1] : fallback; };
   if (flag('--help') || flag('-h')) {
-    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--days N] [--plan NAME] [--auth]\n'
+    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--no-push] [--days N] [--plan NAME] [--auth]\n'
       + 'Reads PROJECT_SYNC_URL and PROJECT_SYNC_TOKEN. --auth signs in to Google Calendar once.');
     return;
   }
@@ -679,7 +714,7 @@ async function main(argv) {
   const { PlannerClient } = await import('./planner.mjs');
   const client = await PlannerClient.open({ url: process.env.PROJECT_SYNC_URL, token: process.env.PROJECT_SYNC_TOKEN, deviceId: 'gcal' });
   const out = await syncCalendar({
-    client, gcal, calendars: loadCalendars(), dryRun: !flag('--apply'), confirmLinks: flag('--confirm-links'), adoptNew: flag('--adopt-new'),
+    client, gcal, calendars: loadCalendars(), dryRun: !flag('--apply'), confirmLinks: flag('--confirm-links'), adoptNew: flag('--adopt-new'), push: !flag('--no-push'),
     horizonDays: +value('--days', HORIZON_DAYS) || HORIZON_DAYS, plan: value('--plan'),
   });
   console.log(out.text);
