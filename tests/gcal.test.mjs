@@ -131,8 +131,8 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
 
   const rows = [
     ['exact title on its day', gev({ id: 'e1', title: 'Fixture drawing (Alcon)' }), { taskId: draw.id, how: 'title' }],
-    ['renamed on the calendar, most words still the task\'s', gev({ id: 'e2', title: 'Drawing for the fixture (Alcon)', description: '' }), { taskId: draw.id, how: 'words' }],
-    ['shortened with the plan as a prefix', gev({ id: 'e2b', day: TUE, from: '13:00', to: '14:00', title: 'Alcon: NRE report, finish', description: '' }), { taskId: report.id, how: 'words' }],
+    ['renamed and moved, most words still the task\'s', gev({ id: 'e2', day: TUE, from: '15:00', to: '16:00', title: 'Drawing for the fixture (Alcon)', description: '' }), { taskId: draw.id, how: 'words' }],
+    ['shortened with the plan as a prefix', gev({ id: 'e2b', day: WED, from: '15:00', to: '16:00', title: 'Alcon: NRE report, finish', description: '' }), { taskId: report.id, how: 'words' }],
     ['a word or two in common at its pinned slot', gev({ id: 'e2c', title: 'Fixture work block (Alcon)', description: '' }), { taskId: draw.id, how: 'slot' }],
     ['moved to another day, title still matches', gev({ id: 'e3', day: WED, from: '10:00', to: '11:00', title: 'NRE report (Alcon)' }), { taskId: report.id, how: 'title' }],
     ['a split task: a second event on its second day', gev({ id: 'e4', day: TUE, title: 'Long study (Alcon)' }), { taskId: long.id, how: 'title' }],
@@ -155,6 +155,18 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
   job(p, ann, 'Lecture 1/28', { work: 1 });
   const dated = run([gev({ id: 'e6a', day: TUE, from: '06:00', to: '07:00', title: 'Lecture 1/30 (Alcon) ✓', description: '' })]);
   assert.deepEqual(dated.matches.map((m) => [m.task.id, m.how]), [[l130.id, 'words']], 'the date in the name counts as a word');
+
+  const byRow = run([gev({ id: 'e6r', day: TUE, from: '15:00', to: '16:00', title: 'Afternoon block (Alcon)', description: `Planner: Alcon › row ${p.tasks.indexOf(report) + 1}. Due Tue.` })]);
+  assert.deepEqual(byRow.matches.map((m) => [m.task.id, m.how]), [[report.id, 'row']], 'a "› row N" in the description names the task');
+  const severalRows = run([gev({ id: 'e6s', day: TUE, from: '15:00', to: '16:00', title: 'Two jobs (Alcon)', description: `Planner: Alcon › rows ${p.tasks.indexOf(report) + 1}, ${p.tasks.indexOf(long) + 1}. Together.` })]);
+  assert.deepEqual(severalRows.ambiguous.map((a) => a.candidates.map((t) => t.id)), [[report.id, long.id]], 'several rows are listed, not guessed');
+
+  const hw1 = job(p, ann, 'Homework 1 — redo, part 1 (weeks 1-2, lectures to 1/23)', { work: 1 });
+  job(p, ann, 'Homework 1 — redo, part 2', { work: 1 });
+  job(p, ann, 'Homework 2 — redo, part 2', { work: 1 });
+  setPin(p, hw1.id, { day: WED, start: 19 * 60, minutes: 60 });
+  const night = run([gev({ id: 'e6h', day: WED, from: '19:00', to: '20:00', title: 'Homework redo (HW1 → HW6, one part a night) (Alcon)', description: '' })]);
+  assert.deepEqual(night.matches.map((m) => m.task.id), [hw1.id], 'among the tasks that share the words, the one pinned that day wins');
 
   const unsure = run([gev({ id: 'e6b', title: 'Deep work (Alcon)', description: '' })]);
   assert.equal(unsure.matches.length, 0, 'a slot alone, with no word in common, is not a match');

@@ -158,6 +158,19 @@ function describedName(description) {
   const m = /^\s*Planner:\s*.*?›\s*(.+?)\s*$/m.exec(String(description || ''));
   return m ? m[1].replace(/\.$/, '') : null;
 }
+/** The row numbers a "Planner: Plan › row 17" / "rows 5, 12" / "rows 26–43" line names. */
+function describedRows(description) {
+  const m = /›\s*rows?\s+([\d]+(?:\s*[,–-]\s*\d+)*)/i.exec(String(description || ''));
+  if (!m) return [];
+  const rows = [];
+  for (const part of m[1].split(',')) {
+    const r = /^\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*$/.exec(part);
+    if (!r) continue;
+    const a = +r[1], b = r[2] ? +r[2] : a;
+    for (let i = a; i <= Math.min(b, a + 60); i++) rows.push(i);
+  }
+  return rows;
+}
 
 // ----------------------------------------------------------- the matching
 
@@ -167,13 +180,15 @@ export const WORDS_THRESHOLD = 0.5;
 /**
  * Which task each unlinked event on a plan's calendar means.
  *
- * Three tiers, each tried only when the one before found nothing:
+ * Four tiers, each tried only when the one before found nothing:
  *   title  the event's title less its plan tag, or the task the description's
  *          "Planner: Plan › Task" line names, equals a task's name (score 1;
  *          0.9 when several tasks share the name and one is pinned that day);
- *   words  the names share at least half their words (score 0.6–0.9);
+ *   row    the description says "› row 17" (score 0.95; "rows 5, 12" lists them);
  *   slot   a task is pinned on that day starting when the event starts and
- *          shares at least a word with it (score 0.6).
+ *          shares at least a word with it (score 0.75);
+ *   words  the names share at least half their words, the task pinned that
+ *          day preferred (score 0.6–0.9).
  * One candidate is a match; several, or a slot with nothing in common, are
  * an ambiguity listed with the candidates; none is an orphan. One task may
  * take several events.
@@ -203,15 +218,26 @@ export function matchEvents(events, { project, planName = project?.name }) {
     const byTitle = titled ? tasks.filter((t) => norm(t.name) === titled) : [];
     const byName = byTitle.length ? byTitle : described ? tasks.filter((t) => norm(t.name) === described) : [];
     if (byName.length) { settle(byName, 'title', 1); continue; }
+    // "› row 17" in the description: the row the event was made for.
+    const byRow = describedRows(ev.description).map((n) => project.tasks[n - 1]).filter((t) => t && !t.summary);
+    if (byRow.length) { settle(byRow, 'row', 0.95); continue; }
+    // A task pinned where the event starts that shares a word with it: the
+    // event was made for that pin, however it was retitled.
+    const atSlot = tasks.filter(pinnedThere);
+    const slotShared = atSlot.filter((t) => overlap(name, t.name) > 0);
+    if (slotShared.length === 1) { out.matches.push({ event: ev, task: slotShared[0], score: 0.75, how: 'slot' }); continue; }
+    if (slotShared.length > 1) { out.ambiguous.push({ event: ev, candidates: slotShared }); continue; }
     const scored = tasks.map((t) => ({ t, o: overlap(name, t.name) })).filter((x) => x.o >= WORDS_THRESHOLD);
     if (scored.length) {
-      const best = Math.max(...scored.map((x) => x.o));
-      settle(scored.filter((x) => x.o === best).map((x) => x.t), 'words', Math.min(0.9, 0.6 + 0.3 * best));
+      // Among everything that shares the words, the task pinned that day
+      // (a routine's or a series' occurrence); else the best score.
+      const onThisDay = scored.filter((x) => onDay(x.t));
+      const pool = onThisDay.length ? onThisDay : scored;
+      const best = Math.max(...pool.map((x) => x.o));
+      settle(pool.filter((x) => x.o === best).map((x) => x.t), 'words', Math.min(0.9, 0.6 + 0.3 * best));
       continue;
     }
-    const bySlot = tasks.filter(pinnedThere);
-    if (bySlot.length === 1 && overlap(name, bySlot[0].name) > 0) out.matches.push({ event: ev, task: bySlot[0], score: 0.6, how: 'slot' });
-    else if (bySlot.length) out.ambiguous.push({ event: ev, candidates: bySlot });
+    if (atSlot.length) out.ambiguous.push({ event: ev, candidates: atSlot });   // a slot alone is not a name
     else out.orphans.push(ev);
   }
   return out;
