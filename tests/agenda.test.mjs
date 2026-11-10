@@ -208,9 +208,13 @@ test('the week written as a calendar reads back the same, with UIDs that hold st
   assert.equal(hourOf(events, 1), 9);
   assert.equal(hourOf(events, 2), 11);
   setPin(p, a.id, { day: MON, start: 15 * 60, minutes: 120 });
+  // A block fixed on a day is the task's sitting for that day (the daily
+  // focus): Monday holds the pin alone, and the other two hours move on to
+  // Tuesday rather than being drawn beside it.
   const moved = blocksToEvents(lay(p).blocks, describe);
-  assert.equal(hourOf(moved, 1), 9, 'the block that stayed keeps its UID and its hour');
-  assert.equal(hourOf(moved, 2), 15, 'the block that moved keeps its UID at the new hour');
+  assert.equal(hourOf(moved, 1), 15, 'Monday’s one block is the pin, at the new hour');
+  assert.equal(moved.find((e) => e.uid === uid(2)), undefined, 'nothing else of it on Monday');
+  assert.ok(moved.some((e) => e.uid === `${a.id}-${TUE}-1@project-planner`), 'the rest is Tuesday’s');
   assert.equal(moved.filter((e) => e.uid.startsWith(`${a.id}-`)).length, events.filter((e) => e.uid.startsWith(`${a.id}-`)).length, 'nothing added');
   assert.ok(toDay(MON) > 0);
 });

@@ -406,3 +406,29 @@ test('the planning routine survives a save: its mark and its place in the day', 
   assert.equal(o.endOfDay, true);
   assert.equal(ensurePlanningRoutine(back, MON), null, 'read back, not made again');
 });
+
+// ---- a fixed block is the day's sitting
+
+test('a task fixed on a day gets no further blocks of itself that day; the rest moves on', () => {
+  // A pinned event (from Google, or by hand) said when the task happens that
+  // day. Laying its remaining hours beside the pin drew the task twice on one
+  // day, which is what made the calendar read as a wall.
+  const { p, ann } = week();
+  const long = job(p, ann, 'Long', { work: 4, days: 3 });
+  setPin(p, long.id, { day: MON, start: 9 * 60, minutes: 60 });
+  const out = lay(p);
+  const mine = out.blocks.filter((b) => b.taskId === long.id);
+  assert.deepEqual(mine.filter((b) => b.dateIso === MON).map((b) => [b.start, b.minutes, !!b.pinned]), [[9 * 60, 60, true]], 'Monday holds only the pin');
+  assert.equal(mine.filter((b) => b.dateIso === TUE).reduce((n, b) => n + b.minutes, 0), 180, 'the other three hours go to Tuesday');
+  assert.deepEqual(out.overflow, []);
+});
+
+test('a block under way holds its day the same way', () => {
+  const { p, ann } = week();
+  const long = job(p, ann, 'Long', { work: 3, days: 3 });
+  const held = [{ taskId: long.id, planId: p.id, day: toDay(MON), start: 9 * 60, end: 10 * 60 }];
+  const out = lay(p, { held, now: new Date(2026, 8, 21, 9, 30) });
+  const mine = out.blocks.filter((b) => b.taskId === long.id);
+  assert.equal(mine.filter((b) => b.dateIso === MON).length, 1, 'the held block alone');
+  assert.equal(mine.filter((b) => b.dateIso === TUE).reduce((n, b) => n + b.minutes, 0), 120);
+});

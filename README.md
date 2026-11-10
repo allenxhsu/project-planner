@@ -158,7 +158,10 @@ calendar says *when*: which hours, on which days.
   working day with a free slot: nothing is dropped, and the calendar's footer
   says how many were held back, with **Show what is held back** listing each
   and the day it moved to. A task counts once however many blocks it is cut
-  into; a block fixed by hand is on its day whatever the count. At work, a
+  into; a block fixed by hand is on its day whatever the count, and it is the
+  task's whole sitting for that day — nothing more of the task is laid beside
+  it, the rest moves on to the next day with room — so a task fixed from
+  Google Calendar is drawn once, not as the event plus its leftovers. At work, a
   home plan's work is laid as **Busy** and takes none of the six: the day's
   tasks are the ones the person can see. The Agenda lists each task on the
   day it got; the day it was held back from shows one closed line with the

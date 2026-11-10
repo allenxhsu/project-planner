@@ -531,6 +531,10 @@ export function planBlocksAcross(entries, { horizonDays = 180, now = new Date(),
       // this task's blocks is not its to use, however free it looks.
       const today = windowsOn(day);
       if (!today.length) { day = nextDay(day + 1); continue; }
+      // A block fixed or under way on this day is the task's sitting for the
+      // day: nothing more of it is laid beside it. The rest moves on, so a
+      // task is drawn once a day, not as a pin plus its leftovers.
+      if (mine.some((b) => b.day === day && (b.pinned || b.held || b.live))) { day = nextDay(day + 1); continue; }
       // A day's limit, when the plan sets one, is what is left of the day's
       // allowance for the person who has the least of it left, because a
       // block belongs to everyone on the task.
