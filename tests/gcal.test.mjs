@@ -76,7 +76,8 @@ test('a task cut into touching blocks is one event; a gap over 15 minutes makes 
 
   const { p: q, ann: a2 } = plan();
   const split = job(q, a2, 'Split job', { work: 2 });
-  setPin(q, split.id, [{ day: MON, start: 9 * 60, minutes: 60 }, { day: MON, start: 14 * 60, minutes: 60 }]);
+  setPin(q, split.id, { day: MON, start: 9 * 60, minutes: 60 });
+  setPin(q, split.id, { day: MON, start: 14 * 60, minutes: 60 });
   const two = desired([q]).events.filter((e) => e.taskId === split.id);
   assert.equal(two.length, 2);
   assert.deepEqual(two.map((e) => e.key.split('|')[3]), ['1', '2'], 'each run has its own sequence number');
@@ -99,7 +100,7 @@ test('runs under 15 minutes and the built-in planning routine are skipped', () =
 test('pins and lateness show as flags in the description', () => {
   const { p, ann } = plan();
   const pinned = job(p, ann, 'Pinned job', { work: 1 });
-  setPin(p, pinned.id, [{ day: TUE, start: 10 * 60, minutes: 60 }]);
+  setPin(p, pinned.id, { day: TUE, start: 10 * 60, minutes: 60 });
   const late = job(p, ann, 'Late job', { work: 2, deadline: '2026-09-18' });
   const { events } = desired([p]);
   assert.match(events.find((e) => e.taskId === pinned.id).description, /Pinned/);

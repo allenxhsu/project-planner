@@ -15,6 +15,7 @@ import {
   saveEvent, removeEvent, eventsOf, setPin, clearPins, pinsOf,
 } from '../src/model/model.js';
 import { isoValid, today } from '../src/model/calendar.js';
+import { GoogleCalendar, syncCalendar, loadCalendars, HORIZON_DAYS } from './gcal.mjs';
 import { computeSchedule } from '../src/model/schedule.js';
 
 
@@ -286,6 +287,29 @@ export const TOOLS = [
       let title = null;
       const { pushed } = await client.edit(args.plan, (p) => { const ev = resolveEvent(p, args.event); title = ev.title; removeEvent(p, ev.id); });
       return { text: `Removed “${title}”.`, data: { removed: 1, title, pushed } };
+    },
+  },
+  {
+    name: 'sync_calendar',
+    description: 'Put the planner\u2019s layout on Google Calendar: one event per task per day on each plan\u2019s own calendar (mcp/plan-calendars.json), today through two weeks out, laid around busy time on the primary calendar. A dry run (the default) lists what would be created, updated, adopted, ticked or deleted; dry_run false applies it. Only events the export made, or hand-made ones whose description starts with "Planner:", are ever touched.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dry_run: { type: 'boolean', description: 'Default true: show the changes and write nothing. false writes them.' },
+        plan: { type: 'string', description: 'Only this plan\u2019s calendar. Default: every plan with a calendar.' },
+        days: { type: 'integer', description: `How many days from today. Default ${HORIZON_DAYS}.` },
+      },
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      const gcal = client.gcal || (client.gcal = await GoogleCalendar.open());
+      const calendars = client.calendars || loadCalendars();
+      const out = await syncCalendar({
+        client, gcal, calendars, now: client.now || new Date(), dryRun: args.dry_run !== false,
+        horizonDays: Number.isInteger(args.days) && args.days > 0 ? args.days : HORIZON_DAYS, plan: args.plan || null,
+      });
+      const counts = Object.fromEntries(Object.entries(out.actions).map(([k, v]) => [k, v.length]));
+      return { text: `${out.text}\n${out.applied ? 'Applied.' : 'Dry run; nothing written.'}`, data: { applied: out.applied, ...counts, unmapped: out.unmapped, horizon: out.horizon } };
     },
   },
   {
