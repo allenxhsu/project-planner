@@ -308,6 +308,8 @@ initSync({ preferStored: !hosted && startedOnFallback })
     }).catch(() => {}); };
     routines();
     setInterval(routines, 60 * 60 * 1000);
+    // Google Calendar reads back every few minutes while the calendar is open (state/gcal.js).
+    void import('./state/gcal.js').then((m) => m.startReadBack());
     void import('./ui/people.js').then((m) => m.reloadPeople());
     return reloadPlans();
   })

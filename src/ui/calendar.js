@@ -106,6 +106,13 @@ let loadedPlans = false;
 /** Bumped whenever the shelf's plans are re-read, so a memo knows. */
 let othersVersion = 0;
 
+/** Every live plan with its schedule — the open one and the shelf's — for the Google Calendar sync (state/gcal.js). */
+export function shelfEntries() {
+  const { project, schedule } = store;
+  const open = !project.template && isLiveWork(project) ? [{ project, schedule }] : [];
+  return [...open, ...others.filter((e) => e.project.id !== project.id)];
+}
+
 /**
  * The week as the calendar lays it, for anything that needs to know — the
  * checks panel says what will be late, the grid marks it. Memoised on the

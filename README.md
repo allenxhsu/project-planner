@@ -637,6 +637,38 @@ link and pull without sending new events, `skip` for events to leave alone,
 `plan`, `days`) or
 from the shell with the same code; setup is in [mcp/README.md](mcp/README.md).
 
+**In the app.** The same reconciliation (`src/model/gcal.js`, shared with the
+MCP) runs in the browser through the sync server, which holds the connected
+Google account:
+
+- **Sync Google**, on the calendar toolbar, reads the plan calendars and shows
+  what a run would do before anything is written — what moved on the calendar
+  and will move here, what the planner will push, the hand-made events it
+  proposes to link (ticked to accept), the events that match nothing (ticked
+  to become tasks), the ambiguous ones it will not guess at, and the plans
+  with no calendar. **Apply** writes both sides.
+- **Read-back** runs by itself every five minutes while the Calendar or Agenda
+  is open and the tab is visible, and once when either is opened: an event
+  dragged, resized, renamed, ticked or deleted in Google moves its task here,
+  with a line in the hint bar. Nothing is pushed and nothing is proposed
+  without the button.
+- **A task's sitting.** Tasks carry `scheduled: { start, end }` — the one
+  sitting, date and time, they are scheduled for, which is their event. It is
+  the **Scheduled** row on the task sheet, under Start date and Deadline:
+  setting it fixes the task there and the next sync moves the event; dragging
+  the event in Google updates it here. It is kept in step with the task's
+  first fixed block, so a block dragged on the planner's own calendar is a
+  sitting too. The MCP's `edit_task` takes `scheduled` as well.
+- **Which calendar.** Each plan's Google calendar is picked in Project
+  settings ▸ Connected calendars ▸ **Plan calendar**; a plan with none set
+  uses the Google calendar named **Claude - <workspace> - <plan>** (what the
+  planner's calendars are called) or exactly the plan's name. Only calendars
+  the connected account may write to are plan calendars.
+- **Writing is a grant of its own.** A Google account connected for reading
+  stays read-only; the Sync dialog offers **Allow writing…**, which connects
+  it again asking for the events scope (`calendar-write` on the sync
+  server). Until then, read-back works and pushing waits.
+
 ## Flow
 
 The [Flow](../flow) app reads plans from the same `project` workspace, and

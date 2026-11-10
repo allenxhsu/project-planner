@@ -437,6 +437,7 @@ export function renderToolbar(root) {
         showPanel(rect.left, rect.bottom + 4, (close) => displayOptions(close));
       }),
       b('↻ Refresh all tasks', 'Re-read every plan and lay the week again', () => { void reloadCalendarPlans(); }),
+      b('⇅ Sync Google', 'Push the week to each plan’s Google calendar and read back what moved there — after a look', () => { void import('./gcalsync.js').then((m) => m.syncDialog()); }),
       b('＋', 'A new task', () => { void import('./taskpanel.js').then((m) => m.newTaskPanel()); }),
       el('select', { class: 'sc-select sc-select--sm cal-range', title: 'How much of the calendar to show', onchange: (e) => set({ calendarRange: e.target.value }) },
         ...Object.entries(RANGES).map(([id, rr]) => el('option', { value: id, text: rr.label, selected: rangeOf() === id }))),

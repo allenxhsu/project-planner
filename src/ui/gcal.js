@@ -11,12 +11,16 @@ import { hosted, post } from '../host.js';
 import { open, foot, button, confirmDialog } from './dialog.js';
 import { feeds } from '../model/model.js';
 
-/** Open Google's sign-in: a window here, the default browser from the Mac app. */
-async function connectAccount() {
+/**
+ * Open Google's sign-in: a window here, the default browser from the Mac app.
+ * `features` is what to ask Google for — reading by default; the sync asks
+ * for `calendar,calendar-write` so the app may make and move events.
+ */
+export async function connectAccount(features = 'calendar') {
   const { serverOrigin } = await import('../state/sync.js');
   const origin = serverOrigin();
   if (!origin) { act.hint('Calendars are read through your sync server: turn sync on (or pair this Mac) first.'); return false; }
-  const url = `${origin}/calendar/google/connect`;
+  const url = `${origin}/calendar/google/connect${features && features !== 'calendar' ? `?features=${encodeURIComponent(features)}` : ''}`;
   if (hosted) post({ type: 'openURL', url });
   else window.open(url, 'connect-google', 'width=520,height=720');
   return true;

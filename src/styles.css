@@ -1545,3 +1545,20 @@ th:hover > .sh-x, td:hover > .sh-x { visibility: visible; }
 .tw-row .tw-skill { width: 120px; }
 .tw-bulk { display: flex; gap: 14px; font-size: 12px; }
 .tw-error { color: var(--sc-danger); }
+
+/* Google Calendar: the task sheet's sitting, and the Sync dialog (ui/gcalsync.js). */
+.fact-scheduled { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fact-scheduled-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sheet-datetime { width: auto; font-size: 12px; }
+.gsync { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.gsync-section { display: flex; flex-direction: column; gap: 6px; }
+.gsync-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.gsync-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.35; }
+.gsync-what { min-width: 0; }
+.gsync-pill { --tint: var(--sc-text-3); font-size: 10px; white-space: nowrap; margin-top: 2px; }
+.gsync-pill.is-pull { --tint: var(--sc-accent); }
+.gsync-pill.is-create { --tint: var(--sc-success, var(--sc-accent)); }
+.gsync-pill.is-delete, .gsync-pill.is-unlink { --tint: var(--sc-danger); }
+.gsync-pill.is-update, .gsync-pill.is-ambiguous, .gsync-pill.is-unmapped { --tint: var(--sc-warning); }
+.gsync-tick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.gsync-grant { display: flex; align-items: center; gap: 10px; justify-content: space-between; }

@@ -16,7 +16,7 @@
 import { el } from '../util.js';
 import { store, set } from '../state/store.js';
 import * as act from '../state/actions.js';
-import { descendants as descendantsOf, timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase, attentionOf, CHECK_CHOICES } from '../model/model.js';
+import { descendants as descendantsOf, timeBlocks, TRAVEL_CHOICES, BUFFER_CHOICES, getTask, isSummary, URGENCIES, urgencyOf, pinsOf, getFeed, bufferOf, fieldsOf, getField, fieldValue, EVENT_COLOURS, EVENT_REPEATS, timeBlockIdsOf, stages, stageOf, phases, phaseOf, getPhase, attentionOf, CHECK_CHOICES , scheduledOf } from '../model/model.js';
 import { formatClock, parseTime, agendaOf, hoursLeft, expectedHours as agendaExpected, BLOCK_CHOICES } from '../model/agenda.js';
 import { fromDay, toDay, formatDate, today, makeCalendar } from '../model/calendar.js';
 import { showMenu, open, foot, button, confirmDialog, showText, promptText } from './dialog.js';
@@ -590,6 +590,13 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
     const start = dateInput(t.constraint?.type !== 'ASAP' ? (t.constraint?.date || '') : '');
     const deadline = dateInput(t.deadline || '');
     const hard = el('input', { type: 'checkbox', class: 'tp-switch-box', checked: !!t.hardDeadline });
+    // The one sitting it is scheduled for, date and time (model.js scheduledOf):
+    // what its Google Calendar event is. Changing it fixes the task there.
+    const sitting = scheduledOf(t);
+    const schedStart = el('input', { class: 'sc-input sheet-date sheet-datetime', type: 'datetime-local', value: sitting?.start || '', step: 300,
+      onchange: () => { if (schedStart.value && !schedEnd.value) { const d = new Date(schedStart.value); d.setMinutes(d.getMinutes() + Math.min(240, Math.max(15, Math.round((expectedMin || 60) / 5) * 5))); schedEnd.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; } } });
+    const schedEnd = el('input', { class: 'sc-input sheet-date sheet-datetime', type: 'datetime-local', value: sitting?.end || '', step: 300 });
+    const schedClear = el('button', { class: 'sc-button sc-button--ghost sc-button--sm', text: 'Clear', title: 'Not scheduled: the calendar places it', onclick: () => { schedStart.value = ''; schedEnd.value = ''; } });
     // Focus needs you there, one at a time; background runs alongside, a look now and then.
     const attention = el('select', { class: 'sc-select' },
       el('option', { value: 'focus', text: 'Focus — needs me there', selected: attentionOf(t) === 'focus' }),
@@ -667,6 +674,7 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
       repeat: repeats && repeats.changed() ? { value: repeats.get() } : null,
       custom: custom.map((c) => ({ id: c.field.id, value: c.get() })),
       name: name.value, done: done.checked, urgency: urgency.value, start: start.value, deadline: deadline.value, notes: notesBox.get(),
+      scheduledStart: schedStart.value, scheduledEnd: schedEnd.value,
       hard: hard.checked, attention: attention.value, checkEvery: +checkEvery.value, energy: energy.value, skill: skill.value, labels: labels.value, chunk: chunk.value, schedule: schedule.value, status: status.value, stage: stage.value,
       auto: auto.checked, claude: claude.checked, duration: duration.value,
       ...(b ? { day: day.value, from: parseTime(from.value), to: parseTime(to.value) } : {}),
@@ -807,6 +815,9 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
           fact('Start date', start),
           fact('Deadline', deadline),
           subFact('Hard deadline', el('label', { class: 'fact-switch', title: 'A hard deadline must hold: it is placed ahead of soft ones.' }, hard, el('span', { class: 'tp-switch' }))),
+          fact('Scheduled', el('div', { class: 'fact-scheduled', title: 'The sitting this task is scheduled for — its Google Calendar event. Setting it fixes the task there; dragging the event in Google updates it here.' },
+            el('div', { class: 'fact-scheduled-row' }, schedStart, el('span', { class: 'sc-faint', text: 'to' }), schedEnd, schedClear),
+            el('span', { class: 'sc-faint small', text: sitting ? 'Fixed here; Google Calendar wins if the event is moved there.' : 'Not scheduled: the calendar places it between its start date and deadline.' }))),
           fact('Schedule', schedule),
           repeats ? fact('Repeats', repeats.node) : null,
           routine ? fact('Repeats', el('span', { class: 'fact-routine' },
@@ -847,6 +858,13 @@ export async function taskSheet({ planId = store.project.id, taskId, block: b = 
   // Claude's mark first: switching it off hands the task back to the Auto-schedule switch.
   if (saved.claude !== (t.scheduledBy === 'claude')) act.editTask(t.id, 'scheduledBy', saved.claude ? 'claude' : null);
   if (!saved.claude && saved.auto !== !!agendaOf(store.project, t).show) act.editTask(t.id, 'calendarShow', saved.auto);
+  // The sitting last, after the switches: scheduling a task puts it on the calendar whatever Auto-schedule said.
+  {
+    const had = scheduledOf(t);
+    const want = saved.scheduledStart && saved.scheduledEnd ? { start: saved.scheduledStart.slice(0, 16), end: saved.scheduledEnd.slice(0, 16) } : null;
+    if (!want && (saved.scheduledStart || saved.scheduledEnd)) act.hint('A sitting needs both a start and an end.');
+    else if ((want?.start || '') !== (had?.start || '') || (want?.end || '') !== (had?.end || '')) act.editTask(t.id, 'scheduled', want);
+  }
   const minutes = saved.duration.trim() === minText(expectedMin) ? expectedMin : parseDurationText(saved.duration);
   if (minutes === null && saved.duration.trim()) act.hint(`“${saved.duration}” is not a duration — try 45 min, 2h or 1h 30m.`);
   else if (minutes !== null && minutes !== expectedMin) act.editTask(t.id, 'work', String(Math.round((minutes / 60) * 100) / 100));
