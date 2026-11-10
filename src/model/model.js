@@ -999,6 +999,30 @@ export function clearPins(p, taskId) {
   t.calendar = { ...t.calendar, pins: [] };
 }
 
+// ---------------------------------------------------------------- links
+//
+// A task's events on an outside calendar (Google Calendar, through mcp/gcal):
+// which calendar, which event, and where the event was when the two were last
+// in step — day, start, minutes, title — so the next sync can tell which side
+// moved. One task may hold several (a block split across days).
+
+const cleanLink = (l) => {
+  if (!l || typeof l !== 'object') return null;
+  const calendarId = String(l.calendarId || '').trim(), eventId = String(l.eventId || '').trim();
+  if (!calendarId || !eventId || !/^\d{4}-\d{2}-\d{2}$/.test(String(l.day))) return null;
+  const start = Math.round(+l.start), minutes = Math.round(+l.minutes);
+  if (!Number.isFinite(start) || !Number.isFinite(minutes)) return null;
+  return { calendarId, eventId, day: l.day, start, minutes, title: String(l.title ?? '') };
+};
+export const linksOf = (task) => (Array.isArray(task?.calendar?.links) ? task.calendar.links : []);
+export function setLinks(p, taskId, links) {
+  const t = getTask(p, taskId);
+  if (!t) throw new Error('No such task.');
+  const list = (Array.isArray(links) ? links : []).map(cleanLink).filter(Boolean);
+  t.calendar = { ...(t.calendar || { show: true, timeBlockIds: [] }) };
+  if (list.length) t.calendar.links = list; else delete t.calendar.links;
+}
+
 // ---------------------------------------------------------------- phases
 //
 // A phase is a top-level summary task — Discovery, Design, Build, Launch. When

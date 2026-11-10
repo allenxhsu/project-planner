@@ -60,6 +60,7 @@ new. `PROJECT_MCP_STORE=memory` keeps nothing between starts.
 | `delete_task` | A task and everything under it |
 | `assign_task` / `unassign_task` | A person on a task, at full time or a fraction |
 | `add_event` / `list_events` / `delete_event` | Blocked time the work goes around (a trip, a ride day, a drive, an appointment): one day or a span, by clock time or all day; events on any plan count for the whole shelf |
+| `sync_calendar` | Keep the planner and Google Calendar in step, the calendar winning: calendar edits (move, resize, rename, ✓, delete) flow to the task, laid blocks without an event are pushed, one event per task per day on each plan's own calendar. A dry run by default; `dry_run: false` writes, `confirm_links` writes the links proposed for hand-made events, `adopt_new` makes tasks from unmatched events, `plan` narrows it, `days` sets the horizon. Setup below. |
 
 A task is named by the **row number** the task list shows, or by its
 **name** — exact, or a prefix or fragment that fits exactly one task. Two
@@ -70,6 +71,47 @@ call with `plan`.
 Dates are `YYYY-MM-DD`. Durations are working days (`3`, `3d`, `2w`; `0d`
 is a milestone); work is hours (`12h`). Predecessors and resources are typed
 as in the task list: `3FS+2d, 5SS`, `Ana, Ben [50%]`.
+
+## Google Calendar
+
+`sync_calendar` (and `node mcp/gcal.mjs`) talk to the Calendar API with an
+OAuth client of your own; nothing is installed.
+
+1. In [Google Cloud](https://console.cloud.google.com/) pick or make a
+   project, enable the **Google Calendar API**, and under *APIs & Services ▸
+   Credentials* create an **OAuth client ID** of type **Desktop app**. If the
+   consent screen is in testing, add the Google account as a test user.
+2. Download the client's JSON and save it as
+   `~/.config/project-planner/gcal-client.json`.
+3. Sign in once; the browser opens, and the refresh token is kept at
+   `~/.config/project-planner/gcal-token.json`:
+
+   ```bash
+   node mcp/gcal.mjs --auth
+   ```
+
+4. Map each plan to its calendar in `mcp/plan-calendars.json` (plan name →
+   calendarId, as the calendar's settings page shows it). A plan that is not
+   there is reported and skipped; nothing is created for it.
+
+Then, with `PROJECT_SYNC_URL` and `PROJECT_SYNC_TOKEN` set as for the
+server:
+
+```bash
+node mcp/gcal.mjs --dry-run                  # what would change, nothing written
+node mcp/gcal.mjs --apply                    # write both sides
+node mcp/gcal.mjs --apply --confirm-links    # also write the links the dry run proposed
+node mcp/gcal.mjs --apply --adopt-new        # also make tasks from unmatched events
+node mcp/gcal.mjs --apply --plan "ISEN 616" --days 7
+```
+
+The dry run prints the window, the counts, and one line per change: `+`
+create, `~` update (with where it was), `-` delete, `←` a calendar edit
+flowing to its task (with `conflict` when the planner had moved too),
+`event deleted:` a task taken off the calendar, `link?` a proposed link for
+a hand-made event with how it matched and its score, `ambiguous:` the
+candidates nobody chose between, `new on calendar:` events that match no
+task, then `no calendar:` for plans not in the map.
 
 ## Testing
 

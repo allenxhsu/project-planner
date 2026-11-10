@@ -15,6 +15,7 @@ import {
   saveEvent, removeEvent, eventsOf, setPin, clearPins, pinsOf,
 } from '../src/model/model.js';
 import { isoValid, today } from '../src/model/calendar.js';
+import { GoogleCalendar, syncCalendar, loadCalendars, HORIZON_DAYS } from './gcal.mjs';
 import { computeSchedule } from '../src/model/schedule.js';
 
 
@@ -286,6 +287,33 @@ export const TOOLS = [
       let title = null;
       const { pushed } = await client.edit(args.plan, (p) => { const ev = resolveEvent(p, args.event); title = ev.title; removeEvent(p, ev.id); });
       return { text: `Removed “${title}”.`, data: { removed: 1, title, pushed } };
+    },
+  },
+  {
+    name: 'sync_calendar',
+    description: 'Keep the planner and Google Calendar in step, the calendar winning. Reads each plan\u2019s own calendar (mcp/plan-calendars.json) two weeks back and ahead: an event moved, resized, renamed, ticked (\u2713) or deleted there updates its task (pin, work, name, done; a deleted event takes the task off the calendar); laid blocks with no event yet are pushed as one event per task per day; a task renamed or finished here retitles its event. Hand-made events are matched to tasks and proposed; the dry run (default) lists everything. confirm_links writes the proposed links; adopt_new turns unmatched events into tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dry_run: { type: 'boolean', description: 'Default true: show what would change and write nothing. false writes both sides.' },
+        plan: { type: 'string', description: 'Only this plan\u2019s calendar. Default: every plan with a calendar.' },
+        days: { type: 'integer', description: `How many days ahead to push. Default ${HORIZON_DAYS}.` },
+        confirm_links: { type: 'boolean', description: 'Write the links the previous dry run proposed (hand-made event \u2194 task). Default false.' },
+        adopt_new: { type: 'boolean', description: 'Make a task for each event on a plan calendar that matches nothing. Default false.' },
+      },
+      additionalProperties: false,
+    },
+    async handler(client, args) {
+      const gcal = client.gcal || (client.gcal = await GoogleCalendar.open());
+      const calendars = client.calendars || loadCalendars();
+      const out = await syncCalendar({
+        client, gcal, calendars, now: client.now || new Date(), dryRun: args.dry_run !== false,
+        horizonDays: Number.isInteger(args.days) && args.days > 0 ? args.days : HORIZON_DAYS, plan: args.plan || null,
+        confirmLinks: args.confirm_links === true, adoptNew: args.adopt_new === true,
+      });
+      const a = out.actions;
+      const counts = { create: a.create.length, update: a.update.length, delete: a.delete.length, pull: a.pull.length, unlink: a.unlink.length, link: a.link.length, ambiguous: a.ambiguous.length, orphans: a.orphans.length, keep: a.keep };
+      return { text: `${out.text}\n${out.applied ? 'Applied.' : 'Dry run; nothing written.'}`, data: { applied: out.applied, ...counts, unmapped: out.unmapped, window: out.window } };
     },
   },
   {
