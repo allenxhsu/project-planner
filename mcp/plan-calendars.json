@@ -1,19 +1,73 @@
 {
-  "Alcon": "ed963e9f3622a1a5bc8c1b4fb3803cece46e490ad7b7c22cbc8b16e28159aea0@group.calendar.google.com",
-  "Zipline SO 287137 WO 423177": "2564f10543f138bb6143c439361c47d14326af2f819a02bae5659cc21303847c@group.calendar.google.com",
-  "Zipline Sales Action Items": "004ad8c3a31e0cc317157102aead8c4427e65d182a4f71678263930ffc59b700@group.calendar.google.com",
-  "L3 Harris SO 288858 WO 430886": "0fc645c0ec8d274a36ddbab8a3eadcdf03de60fa483367c98662cea0c97b66b3@group.calendar.google.com",
-  "AWTE - Das Photonics SO 284999 WO 412856": "2a13311d7912ef7da868551ecee9a8ca3bdf8fab1cdde9d1a40853e532011ed1@group.calendar.google.com",
-  "Black & Decker - Stanley SO 286652 WO 421950": "61787e29a9f186c1c813c512ffe776836172de903a4d5886d6b2ab807d60f1cd@group.calendar.google.com",
-  "Swoboda SO 289665": "f8e9b4d19ce2da34745aea5e9c8a63630d78199165d453a0eca7ea8584d4ce76@group.calendar.google.com",
-  "PMM": "9da14a9424e08df37f472d0d8863a728bf3858780d86715a63fd52658091f8dc@group.calendar.google.com",
-  "Personal tasks": "d413f04379751bdd492e4a269dd9612cb406ac7ef37c6fdde9b535cff7abab9a@group.calendar.google.com",
-  "Home Organization Project": "9f0100b3fe0df545045c492fcddedde2ef2975bf622fc5331814a8324e92815f@group.calendar.google.com",
-  "Health Related Tasks": "276a6b9923eaec27a20cbb587a0e2eadf9ec634b762de2d28f28df0ed1e8309b@group.calendar.google.com",
-  "Daily Planning": "fe900fed6958907021d9dedf637983de735b73d0e269b642b32013400c09b0a3@group.calendar.google.com",
-  "ISEN 616": "d8648b7562133c518fe57d4c9bd2e678045b0f3d8e657c0a030bd61d59d4c1d9@group.calendar.google.com",
-  "ISEN 665": "f18a0f84f800de165002ea4b8b5908e085f0170b00fa172d8f41aa50a5a633d3@group.calendar.google.com",
-  "TA Work": "6od5uj54m61ob3dqmr02hsjiqs@group.calendar.google.com",
-  "Snowboard 2027 Project": "d5c1b3003d4e49f1e388de2fd2567146803b0e5ca166559da951f9ab1256cf15@group.calendar.google.com",
-  "4runner": "fd123d60c3163f7b783be7306c70fcc4f3490dfed59007d04efa779e78cd0f34@group.calendar.google.com"
+  "_note": "Calendars Claude created are named 'Claude - <workspace> - <plan>'; reused calendars keep their own names.",
+  "plans": {
+    "Alcon": {
+      "calendarId": "ed963e9f3622a1a5bc8c1b4fb3803cece46e490ad7b7c22cbc8b16e28159aea0@group.calendar.google.com",
+      "calendarName": "Claude - Work - Alcon"
+    },
+    "Zipline SO 287137 WO 423177": {
+      "calendarId": "2564f10543f138bb6143c439361c47d14326af2f819a02bae5659cc21303847c@group.calendar.google.com",
+      "calendarName": "Claude - Work - Zipline SO 287137 WO 423177"
+    },
+    "Zipline Sales Action Items": {
+      "calendarId": "004ad8c3a31e0cc317157102aead8c4427e65d182a4f71678263930ffc59b700@group.calendar.google.com",
+      "calendarName": "Claude - Work - Zipline Sales Action Items"
+    },
+    "L3 Harris SO 288858 WO 430886": {
+      "calendarId": "0fc645c0ec8d274a36ddbab8a3eadcdf03de60fa483367c98662cea0c97b66b3@group.calendar.google.com",
+      "calendarName": "Claude - Work - L3 Harris SO 288858 WO 430886"
+    },
+    "AWTE - Das Photonics SO 284999 WO 412856": {
+      "calendarId": "2a13311d7912ef7da868551ecee9a8ca3bdf8fab1cdde9d1a40853e532011ed1@group.calendar.google.com",
+      "calendarName": "Claude - Work - AWTE - Das Photonics SO 284999 WO 412856"
+    },
+    "Black & Decker - Stanley SO 286652 WO 421950": {
+      "calendarId": "61787e29a9f186c1c813c512ffe776836172de903a4d5886d6b2ab807d60f1cd@group.calendar.google.com",
+      "calendarName": "Claude - Work - Black & Decker - Stanley SO 286652 WO 421950"
+    },
+    "Swoboda SO 289665": {
+      "calendarId": "f8e9b4d19ce2da34745aea5e9c8a63630d78199165d453a0eca7ea8584d4ce76@group.calendar.google.com",
+      "calendarName": "Claude - Work - Swoboda SO 289665"
+    },
+    "PMM": {
+      "calendarId": "9da14a9424e08df37f472d0d8863a728bf3858780d86715a63fd52658091f8dc@group.calendar.google.com",
+      "calendarName": "Claude - PMM - PMM"
+    },
+    "Personal tasks": {
+      "calendarId": "d413f04379751bdd492e4a269dd9612cb406ac7ef37c6fdde9b535cff7abab9a@group.calendar.google.com",
+      "calendarName": "Claude - Personal - Personal tasks"
+    },
+    "Home Organization Project": {
+      "calendarId": "9f0100b3fe0df545045c492fcddedde2ef2975bf622fc5331814a8324e92815f@group.calendar.google.com",
+      "calendarName": "Claude - Personal - Home Organization Project"
+    },
+    "Health Related Tasks": {
+      "calendarId": "276a6b9923eaec27a20cbb587a0e2eadf9ec634b762de2d28f28df0ed1e8309b@group.calendar.google.com",
+      "calendarName": "Claude - Personal - Health Related Tasks"
+    },
+    "Daily Planning": {
+      "calendarId": "fe900fed6958907021d9dedf637983de735b73d0e269b642b32013400c09b0a3@group.calendar.google.com",
+      "calendarName": "Claude - Work - Daily Planning"
+    },
+    "ISEN 616": {
+      "calendarId": "d8648b7562133c518fe57d4c9bd2e678045b0f3d8e657c0a030bd61d59d4c1d9@group.calendar.google.com",
+      "calendarName": "ISEN 616 - DOE"
+    },
+    "ISEN 665": {
+      "calendarId": "f18a0f84f800de165002ea4b8b5908e085f0170b00fa172d8f41aa50a5a633d3@group.calendar.google.com",
+      "calendarName": "ISEN 665 - Management Control"
+    },
+    "TA Work": {
+      "calendarId": "6od5uj54m61ob3dqmr02hsjiqs@group.calendar.google.com",
+      "calendarName": "CU Boulder TA"
+    },
+    "Snowboard 2027 Project": {
+      "calendarId": "d5c1b3003d4e49f1e388de2fd2567146803b0e5ca166559da951f9ab1256cf15@group.calendar.google.com",
+      "calendarName": "Snowboard Calendar"
+    },
+    "4runner": {
+      "calendarId": "fd123d60c3163f7b783be7306c70fcc4f3490dfed59007d04efa779e78cd0f34@group.calendar.google.com",
+      "calendarName": "4runner Service"
+    }
+  }
 }
