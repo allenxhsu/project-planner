@@ -151,6 +151,11 @@ test('matchEvents, table-driven: exact, renamed, moved, split, duplicate titles,
   assert.equal(dup.ambiguous.length, 1);
   assert.deepEqual(dup.ambiguous[0].candidates.map((t) => t.id).sort(), [twinA.id, twinB.id].sort());
 
+  const l130 = job(p, ann, 'Lectures 1/30, 2/2', { work: 2 });
+  job(p, ann, 'Lecture 1/28', { work: 1 });
+  const dated = run([gev({ id: 'e6a', day: TUE, from: '06:00', to: '07:00', title: 'Lecture 1/30 (Alcon) ✓', description: '' })]);
+  assert.deepEqual(dated.matches.map((m) => [m.task.id, m.how]), [[l130.id, 'words']], 'the date in the name counts as a word');
+
   const unsure = run([gev({ id: 'e6b', title: 'Deep work (Alcon)', description: '' })]);
   assert.equal(unsure.matches.length, 0, 'a slot alone, with no word in common, is not a match');
   assert.deepEqual(unsure.ambiguous.map((a) => a.candidates.map((t) => t.id)), [[draw.id]], 'the one candidate is listed, not taken');
@@ -366,6 +371,17 @@ test('applyToPlan: proposed links are written only on confirmLinks; orphans beco
 
   applyToPlan(p, actions, { now: NOW, confirmLinks: true, adoptNew: true });
   assert.deepEqual(linksOf(draw).map((l) => l.eventId), ['hand']);
+  assert.equal(draw.percent, 0, 'an unticked event links without finishing the task');
+
+  const { p: q, ann: a2 } = plan();
+  const split = job(q, a2, 'Lectures 1/30, 2/2', { work: 2 });
+  const half = rec([q], [gev({ id: 'h1', title: 'Lecture 1/30 (Alcon) ✓', description: '' }), gev({ id: 'h2', day: TUE, title: 'Lecture 2/2 (Alcon)', description: '' })]);
+  assert.equal(half.link.length, 2);
+  applyToPlan(q, half, { now: NOW, confirmLinks: true });
+  assert.equal(split.percent, 0, 'one of two events ticked does not finish the task');
+  const both = rec([q], [gev({ id: 'h1', title: 'Lecture 1/30 (Alcon) ✓', description: '' }), gev({ id: 'h2', day: TUE, title: 'Lecture 2/2 (Alcon) ✓', description: '' })]);
+  applyToPlan(q, both, { now: NOW, confirmLinks: true });
+  assert.equal(split.percent, 100, 'every event ticked does');
   const made = p.tasks.find((x) => x.name === 'Buy a new vise');
   assert.ok(made, 'the orphan is a task now');
   assert.deepEqual(pinsOf(made), [{ day: WED, start: 10 * 60, minutes: 90 }]);
@@ -486,10 +502,24 @@ test('push false: calendar edits still flow in, links are still proposed, but no
   assert.deepEqual(pinsOf(moved), [{ day: TUE, start: 14 * 60, minutes: 60 }]);
 });
 
+test('skip: an event named in skip is left alone — not linked, not pulled, not reported', async () => {
+  const { p, ann } = plan();
+  const draw = job(p, ann, 'Fixture drawing', { work: 2 });
+  setPin(p, draw.id, { day: MON, start: 9 * 60, minutes: 120 });
+  const gcal = fakeGoogle({ events: { [CAL]: [
+    graw({ id: 'hand', summary: 'Fixture drawing (Alcon)' }),
+    graw({ id: 'odd', summary: 'Fixture drawing, old copy (Alcon)', start: { dateTime: iso(TUE, '09:00') }, end: { dateTime: iso(TUE, '11:00') } }),
+  ] } });
+  const out = await syncCalendar({ client: fakePlanner(p), gcal, calendars: CALS, now: NOW, dryRun: true, skip: ['odd'] });
+  assert.deepEqual(out.actions.link.map((l) => l.event.id), ['hand']);
+  assert.ok(!out.actions.orphans.some((e) => e.id === 'odd') && !out.actions.ambiguous.some((a) => a.event.id === 'odd'));
+});
+
 test('the sync_calendar tool: dry by default, dry_run false applies, plan narrows it, confirm_links and adopt_new opt in', async () => {
   const tool = TOOLS.find((t) => t.name === 'sync_calendar');
   assert.ok(tool);
   for (const k of ['dry_run', 'confirm_links', 'adopt_new', 'push']) assert.equal(tool.inputSchema.properties[k].type, 'boolean', k);
+  assert.equal(tool.inputSchema.properties.skip.type, 'array');
   const { p, ann } = plan();
   job(p, ann, 'Fixture drawing', { work: 2 });
   const { p: q, ann: a2 } = plan('Zipline');

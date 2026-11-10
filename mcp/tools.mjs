@@ -301,6 +301,7 @@ export const TOOLS = [
         confirm_links: { type: 'boolean', description: 'Write the links the previous dry run proposed (hand-made event \u2194 task). Default false.' },
         adopt_new: { type: 'boolean', description: 'Make a task for each event on a plan calendar that matches nothing. Default false.' },
         push: { type: 'boolean', description: 'Default true. false: only link and pull; no new events go out (a first run against a hand-made calendar).' },
+        skip: { type: 'array', items: { type: 'string' }, description: 'Event ids to leave alone this run: not linked, not pulled, not listed.' },
       },
       additionalProperties: false,
     },
@@ -311,6 +312,7 @@ export const TOOLS = [
         client, gcal, calendars, now: client.now || new Date(), dryRun: args.dry_run !== false,
         horizonDays: Number.isInteger(args.days) && args.days > 0 ? args.days : HORIZON_DAYS, plan: args.plan || null,
         confirmLinks: args.confirm_links === true, adoptNew: args.adopt_new === true, push: args.push !== false,
+        skip: Array.isArray(args.skip) ? args.skip.map(String) : [],
       });
       const a = out.actions;
       const counts = { create: a.create.length, update: a.update.length, delete: a.delete.length, pull: a.pull.length, unlink: a.unlink.length, link: a.link.length, ambiguous: a.ambiguous.length, orphans: a.orphans.length, keep: a.keep };

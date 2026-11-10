@@ -126,16 +126,31 @@ export function parseTitle(title, planName) {
   return { name: s.replace(/\s+/g, ' ').trim(), done, approx };
 }
 
-/** The words of a name worth comparing: four letters or more, cut to five, no stopwords. */
+/**
+ * The words of a name worth comparing: words of four letters or more, cut
+ * to five so "lecture" and "lectures" agree, and anything with a digit in
+ * it kept whole ("1/30", "27G", "HW6", "11-08") when it is more than one
+ * character — a lecture's date is what tells it from the next one.
+ */
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'that', 'this', 'then', 'about', 'after', 'before']);
-const wordsOf = (s) => new Set(String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w.length >= 4 && !STOP.has(w)).map((w) => w.slice(0, 5)));
-/** How much two names share: common words over the longer one's; 0 when either has none. */
+function wordsOf(s) {
+  const out = new Set();
+  for (const raw of String(s || '').toLowerCase().split(/[\s,;()"“”]+/)) {
+    const t = raw.replace(/^[^\p{L}\p{N}$]+|[^\p{L}\p{N}%]+$/gu, '');
+    if (!t) continue;
+    if (/\d/.test(t)) { if (t.length >= 2) out.add(t); continue; }
+    const w = t.replace(/[^\p{L}]/gu, '');
+    if (w.length >= 4 && !STOP.has(w)) out.add(w.slice(0, 5));
+  }
+  return out;
+}
+/** How much two names share: common words over the geometric mean of their counts; 0 when either has none. */
 export function overlap(a, b) {
   const A = wordsOf(a), B = wordsOf(b);
   if (!A.size || !B.size) return 0;
   let n = 0;
   for (const w of A) if (B.has(w)) n += 1;
-  return n / Math.max(A.size, B.size);
+  return n / Math.sqrt(A.size * B.size);
 }
 
 /** The task name the description's "Planner: Plan › Task" line names, or null. */
@@ -442,11 +457,15 @@ export function applyToPlan(p, actions, { confirmLinks = false, adoptNew = false
     changed += 1;
   }
   if (confirmLinks) {
-    for (const l of actions.link.filter(mine)) {
+    const links = actions.link.filter(mine);
+    for (const l of links) {
       const task = getTask(p, l.taskId);
       if (!task) continue;
       recordLink(p, task.id, l.event);
-      if (parseTitle(l.event.title, p.name).done && !isDone(task)) setTaskField(p, task.id, 'percent', 100);
+      // A ✓ finishes the task only when every event it is linked to is ticked:
+      // one lecture of two watched is not the pair.
+      const all = [...links.filter((x) => x.taskId === task.id).map((x) => x.event.title), ...linksOf(task).filter((k) => !links.some((x) => x.event.id === k.eventId)).map((k) => k.title)];
+      if (!isDone(task) && all.length && all.every((t) => parseTitle(t, p.name).done)) setTaskField(p, task.id, 'percent', 100);
       changed += 1;
     }
   }
@@ -645,9 +664,10 @@ function pickPlan(entries, ref) {
  * One run: lay the plans, read the calendars, reconcile and — unless
  * `dryRun` — write both sides. `plan` narrows the writes to one plan (the
  * layout is still of every plan, since they share the hours); `push: false`
- * keeps new events from going out, for a run that only links and pulls.
+ * keeps new events from going out, for a run that only links and pulls;
+ * `skip` names event ids the run must leave alone.
  */
-export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false, push = true }) {
+export async function syncCalendar({ client, gcal, calendars, now = new Date(), horizonDays = HORIZON_DAYS, lookbackDays = LOOKBACK_DAYS, dryRun = true, plan = null, confirmLinks = false, adoptNew = false, push = true, skip = [] }) {
   await client.sync();
   const all = await client.plans();
   const entries = liveEntries(all);
@@ -658,12 +678,14 @@ export async function syncCalendar({ client, gcal, calendars, now = new Date(), 
   const primary = (await gcal.listEvents('primary', fromMs, toMs)).map((raw) => fromGoogleEvent(raw, 'primary')).filter(Boolean);
   const busy = primary.map((e) => ({ title: e.title, start: e.startMs, end: e.endMs, allDay: e.allDay, busy: !e.transparent, location: e.location }));
 
+  // Events named in `skip` are left as they are: not linked, not pulled, not listed.
+  const skipped = new Set(skip || []);
   const scope = (only ? [only] : entries).map((e) => calendars[e.project.name]).filter(Boolean);
   const existing = [];
   for (const calendarId of [...new Set(scope)]) {
     for (const raw of await gcal.listEvents(calendarId, fromMs, toMs)) {
       const e = fromGoogleEvent(raw, calendarId);
-      if (e) existing.push(e);
+      if (e && !skipped.has(e.id)) existing.push(e);
     }
   }
 
@@ -705,7 +727,7 @@ async function main(argv) {
   const flag = (name) => argv.includes(name);
   const value = (name, fallback = null) => { const i = argv.indexOf(name); return i >= 0 && argv[i + 1] != null ? argv[i + 1] : fallback; };
   if (flag('--help') || flag('-h')) {
-    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--no-push] [--days N] [--plan NAME] [--auth]\n'
+    console.log('node mcp/gcal.mjs [--dry-run | --apply] [--confirm-links] [--adopt-new] [--no-push] [--skip id,id] [--days N] [--plan NAME] [--auth]\n'
       + 'Reads PROJECT_SYNC_URL and PROJECT_SYNC_TOKEN. --auth signs in to Google Calendar once.');
     return;
   }
@@ -715,6 +737,7 @@ async function main(argv) {
   const client = await PlannerClient.open({ url: process.env.PROJECT_SYNC_URL, token: process.env.PROJECT_SYNC_TOKEN, deviceId: 'gcal' });
   const out = await syncCalendar({
     client, gcal, calendars: loadCalendars(), dryRun: !flag('--apply'), confirmLinks: flag('--confirm-links'), adoptNew: flag('--adopt-new'), push: !flag('--no-push'),
+    skip: String(value('--skip', '')).split(',').map((x) => x.trim()).filter(Boolean),
     horizonDays: +value('--days', HORIZON_DAYS) || HORIZON_DAYS, plan: value('--plan'),
   });
   console.log(out.text);

@@ -622,16 +622,19 @@ Google Calendar — one secondary calendar per plan, mapped in
 - **Stable ids both ways.** The event's private extended properties hold
   the plan and task id; the task's `calendar.links` hold the calendar, the
   event id and where the event was at the last sync, which is how a run
-  tells which side moved. Hand-made events are matched by title, then by
-  the description's `Planner:` line, then by slot; one candidate is
-  proposed, two are listed as ambiguous, none is "new on calendar".
+  tells which side moved. Hand-made events are matched by title (less a
+  plan prefix, tag or "— priority" note), then by the words the names share,
+  then by a pin where the event starts; one candidate is proposed, two are
+  listed as ambiguous, none is "new on calendar".
   Proposed links are written only when confirmed, new events become tasks
   only when asked; nothing is guessed.
 - **Window:** 14 days back, 14 ahead. A plan with laid work but no calendar
   in the map is listed as "no calendar" and skipped.
 
 Run it as the MCP tool `sync_calendar` (a dry run by default; `dry_run:
-false` writes both sides; `confirm_links`, `adopt_new`, `plan`, `days`) or
+false` writes both sides; `confirm_links`, `adopt_new`, `push: false` to
+link and pull without sending new events, `skip` for events to leave alone,
+`plan`, `days`) or
 from the shell with the same code; setup is in [mcp/README.md](mcp/README.md).
 
 ## Flow
