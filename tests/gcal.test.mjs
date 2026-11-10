@@ -15,7 +15,7 @@ import { createProject, insertTask, addResource, assign, setTaskField, setPin } 
 import { computeSchedule } from '../src/model/schedule.js';
 import {
   HORIZON_DAYS, MIN_MINUTES, TAG_KEY,
-  liveEntries, desiredEvents, diffEvents, toGoogleEvent, fromGoogleEvent, describeActions, syncCalendar,
+  liveEntries, desiredEvents, calendarMap, diffEvents, toGoogleEvent, fromGoogleEvent, describeActions, syncCalendar,
 } from '../mcp/gcal.mjs';
 import { TOOLS, runTool } from '../mcp/tools.mjs';
 
@@ -316,4 +316,11 @@ test('describeActions reads like a plan: counts first, then one line per change'
   assert.match(text, /\+ 2026-09-21 09:00–11:00 Fixture drawing \(Alcon\)/);
   assert.match(text, /- 2026-09-22 09:00–11:00 Old \(Alcon\)/);
   assert.match(text, /no calendar: Other/);
+});
+
+test('the committed map: plan name → calendarId, in its new nested shape and the old flat one', () => {
+  const nested = { _note: 'names', plans: { Alcon: { calendarId: CAL, calendarName: 'Claude - Work - Alcon' }, 'ISEN 616': { calendarId: 'isen@g', calendarName: 'ISEN 616 - DOE' } } };
+  assert.deepEqual(calendarMap(nested), { Alcon: CAL, 'ISEN 616': 'isen@g' });
+  assert.deepEqual(calendarMap({ Alcon: CAL }), { Alcon: CAL });
+  assert.deepEqual(calendarMap(null), {});
 });

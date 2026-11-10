@@ -55,9 +55,24 @@ const dayMs = (iso) => new Date(`${iso}T00:00:00`).getTime();
 /** Minutes into the day of a local Date. */
 const minutesOf = (d) => d.getHours() * 60 + d.getMinutes();
 
-/** The plan-name → calendarId map as committed. */
+/**
+ * The plan-name → calendarId map as committed: `{ plans: { "<plan>":
+ * { calendarId, calendarName } } }` (calendars Claude made are named
+ * "Claude - <workspace> - <plan>"; reused ones keep their names), or the
+ * older flat `{ "<plan>": "<calendarId>" }`.
+ */
 export function loadCalendars(file = CALENDARS_PATH) {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  return calendarMap(JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+export function calendarMap(raw) {
+  const plans = raw && typeof raw === 'object' && raw.plans && typeof raw.plans === 'object' ? raw.plans : raw || {};
+  const out = {};
+  for (const [name, v] of Object.entries(plans)) {
+    if (name.startsWith('_')) continue;
+    const id = typeof v === 'string' ? v : v?.calendarId;
+    if (id) out[name] = id;
+  }
+  return out;
 }
 
 /** The plans that are laid: every unarchived one, with its schedule. */
