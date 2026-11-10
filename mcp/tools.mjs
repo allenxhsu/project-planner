@@ -291,13 +291,15 @@ export const TOOLS = [
   },
   {
     name: 'sync_calendar',
-    description: 'Put the planner\u2019s layout on Google Calendar: one event per task per day on each plan\u2019s own calendar (mcp/plan-calendars.json), today through two weeks out, laid around busy time on the primary calendar. A dry run (the default) lists what would be created, updated, adopted, ticked or deleted; dry_run false applies it. Only events the export made, or hand-made ones whose description starts with "Planner:", are ever touched.',
+    description: 'Keep the planner and Google Calendar in step, the calendar winning. Reads each plan\u2019s own calendar (mcp/plan-calendars.json) two weeks back and ahead: an event moved, resized, renamed, ticked (\u2713) or deleted there updates its task (pin, work, name, done; a deleted event takes the task off the calendar); laid blocks with no event yet are pushed as one event per task per day; a task renamed or finished here retitles its event. Hand-made events are matched to tasks and proposed; the dry run (default) lists everything. confirm_links writes the proposed links; adopt_new turns unmatched events into tasks.',
     inputSchema: {
       type: 'object',
       properties: {
-        dry_run: { type: 'boolean', description: 'Default true: show the changes and write nothing. false writes them.' },
+        dry_run: { type: 'boolean', description: 'Default true: show what would change and write nothing. false writes both sides.' },
         plan: { type: 'string', description: 'Only this plan\u2019s calendar. Default: every plan with a calendar.' },
-        days: { type: 'integer', description: `How many days from today. Default ${HORIZON_DAYS}.` },
+        days: { type: 'integer', description: `How many days ahead to push. Default ${HORIZON_DAYS}.` },
+        confirm_links: { type: 'boolean', description: 'Write the links the previous dry run proposed (hand-made event \u2194 task). Default false.' },
+        adopt_new: { type: 'boolean', description: 'Make a task for each event on a plan calendar that matches nothing. Default false.' },
       },
       additionalProperties: false,
     },
@@ -307,9 +309,11 @@ export const TOOLS = [
       const out = await syncCalendar({
         client, gcal, calendars, now: client.now || new Date(), dryRun: args.dry_run !== false,
         horizonDays: Number.isInteger(args.days) && args.days > 0 ? args.days : HORIZON_DAYS, plan: args.plan || null,
+        confirmLinks: args.confirm_links === true, adoptNew: args.adopt_new === true,
       });
-      const counts = Object.fromEntries(Object.entries(out.actions).map(([k, v]) => [k, v.length]));
-      return { text: `${out.text}\n${out.applied ? 'Applied.' : 'Dry run; nothing written.'}`, data: { applied: out.applied, ...counts, unmapped: out.unmapped, horizon: out.horizon } };
+      const a = out.actions;
+      const counts = { create: a.create.length, update: a.update.length, delete: a.delete.length, pull: a.pull.length, unlink: a.unlink.length, link: a.link.length, ambiguous: a.ambiguous.length, orphans: a.orphans.length, keep: a.keep };
+      return { text: `${out.text}\n${out.applied ? 'Applied.' : 'Dry run; nothing written.'}`, data: { applied: out.applied, ...counts, unmapped: out.unmapped, window: out.window } };
     },
   },
   {

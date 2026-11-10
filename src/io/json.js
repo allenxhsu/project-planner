@@ -190,7 +190,11 @@ export function parse(text) {
             ...(Array.isArray(t.calendar.pins) && t.calendar.pins.length ? { pins: t.calendar.pins
               .filter((q) => q && /^\d{4}-\d{2}-\d{2}$/.test(String(q.day)) && Number.isFinite(+q.start) && Number.isFinite(+q.minutes)
                 && +q.start >= 0 && +q.minutes >= 5 && +q.start + +q.minutes <= 24 * 60)
-              .map((q) => ({ day: q.day, start: Math.round(+q.start), minutes: Math.round(+q.minutes), ...(q.live ? { live: true } : {}) })) } : {}) }
+              .map((q) => ({ day: q.day, start: Math.round(+q.start), minutes: Math.round(+q.minutes), ...(q.live ? { live: true } : {}) })) } : {}),
+            // Links to events on an outside calendar (model.js setLinks).
+            ...(Array.isArray(t.calendar.links) && t.calendar.links.length ? { links: t.calendar.links
+              .filter((l) => l && String(l.calendarId || '').trim() && String(l.eventId || '').trim() && /^\d{4}-\d{2}-\d{2}$/.test(String(l.day)) && Number.isFinite(+l.start) && Number.isFinite(+l.minutes))
+              .map((l) => ({ calendarId: String(l.calendarId).trim(), eventId: String(l.eventId).trim(), day: l.day, start: Math.round(+l.start), minutes: Math.round(+l.minutes), title: String(l.title ?? '') })) } : {}) }
         : { show: false, timeBlockIds: [] },
       constraint: t.constraint && CONSTRAINTS[t.constraint.type] ? { type: t.constraint.type, date: isoValid(t.constraint.date) ? t.constraint.date : null } : { type: 'ASAP', date: null },
       predecessors: Array.isArray(t.predecessors) ? t.predecessors.filter((l) => l && l.id).map((l) => ({ id: String(l.id), type: LINK_TYPES[l.type] ? l.type : 'FS', lag: Number(l.lag) || 0 })) : [],
